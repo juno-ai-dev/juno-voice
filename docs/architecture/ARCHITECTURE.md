@@ -54,7 +54,9 @@ Juno v30 exposes contract custom queries:
 {"total_voting_power_at":{"height":123}}
 ```
 
-The module returns the most recent snapshot **at or before** the requested height. Power is a base-10 unsigned string and must be checked into `Uint128`. The module records staking changes during EndBlock and backfilled history starts at its activation height.
+The module returns the most recent snapshot **at or before** the requested height. Power is a base-10 unsigned string and must be checked into `Uint128`. The module records staking changes during EndBlock and backfilled history starts at its activation height. Power is bonded JUNO delegated to validators currently in `Bonded` status.
+
+Governance-allowlisted LST addresses receive zero direct power and their bonded stake is removed from total power. The v30 default allowlist is empty: an unlisted LST therefore behaves like an ordinary staking account until governance classifies it. Allowlist updates affect snapshots from their update height forward; they do not rewrite prior history.
 
 For Juno Voice, every request stores an immutable `snapshot_height` chosen as the **last fully settled block when the request opens**. If creation executes in block `H`, the contract stores `H - 1`. This makes the rule explicit and avoids reading the current block before its EndBlock snapshot exists.
 
@@ -65,6 +67,8 @@ Consequences:
 - a query that resolves before available history can return zero, so request creation must reject zero total power;
 - retention parameters are governance-controlled. The contract must refuse a configuration/request window that could outlive retained history;
 - exported-genesis restarts lose pre-restart history, so requests whose snapshot predates a restart boundary cannot safely accept new votes.
+
+Deployment governance must keep retained history longer than the maximum active voting age. If an upgrade or restart removes a still-open request's history, the contract must not silently reinterpret zero power as a valid electorate; the operational response is to pause new requests and expire or migrate affected requests under an explicit policy.
 
 This is related to—but separate from—the DAO DAO convention where proposal beginning height `h` reads snapshot `h - 1`.
 
@@ -101,7 +105,9 @@ Request {
   snapshot_height: u64,
   total_power: Uint128,
   opened_height: u64,
-  closes_height: u64,
+  closes_height: u64,            // end-exclusive
+  quorum_bps: u16,               // copied from config at creation
+  support_bps: u16,              // copied from config at creation
   status: Status,
   support_power: Uint128,
   oppose_power: Uint128,
@@ -151,7 +157,8 @@ OPEN / QUALIFIED / ACCEPTED ─────────────────�
 OPEN / QUALIFIED / ACCEPTED ────────────────────────────────▶ SPAM
 ```
 
-- `OPEN → QUALIFIED` is deterministic after the voting window if configured signal thresholds are met.
+- Voting is allowed while `opened_height <= env.block.height < closes_height`.
+- `OPEN → QUALIFIED` is permissionless and deterministic at or after `closes_height`: participation quorum is `(support + oppose) / total_power`; support is `support / (support + oppose)`, with a defined zero-denominator failure. Both thresholds are copied into the request at creation.
 - `QUALIFIED → ACCEPTED` and delivery states are steward actions with public reason/evidence.
 - Every status change emits an event and appends immutable history.
 - `SHIPPED` requires at least one evidence item; it is an attestation, not proof that external code is safe.
@@ -230,6 +237,7 @@ Wallet signing must show:
 - Require exact deposit denom/amount; reject extra funds.
 - Use indexed maps and bounded pagination; never iterate every voter during execution.
 - Update aggregate tallies atomically with receipt creation.
+- Evaluate basis-point thresholds with checked wide-integer cross-multiplication; avoid lossy division and define zero denominators explicitly.
 - Enforce the lifecycle graph and role checks in one module.
 - Use pull refunds and reentrancy-safe state-before-message order.
 - Protect migration with CW2 contract identity/version checks.
@@ -250,6 +258,8 @@ Wallet signing must show:
 ## 10. Authoritative implementation references
 
 Verified against [`CosmosContracts/juno@c0b3a8d` (`v30.0.0`)](https://github.com/CosmosContracts/juno/tree/c0b3a8d258d52d16e5bc39a75168a99aab9d098e):
+
+Verification command: `go test ./x/voting-snapshot/keeper ./wasmbindings/...` — keeper and binding tests passed; packages without tests compiled successfully.
 
 - [`proto/juno/votingsnapshot/v1/query.proto`](https://github.com/CosmosContracts/juno/blob/c0b3a8d258d52d16e5bc39a75168a99aab9d098e/proto/juno/votingsnapshot/v1/query.proto) — REST/gRPC methods, at-or-before behavior, string power.
 - [`proto/juno/votingsnapshot/v1/params.proto`](https://github.com/CosmosContracts/juno/blob/c0b3a8d258d52d16e5bc39a75168a99aab9d098e/proto/juno/votingsnapshot/v1/params.proto) — LST allowlist, retention, pruning controls.

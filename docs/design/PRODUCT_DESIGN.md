@@ -166,6 +166,11 @@ They should differ in hierarchy—not merely swap colors.
 - Announce transaction pending/success/failure through an ARIA live region.
 - Respect `prefers-reduced-motion`; mechanical transitions collapse cleanly.
 - Charts/tally bars include a textual equivalent.
+- Dialogs require `role="dialog"`, `aria-modal`, a labelled title, initial focus, focus trap, Escape handling, and focus restoration.
+- Tabs require roving tab focus, arrow-key behavior, `aria-controls`, and matching tab panels.
+- Interactive request rows render as semantic links/buttons; clickable tags render as buttons with `aria-pressed`.
+- Toasts use `status`/`alert` semantics and remain discoverable beyond a timed visual disappearance.
+- Form errors use `aria-invalid` and `aria-describedby`; icon-only controls require contextual accessible names.
 
 ## Prototype scope
 
