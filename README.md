@@ -14,7 +14,7 @@ Architecture and product design. No contract is deployed and no funds are accept
 - [Product and interaction design](docs/design/PRODUCT_DESIGN.md)
 - [Decision records](docs/architecture/decisions/)
 - [Implementation plan](docs/plans/2026-07-23-mvp.md)
-- [Interactive design prototype](prototype/index.html)
+- [Interactive design prototype](https://juno-ai-dev.github.io/juno-voice/) ([source](prototype/index.html))
 
 ## Product principles
 
