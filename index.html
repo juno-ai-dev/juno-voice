@@ -158,6 +158,7 @@
   function renderRows(){
     const q=$("#search").value.toLowerCase().trim();
     const shown=data.filter(r=>(filter==="all"||r.status===filter)&&(!q||(r.title+" "+r.summary+" "+r.category).toLowerCase().includes(q)));
+    if(shown.length&&!shown.some(r=>r.id===active.id)){active=shown[0];renderDetail()}
     $("#requests").innerHTML=shown.length?shown.map((r,i)=>`<button class="request-row ${r.id===active.id?"selected":""}" data-id="${r.id}" aria-label="Open request ${r.id}: ${esc(r.title)}"><span class="rank">${String(i+1).padStart(2,"0")}</span><span><span class="request-title">${esc(r.title)}</span><span class="request-summary">${esc(r.summary)}</span></span><span>${badge(r.status)}<span class="tag">#${esc(r.category)}</span></span><span class="signal positive">${r.net}<small>${r.support} support</small></span><span class="meta">${r.activity}<small>${r.voters} voters</small></span></button>`).join(""):`<div class="empty">No signal in this channel.</div>`;
     document.querySelectorAll(".request-row").forEach(el=>el.onclick=()=>{active=data.find(r=>r.id===Number(el.dataset.id));renderRows();renderDetail();location.hash="detail"});
   }
