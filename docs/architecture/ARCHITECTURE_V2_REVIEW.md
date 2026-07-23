@@ -1,7 +1,7 @@
 # Juno Voice Architecture V2 Review
 
-**Status:** decision draft; not an implementation specification  
-**Scope:** consolidated protocol, product/operations, and contract-feasibility review  
+**Status:** decision draft; not an implementation specification
+**Scope:** consolidated protocol, product/operations, and contract-feasibility review
 **Implementation gate:** contract behavior and public schemas remain paused until the blocking decisions in this document are accepted or revised
 
 ## 1. Review verdict
