@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Juno Voice — design prototype</title>
+  <meta name="description" content="Juno Voice on-chain roadmap design prototype">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --coral:#FF7B7C;--coral-bright:#FF9698;--coral-deep:#E85F60;--coral-blood:#C6484A;
+      --maroon:#270B0D;--maroon-deep:#1B0708;--void:#100405;--void-pure:#0A0203;
+      --cream:#FFEBD2;--cream-dim:#E3CDB2;--cream-mute:#B69C82;--cream-faint:#6E5C4A;
+      --coral-a04:rgba(255,123,124,.04);--coral-a08:rgba(255,123,124,.08);--coral-a12:rgba(255,123,124,.12);
+      --coral-a20:rgba(255,123,124,.20);--coral-a35:rgba(255,123,124,.35);--coral-a60:rgba(255,123,124,.60);
+      --cream-a06:rgba(255,235,210,.06);--cream-a10:rgba(255,235,210,.10);--cream-a70:rgba(255,235,210,.70);
+      --signal-warn:#E9A94F;--signal-ok:#8FB08A;--surface-card:#230A0C;--surface-raised:#2E1214;
+      --line-hair:var(--coral-a12);--line-soft:var(--coral-a20);--line-strong:var(--coral-a35);
+      --font-display:"Montserrat","Gotham","Helvetica Neue",Arial,sans-serif;
+      --font-mono:"Space Mono","IBM Plex Mono",ui-monospace,monospace;
+      --r-xs:2px;--r-sm:3px;--r-md:5px;--cell:32px;--container:1200px;
+      --shadow-card:0 1px 0 rgba(255,235,210,.03),0 12px 32px rgba(0,0,0,.5);
+      --glow-soft:0 0 32px rgba(255,123,124,.18);--ease-mech:cubic-bezier(.22,.61,.36,1);
+    }
+    *{box-sizing:border-box}html{background:var(--void-pure)}body{margin:0;color:var(--cream);background:var(--maroon);font:15px/1.7 var(--font-display);min-height:100vh}
+    button,input{font:inherit}button{color:inherit}a{color:var(--coral)}:focus-visible{outline:2px solid var(--coral);outline-offset:3px}
+    .grid{background-image:linear-gradient(var(--coral-a04) 1px,transparent 1px),linear-gradient(90deg,var(--coral-a04) 1px,transparent 1px);background-size:var(--cell) var(--cell)}
+    .shell{min-height:100vh;background:radial-gradient(90% 50% at 50% -15%,rgba(255,123,124,.13),transparent 65%)}
+    .topbar{height:66px;position:sticky;top:0;z-index:20;display:flex;align-items:center;border-bottom:1px solid var(--line-hair);background:rgba(16,4,5,.92);backdrop-filter:blur(12px)}
+    .topbar-inner{width:min(var(--container),calc(100% - 40px));margin:auto;display:flex;align-items:center;justify-content:space-between;gap:24px}
+    .brand{display:flex;align-items:center;gap:12px}.brand img:first-child{width:28px;height:28px}.brand img:nth-child(2){height:16px;width:auto}.product{border-left:1px solid var(--line-soft);padding-left:12px;font:700 10px/1 var(--font-mono);letter-spacing:.22em;color:var(--cream-mute)}
+    .nav{display:flex;align-items:center;gap:18px}.nav a{font:700 10px/1 var(--font-mono);letter-spacing:.13em;text-transform:uppercase;text-decoration:none;color:var(--cream-mute)}.nav a[aria-current="page"]{color:var(--coral)}
+    .button{min-height:38px;padding:9px 18px;border:1px solid transparent;border-radius:var(--r-sm);font:700 11px/1 var(--font-mono);letter-spacing:.13em;text-transform:uppercase;cursor:pointer;transition:120ms var(--ease-mech)}
+    .button.primary{background:var(--coral);border-color:var(--coral);color:var(--maroon-deep)}.button.primary:hover{background:var(--coral-bright);box-shadow:var(--glow-soft)}
+    .button.secondary{background:transparent;border-color:var(--line-strong);color:var(--cream)}.button.secondary:hover{background:var(--cream-a06)}
+    .button.ghost{background:transparent;color:var(--coral)}.button.ghost:hover{background:var(--coral-a08)}
+    main{width:min(var(--container),calc(100% - 40px));margin:auto;padding:62px 0 80px}
+    .eyebrow{font:400 10px/1.5 var(--font-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--coral)}
+    .hero{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:64px;align-items:end;margin-bottom:42px}.hero h1{font:500 clamp(38px,6vw,68px)/1.02 var(--font-display);letter-spacing:-.025em;margin:12px 0 18px;max-width:820px}.hero p{max-width:700px;margin:0;color:var(--cream-dim);font-size:17px}.hero-aside{border-left:1px solid var(--line-soft);padding-left:24px;display:grid;gap:13px}
+    .protocol-row{display:flex;justify-content:space-between;gap:20px;font:400 10px/1.5 var(--font-mono);letter-spacing:.05em}.protocol-row span:first-child{color:var(--cream-faint);text-transform:uppercase}.protocol-row span:last-child{color:var(--cream-dim);text-align:right}.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--coral);box-shadow:0 0 16px var(--coral);margin-right:7px}
+    .sample{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:10px 12px;margin-bottom:16px;border:1px solid rgba(233,169,79,.35);color:var(--signal-warn);background:rgba(233,169,79,.05);font:400 10px/1.5 var(--font-mono);letter-spacing:.08em;text-transform:uppercase}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line-soft);padding-bottom:14px}.tabs{display:flex;gap:3px;overflow:auto}.tab{min-height:38px;padding:0 13px;background:transparent;border:1px solid transparent;border-radius:var(--r-xs);color:var(--cream-mute);font:700 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;cursor:pointer;white-space:nowrap}.tab.active{color:var(--coral);border-color:var(--line-soft);background:var(--coral-a08)}
+    .search{width:240px;height:38px;padding:0 12px;border:1px solid var(--line-soft);border-radius:var(--r-sm);background:var(--void);color:var(--cream);font:400 11px/1 var(--font-mono)}.search::placeholder{color:var(--cream-faint)}
+    .ledger{border:1px solid var(--line-hair);border-top:0;background:rgba(16,4,5,.78);box-shadow:var(--shadow-card)}
+    .ledger-head,.request-row{display:grid;grid-template-columns:70px minmax(280px,1fr) 140px 165px 110px;gap:16px;align-items:center}.ledger-head{min-height:42px;padding:0 18px;border-bottom:1px solid var(--line-hair);font:400 9px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cream-faint)}
+    .request-row{width:100%;padding:19px 18px;background:transparent;border:0;border-bottom:1px solid var(--line-hair);text-align:left;cursor:pointer;transition:160ms var(--ease-mech)}.request-row:last-child{border-bottom:0}.request-row:hover,.request-row.selected{background:var(--coral-a04)}.request-row.selected{box-shadow:inset 2px 0 var(--coral)}
+    .rank{font:700 27px/1 var(--font-mono);color:var(--cream-faint)}.request-row>span:nth-child(2){display:block;min-width:0}.selected .rank{color:var(--coral)}.request-title,.request-summary{display:block}.request-title{font-weight:500;line-height:1.35;color:var(--cream);margin-bottom:5px}.request-summary{font-size:12px;line-height:1.5;color:var(--cream-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mono{font-family:var(--font-mono)}
+    .badge,.tag{display:inline-flex;align-items:center;border-radius:var(--r-xs);white-space:nowrap}.badge{gap:6px;padding:3px 8px;border:1px solid var(--line-soft);font:700 9px/1.3 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--cream-mute)}.badge.live{color:var(--coral);border-color:var(--coral-a35)}.badge.ok{color:var(--signal-ok);border-color:rgba(143,176,138,.35)}.badge.warn{color:var(--signal-warn);border-color:rgba(233,169,79,.35)}
+    .tag{padding:3px 7px;border:1px solid var(--line-hair);font:400 9px/1.3 var(--font-mono);color:var(--cream-mute);margin-left:6px}.signal{font:700 15px/1.2 var(--font-mono);color:var(--cream)}.signal small,.meta small{display:block;margin-top:5px;font:400 9px/1.2 var(--font-mono);color:var(--cream-faint);text-transform:uppercase;letter-spacing:.08em}.signal.positive{color:var(--coral)}.meta{font:400 11px/1.3 var(--font-mono);color:var(--cream-dim)}
+    .detail{margin-top:28px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px}.panel{position:relative;border:1px solid var(--line-hair);border-radius:var(--r-md);background:var(--surface-card);box-shadow:var(--shadow-card);padding:26px}.coord{position:absolute;right:12px;top:10px;font:400 9px/1 var(--font-mono);letter-spacing:.12em;color:var(--cream-faint);text-transform:uppercase}.detail h2{font:500 28px/1.16 var(--font-display);margin:11px 0 12px;letter-spacing:-.015em}.detail-copy{color:var(--cream-dim);max-width:720px}.section-title{margin:30px 0 12px;font:700 10px/1.4 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cream-mute)}
+    .acceptance{padding:15px 16px;border-left:2px solid var(--coral);background:var(--coral-a04);color:var(--cream-dim);font-size:13px}.timeline{display:grid;gap:0}.event{display:grid;grid-template-columns:88px 18px 1fr;gap:10px;min-height:58px}.event-time{font:400 9px/1.5 var(--font-mono);color:var(--cream-faint)}.event-line{position:relative;border-left:1px solid var(--line-soft)}.event-line::before{content:"";position:absolute;left:-4px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--maroon);border:1px solid var(--coral)}.event-text{font-size:12px;line-height:1.5;color:var(--cream-dim)}.event-text strong{display:block;color:var(--cream);font:700 10px/1.4 var(--font-mono);text-transform:uppercase;letter-spacing:.08em}
+    .tally{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.metric{padding:12px;border:1px solid var(--line-hair);background:var(--void)}.metric span{display:block;font:400 9px/1.4 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--cream-faint)}.metric strong{display:block;margin-top:6px;font:700 16px/1.2 var(--font-mono);color:var(--cream)}.metric.support strong{color:var(--coral)}
+    .bar{height:5px;background:rgba(233,169,79,.32);display:flex;margin-bottom:18px}.bar span{display:block;background:var(--coral);width:86%}.vote-power{padding:13px;border:1px solid var(--line-soft);background:var(--coral-a04);font:400 10px/1.65 var(--font-mono);color:var(--cream-mute)}.vote-power strong{color:var(--cream)}.vote-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.vote-note{font:400 9px/1.55 var(--font-mono);color:var(--cream-faint);margin-top:12px}
+    .evidence{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:12px 0;border-top:1px solid var(--line-hair)}.evidence:first-of-type{border-top:0}.evidence strong{font-size:12px;color:var(--cream-dim)}.evidence code{display:block;color:var(--cream-faint);font-size:9px;margin-top:3px}.evidence .badge{flex:none}
+    .empty{padding:40px;text-align:center;color:var(--cream-faint);font:400 11px/1.7 var(--font-mono);letter-spacing:.08em}
+    .toast{position:fixed;right:22px;bottom:22px;z-index:30;max-width:340px;padding:14px 16px;border:1px solid var(--coral-a35);border-radius:var(--r-sm);background:var(--maroon-deep);box-shadow:var(--shadow-card),var(--glow-soft);font:400 11px/1.6 var(--font-mono);color:var(--cream-dim);transform:translateY(18px);opacity:0;pointer-events:none;transition:200ms var(--ease-mech)}.toast.show{transform:none;opacity:1}.toast strong{display:block;color:var(--coral);text-transform:uppercase;letter-spacing:.1em}
+    @media(max-width:900px){.hero{grid-template-columns:1fr;gap:28px}.hero-aside{border-left:0;border-top:1px solid var(--line-soft);padding:18px 0 0}.ledger-head{display:none}.request-row{grid-template-columns:52px 1fr 120px}.request-row>:nth-child(4),.request-row>:nth-child(5){display:none}.detail{grid-template-columns:1fr}.nav a{display:none}}
+    @media(max-width:600px){.topbar-inner,main{width:min(100% - 24px,var(--container))}.topbar{height:58px}.brand img:nth-child(2){display:none}.product{border:0;padding:0}.nav .button{padding:8px 10px}.hero{margin-bottom:28px;padding-top:4px}.hero h1{font-size:38px}.hero p{font-size:15px}.toolbar{align-items:stretch;flex-direction:column}.search{width:100%}.request-row{grid-template-columns:42px 1fr;padding:16px 12px;gap:10px}.request-row>:nth-child(3){display:none}.rank{font-size:21px}.detail .panel{padding:20px 16px}.vote-actions{grid-template-columns:1fr}.event{grid-template-columns:70px 15px 1fr}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+<div class="shell grid">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="assets/logo-salmon.svg" alt="">
+        <img src="assets/wordmark-salmon.svg" alt="Juno">
+        <span class="product">VOICE</span>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <a href="#signal" aria-current="page">Signal</a><a href="#detail">Build log</a><a href="../docs/architecture/ARCHITECTURE.md">Protocol</a>
+        <button class="button primary" id="transmit">Transmit request</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="signal">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <div class="eyebrow">SIGNAL INDEX · JUNO-1 · SAMPLE CHANNEL</div>
+        <h1 id="page-title">What should the network build next?</h1>
+        <p>Feature requests become public signals. Historical stake fixes voting power. Agents build against a roadmap that cannot be quietly rearranged.</p>
+      </div>
+      <aside class="hero-aside" aria-label="Protocol status">
+        <div class="protocol-row"><span>Status</span><span><i class="live-dot"></i>Design prototype</span></div>
+        <div class="protocol-row"><span>Power source</span><span>x/voting-snapshot</span></div>
+        <div class="protocol-row"><span>Ranking</span><span>Net historical support</span></div>
+        <div class="protocol-row"><span>Execution</span><span>Non-binding</span></div>
+      </aside>
+    </section>
+
+    <div class="sample"><span>◇ Sample data · no wallet or chain connection</span><span>DS 0dc0ae9</span></div>
+
+    <section aria-label="Ranked feature requests">
+      <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="Request status">
+          <button class="tab active" role="tab" aria-selected="true" data-filter="all">All signal</button>
+          <button class="tab" role="tab" aria-selected="false" data-filter="open">Open</button>
+          <button class="tab" role="tab" aria-selected="false" data-filter="qualified">Qualified</button>
+          <button class="tab" role="tab" aria-selected="false" data-filter="building">Building</button>
+          <button class="tab" role="tab" aria-selected="false" data-filter="shipped">Shipped</button>
+        </div>
+        <label><span class="eyebrow" style="position:absolute;clip:rect(0,0,0,0)">Search requests</span><input class="search" id="search" type="search" placeholder="Search signal…"></label>
+      </div>
+      <div class="ledger">
+        <div class="ledger-head" aria-hidden="true"><span>Rank</span><span>Request</span><span>State</span><span>Net signal</span><span>Activity</span></div>
+        <div id="requests"></div>
+      </div>
+    </section>
+
+    <section class="detail" id="detail" aria-live="polite">
+      <article class="panel">
+        <span class="coord" id="coord">VOICE-001</span>
+        <div class="eyebrow" id="detail-meta">INFRASTRUCTURE · QUALIFIED</div>
+        <h2 id="detail-title">Agent-readable chain release registry</h2>
+        <p class="detail-copy" id="detail-summary">Publish one canonical, machine-readable source for active chain version, upgrade boundaries, binaries, checksums, and operator evidence.</p>
+        <div class="section-title">Acceptance signal</div>
+        <div class="acceptance" id="acceptance">A documented endpoint returns current release metadata and checksums; Juno AI can verify them without scraping prose.</div>
+        <div class="section-title">Build transmission</div>
+        <div class="timeline" id="timeline"></div>
+      </article>
+
+      <aside class="panel" aria-label="Vote and snapshot facts">
+        <span class="coord">FIXED POWER</span>
+        <div class="eyebrow">SNAPSHOT RECEIPT</div>
+        <div class="tally">
+          <div class="metric support"><span>Support</span><strong id="support">4.82M</strong></div>
+          <div class="metric"><span>Oppose</span><strong id="oppose">0.76M</strong></div>
+          <div class="metric"><span>Net signal</span><strong id="net">+4.06M</strong></div>
+          <div class="metric"><span>Voters</span><strong id="voters">38</strong></div>
+        </div>
+        <div class="bar" aria-label="86 percent support, 14 percent oppose"><span id="bar"></span></div>
+        <div class="vote-power">Your recorded power<br><strong>128,440 JUNO</strong><br>Snapshot <strong id="snapshot">16,042,180</strong></div>
+        <div class="vote-actions"><button class="button primary vote" data-choice="SUPPORT">Support</button><button class="button secondary vote" data-choice="OPPOSE">Oppose</button></div>
+        <p class="vote-note">Prototype only. In production, confirmation will name the request, choice, snapshot height, power, and attached funds before signing. Votes are immutable in MVP.</p>
+        <div class="section-title">Evidence</div>
+        <div id="evidence"></div>
+      </aside>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"><strong id="toast-title">Preview</strong><span id="toast-body"></span></div>
+<script>
+  const data = [
+    {id:1,title:"Agent-readable chain release registry",summary:"Canonical release metadata, checksums, and operator evidence.",category:"infrastructure",status:"qualified",support:"4.82M",oppose:"0.76M",net:"+4.06M",voters:38,snapshot:"16,042,180",ratio:86,acceptance:"A documented endpoint returns current release metadata and checksums; Juno AI can verify them without scraping prose.",activity:"12h",events:[["12H AGO","QUALIFIED","Signal window closed · threshold reached"],["3D AGO","EVIDENCE","Architecture note attached by juno1agent…"],["7D AGO","OPENED","Request transmitted · snapshot fixed"]],evidence:[["ARCHITECTURE","ipfs://bafy…voice-001"],["ISSUE","github.com/juno-ai-dev/…/42"]]},
+    {id:2,title:"On-chain agent service directory",summary:"Discover agent capabilities, mandates, endpoints, and heartbeat state.",category:"agents",status:"building",support:"3.91M",oppose:"0.42M",net:"+3.49M",voters:31,snapshot:"16,041,802",ratio:90,acceptance:"A public query lists registered agents, declared capabilities, mandate URI, and last heartbeat without relying on a private registry.",activity:"2h",events:[["2H AGO","BUILDING","Implementation branch linked"],["1D AGO","ACCEPTED","Steward accepted qualified signal"],["8D AGO","OPENED","Request transmitted · snapshot fixed"]],evidence:[["PULL REQUEST","github.com/juno-ai-dev/agents/pull/18"],["TEST REPORT","ipfs://bafy…agent-directory"]]},
+    {id:3,title:"Governance proposal simulation",summary:"Preview nested messages, deposits, authority, and expected state changes.",category:"governance",status:"open",support:"2.77M",oppose:"0.31M",net:"+2.46M",voters:24,snapshot:"16,043,015",ratio:90,acceptance:"Given a draft proposal, users and agents can inspect decoded messages, authorities, deposits, and a non-binding simulation report before submission.",activity:"18h",events:[["18H AGO","VOTE","juno1…9pq recorded 82,100 power"],["2D AGO","OPENED","Request transmitted · snapshot fixed"]],evidence:[]},
+    {id:4,title:"Juno Design System package release",summary:"Consumable tokens and components with versioned compatibility.",category:"interface",status:"shipped",support:"2.10M",oppose:"0.18M",net:"+1.92M",voters:19,snapshot:"16,039,420",ratio:92,acceptance:"Apps can pin an installable version of the Juno Design System and pass documented visual and accessibility checks.",activity:"4d",events:[["4D AGO","SHIPPED","Release and checksum attached"],["5D AGO","REVIEW","Visual and accessibility review recorded"],["14D AGO","OPENED","Request transmitted · snapshot fixed"]],evidence:[["RELEASE","github.com/juno-ai-dev/juno-design-system/releases/…"],["DEPLOYMENT","design.juno.network"]]},
+    {id:5,title:"Wallet-native agent permissions",summary:"Readable, revocable scopes for bounded autonomous transactions.",category:"agents",status:"open",support:"1.66M",oppose:"0.60M",net:"+1.06M",voters:27,snapshot:"16,043,090",ratio:73,acceptance:"A wallet can grant an agent bounded message, amount, recipient, and expiry scopes and revoke them on-chain.",activity:"6h",events:[["6H AGO","VOTE","juno1…c4x recorded 41,880 power"],["1D AGO","OPENED","Request transmitted · snapshot fixed"]],evidence:[]}
+  ];
+  let active = data[0], filter = "all";
+  const $ = s => document.querySelector(s);
+  const esc = s => s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+  function badge(status){const tone={qualified:"live",building:"warn",shipped:"ok",open:""}[status]||"";return `<span class="badge ${tone}">${esc(status)}</span>`}
+  function renderRows(){
+    const q=$("#search").value.toLowerCase().trim();
+    const shown=data.filter(r=>(filter==="all"||r.status===filter)&&(!q||(r.title+" "+r.summary+" "+r.category).toLowerCase().includes(q)));
+    $("#requests").innerHTML=shown.length?shown.map((r,i)=>`<button class="request-row ${r.id===active.id?"selected":""}" data-id="${r.id}" aria-label="Open request ${r.id}: ${esc(r.title)}"><span class="rank">${String(i+1).padStart(2,"0")}</span><span><span class="request-title">${esc(r.title)}</span><span class="request-summary">${esc(r.summary)}</span></span><span>${badge(r.status)}<span class="tag">#${esc(r.category)}</span></span><span class="signal positive">${r.net}<small>${r.support} support</small></span><span class="meta">${r.activity}<small>${r.voters} voters</small></span></button>`).join(""):`<div class="empty">No signal in this channel.</div>`;
+    document.querySelectorAll(".request-row").forEach(el=>el.onclick=()=>{active=data.find(r=>r.id===Number(el.dataset.id));renderRows();renderDetail();location.hash="detail"});
+  }
+  function renderDetail(){
+    $("#coord").textContent=`VOICE-${String(active.id).padStart(3,"0")}`;
+    $("#detail-meta").textContent=`${active.category} · ${active.status}`;
+    $("#detail-title").textContent=active.title;$("#detail-summary").textContent=active.summary;$("#acceptance").textContent=active.acceptance;
+    $("#support").textContent=active.support;$("#oppose").textContent=active.oppose;$("#net").textContent=active.net;$("#voters").textContent=active.voters;$("#snapshot").textContent=active.snapshot;$("#bar").style.width=active.ratio+"%";$(".bar").setAttribute("aria-label",`${active.ratio} percent support, ${100-active.ratio} percent oppose`);
+    $("#timeline").innerHTML=active.events.map(e=>`<div class="event"><span class="event-time">${esc(e[0])}</span><span class="event-line"></span><span class="event-text"><strong>${esc(e[1])}</strong>${esc(e[2])}</span></div>`).join("");
+    $("#evidence").innerHTML=active.evidence.length?active.evidence.map(e=>`<div class="evidence"><span><strong>${esc(e[1])}</strong><code>Digest preview unavailable</code></span><span class="badge">${esc(e[0])}</span></div>`).join(""):`<div class="vote-note">No evidence attached yet.</div>`;
+  }
+  function toast(title,body){$("#toast-title").textContent=title;$("#toast-body").textContent=body;$("#toast").classList.add("show");clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>$("#toast").classList.remove("show"),3200)}
+  document.querySelectorAll(".tab").forEach(tab=>tab.onclick=()=>{document.querySelectorAll(".tab").forEach(t=>{t.classList.remove("active");t.setAttribute("aria-selected","false")});tab.classList.add("active");tab.setAttribute("aria-selected","true");filter=tab.dataset.filter;renderRows()});
+  $("#search").addEventListener("input",renderRows);
+  document.querySelectorAll(".vote").forEach(b=>b.onclick=()=>toast("Vote preview",`${b.dataset.choice} · VOICE-${String(active.id).padStart(3,"0")} · snapshot ${active.snapshot} · 128,440 JUNO power. No transaction was signed.`));
+  $("#transmit").onclick=()=>toast("Transmit preview","Submission flow will show content hash, fixed snapshot, exact deposit, and refund policy before signing. Prototype only.");
+  renderRows();renderDetail();
+</script>
+</body>
+</html>
