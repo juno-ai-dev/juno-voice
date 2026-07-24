@@ -79,6 +79,8 @@ pub fn execute(
             ],
             bond_totals: Some(totals),
             duplicate_reference: None,
+            evidence_ids: vec![],
+            shipment_attestation: None,
         },
         "close_request",
     )

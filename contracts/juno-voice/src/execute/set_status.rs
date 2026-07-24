@@ -5,10 +5,10 @@ use crate::error::ContractError;
 use crate::lifecycle::{allowed, Controller, Transition};
 use crate::rank::rank_key;
 use crate::state::{
-    BondState, BondTotals, Request, RequestAction, RequestActionRecord, Status,
-    StatusHistoryRecord, BOND_TOTALS, CONFIG, DUPLICATE_REFERENCES, NEXT_REQUEST_ACTION_ID,
-    NEXT_STATUS_HISTORY_ID, REQUESTS, REQUESTS_BY_STATUS, REQUEST_ACTIONS, STATUS_CATEGORY_RANK,
-    STATUS_HISTORY, STATUS_RANK,
+    BondState, BondTotals, Request, RequestAction, RequestActionRecord, ShipmentAttestation,
+    Status, StatusHistoryRecord, BOND_TOTALS, CONFIG, DUPLICATE_REFERENCES, NEXT_REQUEST_ACTION_ID,
+    NEXT_STATUS_HISTORY_ID, REQUESTS, REQUESTS_BY_STATUS, REQUEST_ACTIONS, SHIPMENT_ATTESTATIONS,
+    STATUS_CATEGORY_RANK, STATUS_HISTORY, STATUS_RANK,
 };
 
 pub fn mark_spam(
@@ -501,6 +501,8 @@ fn transition(
             actions,
             bond_totals,
             duplicate_reference,
+            evidence_ids: vec![],
+            shipment_attestation: None,
         },
         response_action,
     )
@@ -596,6 +598,8 @@ pub(crate) struct TransitionWrite {
     pub actions: Vec<RequestAction>,
     pub bond_totals: Option<BondTotals>,
     pub duplicate_reference: Option<(u64, u64)>,
+    pub evidence_ids: Vec<u64>,
+    pub shipment_attestation: Option<ShipmentAttestation>,
 }
 
 pub(crate) fn persist_transition(
@@ -636,6 +640,13 @@ pub(crate) fn persist_transition(
         if DUPLICATE_REFERENCES.may_load(storage, reference)?.is_some() {
             return Err(ContractError::AuditInvariant);
         }
+    }
+    if write.shipment_attestation.is_some()
+        && SHIPMENT_ATTESTATIONS
+            .may_load(storage, request_id)?
+            .is_some()
+    {
+        return Err(ContractError::AttestationExists);
     }
 
     let key = rank_key(
@@ -686,7 +697,7 @@ pub(crate) fn persist_transition(
         from: write.from.clone(),
         to: write.request.status.clone(),
         reason: write.reason.clone(),
-        evidence_ids: vec![],
+        evidence_ids: write.evidence_ids.clone(),
         height: env.block.height,
         timestamp: env.block.time,
     };
@@ -743,6 +754,9 @@ pub(crate) fn persist_transition(
         REQUEST_ACTIONS.save(storage, (request_id, record.id), &record)?;
     }
     STATUS_HISTORY.save(storage, (request_id, history_id), &history)?;
+    if let Some(attestation) = write.shipment_attestation {
+        SHIPMENT_ATTESTATIONS.save(storage, request_id, &attestation)?;
+    }
     NEXT_REQUEST_ACTION_ID.save(storage, request_id, &next_action_id)?;
     NEXT_STATUS_HISTORY_ID.save(storage, request_id, &next_history_id)?;
 

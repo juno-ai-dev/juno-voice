@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
 
-use crate::state::RequestLimits;
+use crate::state::{EvidenceKind, RequestLimits};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -72,6 +72,26 @@ pub enum ExecuteMsg {
     BlockReview {
         request_id: u64,
         reason: String,
+    },
+    AddEvidence {
+        request_id: u64,
+        kind: EvidenceKind,
+        uri: String,
+        digest: String,
+        note: String,
+    },
+    RequestReview {
+        request_id: u64,
+        reason: String,
+        evidence_ids: Vec<u64>,
+    },
+    AttestShipment {
+        request_id: u64,
+        rationale: String,
+        evidence_ids: Vec<u64>,
+    },
+    WithdrawRefund {
+        request_id: u64,
     },
     ProposeGovernor {
         address: String,

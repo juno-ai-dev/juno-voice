@@ -3,7 +3,9 @@ use cw2::set_contract_version;
 
 use crate::bindings::JunoQuery;
 use crate::error::ContractError;
-use crate::execute::{cast_vote, close_request, set_status, submit_request};
+use crate::execute::{
+    add_evidence, cast_vote, close_request, set_status, submit_request, withdraw_refund,
+};
 use crate::msg::{ExecuteMsg, InstantiateMsg};
 use crate::state::{
     BondTotals, Config, ProtocolAction, ProtocolActionRecord, RequestLimits, BOND_TOTALS, CONFIG,
@@ -172,6 +174,36 @@ pub fn execute(
         ExecuteMsg::BlockReview { request_id, reason } => {
             reject_funds(&info)?;
             set_status::block_review(deps, env, info, request_id, reason)
+        }
+        ExecuteMsg::AddEvidence {
+            request_id,
+            kind,
+            uri,
+            digest,
+            note,
+        } => {
+            reject_funds(&info)?;
+            add_evidence::add(deps, env, info, request_id, kind, uri, digest, note)
+        }
+        ExecuteMsg::RequestReview {
+            request_id,
+            reason,
+            evidence_ids,
+        } => {
+            reject_funds(&info)?;
+            add_evidence::request_review(deps, env, info, request_id, reason, evidence_ids)
+        }
+        ExecuteMsg::AttestShipment {
+            request_id,
+            rationale,
+            evidence_ids,
+        } => {
+            reject_funds(&info)?;
+            add_evidence::attest(deps, env, info, request_id, rationale, evidence_ids)
+        }
+        ExecuteMsg::WithdrawRefund { request_id } => {
+            reject_funds(&info)?;
+            withdraw_refund::execute(deps, env, info, request_id)
         }
         ExecuteMsg::ProposeGovernor { address, reason } => {
             if !info.funds.is_empty() {
