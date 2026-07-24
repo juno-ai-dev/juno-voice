@@ -34,3 +34,11 @@ mod cast_vote_tests;
 #[cfg(test)]
 #[path = "tests/lifecycle.rs"]
 mod lifecycle_tests;
+
+#[cfg(test)]
+#[path = "tests/evidence_refunds.rs"]
+mod evidence_refunds_tests;
+
+#[cfg(test)]
+#[path = "tests/task6_acceptance.rs"]
+mod task6_acceptance_tests;

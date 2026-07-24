@@ -149,4 +149,19 @@ pub enum ContractError {
 
     #[error("request vote aggregates or copied thresholds are inconsistent")]
     AggregateInvariant,
+
+    #[error("evidence URI, digest, note, count, or policy is invalid")]
+    InvalidEvidence,
+
+    #[error("evidence id overflow")]
+    EvidenceIdOverflow,
+
+    #[error("evidence references are invalid")]
+    InvalidEvidenceReferences,
+
+    #[error("shipment attestation already exists")]
+    AttestationExists,
+
+    #[error("contract balance does not cover bond liabilities")]
+    Insolvent,
 }
