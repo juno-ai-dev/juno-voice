@@ -9,6 +9,36 @@ pub enum ContractError {
     #[error("this operation must not include funds")]
     UnexpectedFunds,
 
+    #[error("submission requires exactly the configured bond coin")]
+    InvalidSubmissionFunds,
+
+    #[error("request submissions are paused")]
+    SubmissionsPaused,
+
+    #[error("invalid or oversized required brief field: {field}")]
+    InvalidBrief { field: &'static str },
+
+    #[error("category must be a bounded nonempty lowercase ASCII slug")]
+    InvalidCategory,
+
+    #[error("detail URI and digest must be paired and use canonical syntax")]
+    InvalidDetail,
+
+    #[error("submission requires a nonzero execution height")]
+    InvalidSnapshotHeight,
+
+    #[error("snapshot height cannot be represented by the Juno query binding")]
+    SnapshotHeightConversionOverflow,
+
+    #[error("total voting power must be a nonzero base-10 unsigned integer")]
+    InvalidTotalVotingPower,
+
+    #[error("request id overflow")]
+    RequestIdOverflow,
+
+    #[error("locked bond total overflow")]
+    BondTotalOverflow,
+
     #[error("invalid {role} address")]
     InvalidAddress { role: &'static str },
 

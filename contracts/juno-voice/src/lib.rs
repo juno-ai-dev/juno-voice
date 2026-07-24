@@ -1,6 +1,7 @@
 pub mod bindings;
 pub mod contract;
 pub mod error;
+pub mod execute;
 pub mod msg;
 pub mod state;
 
@@ -19,3 +20,7 @@ mod governor_tests;
 #[cfg(test)]
 #[path = "tests/audit.rs"]
 mod audit_tests;
+
+#[cfg(test)]
+#[path = "tests/submit_request.rs"]
+mod submit_request_tests;
