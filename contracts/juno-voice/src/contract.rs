@@ -3,7 +3,7 @@ use cw2::set_contract_version;
 
 use crate::bindings::JunoQuery;
 use crate::error::ContractError;
-use crate::execute::{cast_vote, submit_request};
+use crate::execute::{cast_vote, close_request, set_status, submit_request};
 use crate::msg::{ExecuteMsg, InstantiateMsg};
 use crate::state::{
     BondTotals, Config, ProtocolAction, ProtocolActionRecord, RequestLimits, BOND_TOTALS, CONFIG,
@@ -125,6 +125,54 @@ pub fn execute(
             }
             cast_vote::execute(deps, env, info, request_id, choice)
         }
+        ExecuteMsg::CloseRequest { request_id } => {
+            reject_funds(&info)?;
+            close_request::execute(deps, env, info, request_id)
+        }
+        ExecuteMsg::MarkSpam { request_id, reason } => {
+            reject_funds(&info)?;
+            set_status::mark_spam(deps, env, info, request_id, reason)
+        }
+        ExecuteMsg::MarkDuplicate {
+            request_id,
+            canonical_request_id,
+            reason,
+        } => {
+            reject_funds(&info)?;
+            set_status::mark_duplicate(deps, env, info, request_id, canonical_request_id, reason)
+        }
+        ExecuteMsg::ArchiveRequest { request_id, reason } => {
+            reject_funds(&info)?;
+            set_status::archive_request(deps, env, info, request_id, reason)
+        }
+        ExecuteMsg::StartBuilding {
+            request_id,
+            builder,
+            reason,
+        } => {
+            reject_funds(&info)?;
+            set_status::start_building(deps, env, info, request_id, builder, reason)
+        }
+        ExecuteMsg::BlockBuilding { request_id, reason } => {
+            reject_funds(&info)?;
+            set_status::block_building(deps, env, info, request_id, reason)
+        }
+        ExecuteMsg::ResumeBuilding {
+            request_id,
+            builder,
+            reason,
+        } => {
+            reject_funds(&info)?;
+            set_status::resume_building(deps, env, info, request_id, builder, reason)
+        }
+        ExecuteMsg::RejectReview { request_id, reason } => {
+            reject_funds(&info)?;
+            set_status::reject_review(deps, env, info, request_id, reason)
+        }
+        ExecuteMsg::BlockReview { request_id, reason } => {
+            reject_funds(&info)?;
+            set_status::block_review(deps, env, info, request_id, reason)
+        }
         ExecuteMsg::ProposeGovernor { address, reason } => {
             if !info.funds.is_empty() {
                 return Err(ContractError::UnexpectedFunds);
@@ -144,6 +192,13 @@ pub fn execute(
             execute_accept_governor(deps, env, info, reason)
         }
     }
+}
+
+fn reject_funds(info: &MessageInfo) -> Result<(), ContractError> {
+    if !info.funds.is_empty() {
+        return Err(ContractError::UnexpectedFunds);
+    }
+    Ok(())
 }
 
 fn execute_propose_governor(

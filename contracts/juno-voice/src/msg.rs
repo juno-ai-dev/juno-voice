@@ -35,6 +35,44 @@ pub enum ExecuteMsg {
         request_id: u64,
         choice: crate::state::VoteChoice,
     },
+    CloseRequest {
+        request_id: u64,
+    },
+    MarkSpam {
+        request_id: u64,
+        reason: String,
+    },
+    MarkDuplicate {
+        request_id: u64,
+        canonical_request_id: u64,
+        reason: String,
+    },
+    ArchiveRequest {
+        request_id: u64,
+        reason: String,
+    },
+    StartBuilding {
+        request_id: u64,
+        builder: String,
+        reason: String,
+    },
+    BlockBuilding {
+        request_id: u64,
+        reason: String,
+    },
+    ResumeBuilding {
+        request_id: u64,
+        builder: String,
+        reason: String,
+    },
+    RejectReview {
+        request_id: u64,
+        reason: String,
+    },
+    BlockReview {
+        request_id: u64,
+        reason: String,
+    },
     ProposeGovernor {
         address: String,
         reason: String,
