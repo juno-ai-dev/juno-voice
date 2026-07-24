@@ -107,4 +107,46 @@ pub enum ContractError {
 
     #[error("protocol action id overflow")]
     ProtocolActionIdOverflow,
+
+    #[error("request cannot make the requested lifecycle transition")]
+    InvalidStatusTransition,
+
+    #[error("request cannot be finalized before its close height")]
+    RequestNotClosed,
+
+    #[error("request bond state or aggregate totals are inconsistent")]
+    BondInvariant,
+
+    #[error("request action id overflow")]
+    RequestActionIdOverflow,
+
+    #[error("status history id overflow")]
+    StatusHistoryIdOverflow,
+
+    #[error("request audit counter would overwrite an existing record")]
+    AuditInvariant,
+
+    #[error("duplicate canonical target is invalid")]
+    InvalidDuplicateTarget,
+
+    #[error("request is referenced as a canonical duplicate target")]
+    DuplicateTargetReferenced,
+
+    #[error("builder must be valid, assigned, and distinct from verifier")]
+    InvalidBuilder,
+
+    #[error("work round overflow")]
+    WorkRoundOverflow,
+
+    #[error("work activity height is missing")]
+    MissingWorkActivity,
+
+    #[error("copied work inactivity period has not elapsed")]
+    WorkInactivityNotElapsed,
+
+    #[error("request lifecycle indexes are inconsistent")]
+    IndexInvariant,
+
+    #[error("request vote aggregates or copied thresholds are inconsistent")]
+    AggregateInvariant,
 }

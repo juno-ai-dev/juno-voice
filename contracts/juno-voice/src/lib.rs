@@ -2,6 +2,7 @@ pub mod bindings;
 pub mod contract;
 pub mod error;
 pub mod execute;
+pub mod lifecycle;
 pub mod msg;
 mod rank;
 pub mod state;
@@ -29,3 +30,7 @@ mod submit_request_tests;
 #[cfg(test)]
 #[path = "tests/cast_vote.rs"]
 mod cast_vote_tests;
+
+#[cfg(test)]
+#[path = "tests/lifecycle.rs"]
+mod lifecycle_tests;
