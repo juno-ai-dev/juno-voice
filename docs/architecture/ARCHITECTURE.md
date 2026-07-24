@@ -130,11 +130,13 @@ Bond { amount: Uint128, state: Locked | Refundable | Claimed | Forfeited }
 BondTotals { locked: Uint128, refundable: Uint128, forfeited: Uint128 }
 ```
 
-The brief is required, bounded, inline, immutable, and canonical. `category` is a lowercase `[a-z0-9-]` slug, not a closed enum. Supplementary detail fields accept exactly `(None, None)` or `(Some(uri), Some(digest))`; either unpaired form is rejected. The URI must use `https://` or `ipfs://`, and the digest must be `sha256:<64 lowercase hex>`. Material corrections create a new request.
+The brief is required, bounded, inline, immutable, and canonical. `category` is a lowercase `[a-z0-9-]` slug, not a closed enum. Supplementary detail fields accept exactly `(None, None)` or `(Some(uri), Some(digest))`; either unpaired form is rejected. The URI must use `https://` or `ipfs://` followed by a non-empty locator, and the digest must be `sha256:<64 lowercase hex>`. Material corrections create a new request.
 
 Configuration values copied into a request cannot rewrite active behavior. `native_denom`, contract identity, MVP evidence policy version 1, reason bound, and query page bounds are immutable. Governor updates to bond, voting period, thresholds, inactivity timeout, and request limits affect future requests only. Pause and role changes are immediate. A later code version may introduce a new, fully specified evidence policy version without changing version 1 semantics.
 
-Instantiate and future-config validation require: non-empty valid native denom; nonzero bond; nonzero voting and inactivity periods; `1 <= quorum_bps <= 10,000`; `1 <= support_bps <= 10,000`; valid distinct role addresses where a rule requires address distinction; every byte/count limit nonzero; `default_query_limit <= max_query_limit`; and checked `opened_height + voting_period_blocks`. The contract applies the same validation to every updated field set before changing configuration.
+Instantiate and future-config validation require: non-empty valid native denom; nonzero bond; nonzero voting and inactivity periods; `1 <= quorum_bps <= 10,000`; `1 <= support_bps <= 10,000`; valid distinct role addresses where a rule requires address distinction; valid byte/count limits; `default_query_limit <= max_query_limit`; and checked `opened_height + voting_period_blocks`. The contract applies the same validation to every updated field set before changing configuration.
+
+For evidence policy version 1, instantiate fixes `evidence_policy_version` to exactly `1` and enforces semantic limit minima rather than accepting merely nonzero values: `max_uri_bytes >= 9`, `max_digest_bytes >= 71`, `max_evidence_items >= 2`, `max_review_evidence_refs >= 1`, and `max_attestation_evidence_refs >= 2`. The URI minimum admits a non-empty locator under either accepted scheme. Review and attestation reference maxima must not exceed `max_evidence_items`; all other byte/count limits are nonzero. These invariants apply to every future-request `request_limits` update, so no request can copy limits that make required delivery evidence, review, or shipment structurally unreachable.
 
 ### Accepted schema defaults
 
@@ -240,7 +242,7 @@ ShipmentAttestation {
 }
 ```
 
-The first five kinds are delivery class (current builder in `BUILDING`); the last three are verification class (current verifier in `REVIEW`). No kind belongs to both. Every item requires `https://` or `ipfs://` and a valid SHA-256 digest.
+The first five kinds are delivery class (current builder in `BUILDING`); the last three are verification class (current verifier in `REVIEW`). No kind belongs to both. Every item requires `https://` or `ipfs://` followed by a non-empty locator and a valid SHA-256 digest.
 
 `RequestReview` accepts a non-empty list of at most the request-copied `max_review_evidence_refs`. IDs must be unique, exist on this request and current round, and each must be delivery-class evidence submitted by the current builder. Failure rejects without changing status. A successful request stores the references in status history and enters `REVIEW`.
 
