@@ -18,18 +18,18 @@ The visual voice follows the Juno system: precise, dark, diagrammatic, terse. It
 
 - **Signal** — ranked requests, filters, search, status and participation.
 - **Request detail** — brief, acceptance criteria, fixed snapshot, tally, lifecycle, evidence.
-- **Transmit** — submit a feature request and deposit.
+- **Transmit** — submit a feature request and anti-spam bond.
 - **Build log** — cross-request delivery activity and evidence.
-- **Protocol** — transparent ranking, deposit, lifecycle, and snapshot rules.
-- **Wallet** — voting power, submitted requests, votes, refundable deposits.
+- **Protocol** — transparent ranking, bond, lifecycle, authority, and snapshot rules.
+- **Wallet** — voting power, submitted requests, votes, and bond/refund state.
 
 ## Primary flows
 
 ### Submit a request
 
 1. Connect wallet.
-2. Enter title, concise problem statement, category, and acceptance-criteria URI.
-3. Review exact anti-spam deposit and immutable snapshot rule.
+2. Enter title, concise problem statement, category, and required inline acceptance criteria; optionally add a digest-pinned detail URI.
+3. Review exact anti-spam bond, refund/forfeiture policy, and immutable snapshot rule.
 4. Sign transaction.
 5. Land on the new request detail with status `OPEN`.
 
@@ -47,11 +47,11 @@ Never reduce voting to an unexplained percentage. Show support power, opposition
 
 ### Build and verify
 
-1. Agent or builder queries qualified/accepted work.
-2. Request moves to `BUILDING` with a reason.
-3. Builder attaches commit, PR, deployment, or test evidence.
-4. Steward advances to `REVIEW` then `SHIPPED`.
-5. Timeline preserves every transition and attestation.
+1. Agent or builder queries `QUALIFIED` work directly over RPC.
+2. Steward assigns one builder and moves the request directly to `BUILDING`; there is no `ACCEPTED` state.
+3. The current-round builder attaches digest-bearing delivery evidence and requests `REVIEW`.
+4. A distinct verifier adds current-round verification evidence and either rejects/blocks review or attests `SHIPPED` against the immutable criteria.
+5. Typed action logs preserve assignment, evidence, bond, transition, and attestation history.
 
 ## Screen inventory
 
@@ -59,7 +59,7 @@ Never reduce voting to an unexplained percentage. Show support power, opposition
 
 - Juno wordmark + `VOICE` product label.
 - Primary action: `TRANSMIT REQUEST`.
-- Compact protocol indicators: chain, snapshot availability, open request count.
+- Compact protocol indicators: chain, externally operator-attested snapshot-retention status with source and as-of height/time, submission-pause state, open request count. Label retention status as external and never as contract-verified exact-height availability.
 - Filter tabs: `ALL`, `OPEN`, `QUALIFIED`, `BUILDING`, `SHIPPED`.
 - Category tags and search.
 - Dense ranked rows rather than a card mosaic:
@@ -82,25 +82,25 @@ Never reduce voting to an unexplained percentage. Show support power, opposition
 ### 3. Transmit request
 
 - Single focused form in a technical enclosure.
-- Deposit, refund policy, snapshot behavior, and byte limits visible before signing.
+- Bond state/refund policy, snapshot trust assumption, voting duration, and accepted byte/count limits visible before signing.
 - Transaction preview uses exact values; never vague “network fee may apply” copy alone.
 
 ### 4. Build log
 
-- Chronological event stream with request IDs.
-- Filters by evidence kind, status, and builder.
+- Chronological typed-action stream with request IDs and work rounds.
+- Filters by delivery/verification evidence kind, status, builder, and verifier.
 - No vanity metrics; only verifiable work events.
 
 ### 5. Protocol
 
 - Human-readable rules beside exact machine fields.
-- Explain historical power, ranking tie-breaks, deposits, roles, and non-goals.
+- Explain the external snapshot-retention trust assumption, signed ranking tie-breaks, independent bond lifecycle, separate admin/governor/steward/verifier/builder roles, submission-only pause, and non-goals.
 - Link contract address/code checksum after deployment.
 
 ### 6. Wallet
 
 - Snapshot-aware voting power explanation.
-- Submitted requests, immutable vote receipts, refundable deposits.
+- Submitted requests, immutable vote receipts, and locked/refundable/claimed bond state.
 - Pull-refund action with explicit amount.
 
 ## Design-system mapping
@@ -147,6 +147,9 @@ They should differ in hierarchy—not merely swap colors.
 - No emoji, hype, exclamation points, or “seamless community-driven innovation.”
 - IDs, heights, addresses, power, and timestamps use monospace.
 - Draft product copy must not imply that ranking binds Juno governance.
+- Use “attested shipment” or “delivery attestation,” never “proof of correctness.”
+- Label `OPEN` requests past close as derived `AWAITING_FINALIZATION`; do not present it as an on-chain status.
+- A pause banner must say that only new submissions are paused and that voting, finalization, evidence, recovery, and refunds remain available.
 
 ## Responsive behavior
 
