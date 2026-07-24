@@ -1,18 +1,18 @@
-# ADR-003: Chain state is canonical; indexing is derived
+# ADR-003: Chain state is canonical; direct RPC is primary
 
-- **Status:** Proposed
-- **Date:** 2026-07-23
+- **Status:** Accepted
+- **Date:** 2026-07-24
 
 ## Context
 
-Text search, rich filtering, notifications, and analytics are expensive or awkward in a smart contract. Making a centralized API canonical would weaken the product's core promise.
+Text search and analytics are awkward on-chain, but making a centralized API canonical would weaken auditability.
 
 ## Decision
 
-Requests, snapshot heights, vote receipts/tallies, status history, deposits, and evidence references are canonical contract state. An optional indexer may provide search and cached views, but every result is reproducible from chain queries/events and identifies its indexed height.
+Requests, snapshot values, receipts/tallies, bonds, lifecycle, assignments, evidence, attestations, role/config/pause state, and typed logs are canonical contract state. Direct RPC is the primary MVP path for bounded status/category ranking, request detail, and histories.
+
+An optional indexer may add search, activity, and caches. It identifies chain/contract/schema, indexed and current heights, lag state, and a direct-chain verification path. It never becomes authoritative.
 
 ## Consequences
 
-- The UI can remain fast without trusting an API for governance signal.
-- Direct RPC fallback remains possible for request detail.
-- Indexer schema/versioning becomes an implementation concern, not a consensus dependency.
+The MVP does not depend on indexer availability. Contract pagination and ranking indexes must be bounded and useful directly. Mutable-list results expose query height and weak-consistency behavior.

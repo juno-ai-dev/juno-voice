@@ -1,12 +1,14 @@
 # Juno Voice Architecture V2 Review
 
-**Status:** decision draft; not an implementation specification
+**Status:** Accepted on 2026-07-24 and superseded by canonical documentation
 **Scope:** consolidated protocol, product/operations, and contract-feasibility review
-**Implementation gate:** contract behavior and public schemas remain paused until the blocking decisions in this document are accepted or revised
+**Canonical sources:** [`ARCHITECTURE.md`](./ARCHITECTURE.md), accepted ADRs in [`decisions/`](./decisions/), [`PRODUCT_DESIGN.md`](../design/PRODUCT_DESIGN.md), and [`2026-07-23-mvp.md`](../plans/2026-07-23-mvp.md)
+
+> This review is retained as decision history. Its recommendations were accepted with the launch-policy qualifications recorded in the canonical sources. It is no longer an implementation specification and imposes no implementation pause.
 
 ## 1. Review verdict
 
-The existing architecture is strong enough to establish the product boundary, fixed-snapshot voting model, and non-binding posture. It is not yet safe to freeze behavior-complete contract schemas.
+At review time, the existing architecture was strong enough to establish the product boundary, fixed-snapshot voting model, and non-binding posture, but was not yet safe to freeze behavior-complete contract schemas. The accepted canonical architecture now closes those gaps.
 
 The current draft credibly supports:
 
@@ -22,7 +24,7 @@ suggest → prioritize → select → build → review → attest shipment
 
 The contract cannot prove that external software is correct. It can preserve what was requested, how it was prioritized, who accepted responsibility, which immutable evidence was cited, and who attested that the acceptance criteria were met.
 
-This document consolidates the independent review findings without accepting launch parameters or authorizing implementation, deployment, or fund acceptance.
+This document consolidated the review findings. Acceptance authorized canonical MVP implementation, but not deployment or fund acceptance; the intended launch profile is selected in canonical architecture and remains explicit deployment input subject to live revalidation.
 
 ## 2. Product objective and non-objectives
 
@@ -57,7 +59,7 @@ Prioritization remains non-binding. Steward acceptance and shipment attestations
 
 The current `acceptance_uri: Option<String>` is insufficient as the canonical contract between voters and builders. External HTTPS content can change, and an optional URI does not give agents a stable definition of done.
 
-### Recommended request fields
+### Accepted request fields
 
 ```rust
 RequestBrief {
@@ -74,8 +76,8 @@ Rules:
 
 - `acceptance_criteria` is required, bounded, stored on-chain, and immutable.
 - `category` is a bounded lowercase slug matching `[a-z0-9-]`; it is not a closed Rust enum.
-- `detail_uri` is supplementary. The inline brief remains canonical.
-- If a mutable external document is intended to be relied on, its digest must be supplied using a defined syntax such as `sha256:<64 lowercase hex>`.
+- `detail_uri` is supplementary. The inline brief remains canonical. Detail fields accept only `(None, None)` or `(Some(uri), Some(digest))`; unpaired values are rejected.
+- A supplied URI must use `https://` or `ipfs://` and its digest must be `sha256:<64 lowercase hex>`.
 - Submitted requests cannot be edited. Material corrections create a replacement request and may be linked through archival or duplicate metadata.
 
 ## 4. Fixed-snapshot voting and qualification
@@ -110,7 +112,7 @@ Architecture V2 consequently treats retained snapshot history as an explicit ext
 - equality does **not** prove exact-height availability and must never be presented as such;
 - if Juno adds a binding that returns the resolved snapshot height, a later contract version should require exact equality with the request's query height.
 
-This limitation is a launch risk, not something application code can fully repair. The fixed-snapshot ADR remains conditional on accepting this chain-level trust assumption or adding a stronger binding.
+This limitation is a launch risk, not something application code can fully repair. The chain-level trust assumption was accepted; a stronger binding remains a future improvement.
 
 ## 5. Ranking
 
@@ -194,12 +196,13 @@ Every bond transition updates the request and aggregate totals atomically. The c
 
 ## 7. Roles and authority
 
-Separate four authorities:
+Separate five actors/authorities:
 
 1. **Chain contract admin** — can replace contract code through CosmWasm migration and is therefore an effective custodian of every locked or refundable bond.
 2. **Governor** — replaces operational roles and controls durable protocol configuration.
 3. **Steward** — moderates requests, selects work, assigns builders, and handles stale-work recovery.
 4. **Verifier** — reviews evidence, rejects review, adds verification evidence, and attests shipment.
+5. **Builder** — the request's current-round assignee; adds delivery evidence and requests review.
 
 The production chain admin and governor must be DAO or multisig authorities; a unilateral admin must never accept production bonds. Their addresses, powers, proposal/review process, and any enforceable delay must be disclosed to depositors. Governor transfer uses propose/accept semantics. Steward and verifier cannot replace the governor or themselves. The assigned builder and verifier must be different addresses for each shipment.
 
@@ -255,7 +258,7 @@ SHIPPED
 
 The existing authorization allowing only the author or steward to attach evidence contradicts the documented agent workflow. In V2:
 
-- one builder address and one monotonically increasing work-round number are canonical while a request is `BUILDING` or `REVIEW`;
+- one builder address, one monotonically increasing work-round number, and one work-activity height are canonical while a request is `BUILDING` or `REVIEW`;
 - the assigned builder may add delivery evidence in `BUILDING` and request review;
 - the configured verifier may add verification evidence in `REVIEW`, reject review, or attest shipment;
 - the request author has no special evidence authority unless assigned as builder or configured in another role.
@@ -297,6 +300,8 @@ Evidence {
 
 Evidence IDs are request-local and monotonically increasing. Every item requires an `https://` or `ipfs://` URI and a `sha256:<64 lowercase hex>` digest, regardless of URI scheme. The digest is a submitter assertion: the contract validates syntax and authority but does not fetch or hash external content.
 
+`RequestReview` carries a non-empty bounded list of unique evidence IDs. Every ID must belong to this request and current round and identify delivery-class evidence from the current builder; failure leaves the request in `BUILDING`.
+
 `SHIPPED` requires a distinct verification attestation:
 
 ```rust
@@ -314,7 +319,7 @@ The exact `REVIEW → SHIPPED` predicate is:
 
 1. sender is the configured verifier and differs from the assigned builder;
 2. rationale is non-empty and bounded and explicitly attests that the immutable acceptance criteria were met;
-3. all referenced evidence exists on this request and in the current work round;
+3. the bounded reference list is non-empty and unique, and all referenced evidence exists on this request and in the current work round;
 4. at least one referenced item is delivery-class evidence submitted by the currently assigned builder; and
 5. at least one different referenced item is verification-class evidence submitted by the current verifier.
 
@@ -341,7 +346,7 @@ The governor and steward may pause submissions with a reason. Only the governor 
 
 If the historical-total consistency check mismatches, the vote fails without state changes and clients show `SNAPSHOT_INTEGRITY_MISMATCH`. This does not detect every exact-height history failure. Operators may pause new submissions while externally verifying chain history. Recovery is a disclosed governor action, not a mechanically proven contract fact: while submissions are paused, the governor may emergency-archive an `OPEN` request with refund and a typed `SnapshotHistoryRisk` reason. Ordinary steward `OPEN → ARCHIVED` is not allowed.
 
-`BUILDING` and `REVIEW` records expose last assignment, evidence, and status activity heights. Stale warnings are derived. Steward-forced `BUILDING → BLOCKED` requires the request-copied inactivity timeout to have elapsed; the builder may voluntarily block earlier.
+Entering or re-entering `BUILDING` sets the canonical work-activity height; successful delivery evidence by the current builder resets it and unrelated actions do not. Steward-forced `BUILDING → BLOCKED` requires checked `height >= work_activity_height + copied_timeout`; overflow means not elapsed. The builder may voluntarily block earlier.
 
 ## 12. Configuration mutability
 
@@ -349,26 +354,29 @@ Immutable after instantiate:
 
 - native denom;
 - contract identity.
+- evidence policy version 1;
+- lifecycle/protocol reason bound;
+- default and maximum query page bounds.
 
 Future requests only; values are copied into each new request:
 
 - submission bond amount;
 - voting period;
 - quorum and support thresholds;
-- work inactivity timeout.
-- string and evidence count limits;
-- evidence policy version and all evidence/URI/digest limits.
+- work inactivity timeout; and
+- request limits, including all string, URI, digest, evidence-count, review-reference, and attestation-reference limits.
 
 Immediate:
 
 - pause state;
-- operational steward after governor action.
+- governor transfer after acceptance; and
+- steward and verifier replacement after governor action.
 
 MVP evidence policy version 1 is immutable and permits only the kinds, schemes, digest syntax, and role/status matrix in Section 9. Existing requests are always completed under the copied policy and limits they were submitted with; configuration changes cannot dead-end active work.
 
 ## 13. Bounded public schema
 
-Proposed starting limits for review, not yet accepted launch values:
+Accepted schema defaults (deployment overrides remain launch choices):
 
 | Field | Bound |
 |---|---:|
@@ -381,8 +389,9 @@ Proposed starting limits for review, not yet accepted launch values:
 | Evidence note | 1,024 bytes |
 | Lifecycle/attestation reason | 1,024 bytes |
 | Evidence items per request | 64 |
+| Review evidence references | 16 |
 | Attestation evidence references | 16 |
-| Query page size | default 30, maximum 100 |
+| Query page size | immutable contract-wide default 30, maximum 100 |
 
 Status history is not the complete audit model. Canonical state contains bounded, paginated typed logs:
 
@@ -408,7 +417,7 @@ StatusHistoryRecord {
 }
 ```
 
-Events mirror action records for indexing but are not the only audit source. Current state plus these logs must reproduce role, config, pause, assignment, moderation, bond, evidence, and attestation history. Exact execute/query JSON names and response-version strategy remain to be frozen after this architecture is accepted.
+Events mirror action records for indexing but are not the only audit source. Current state plus these logs must reproduce role, config, pause, assignment, moderation, bond, evidence, and attestation history. The canonical architecture now fixes the execute/query variants, filters, cursors, limits, and typed behavior; generated JSON schema and exact encoding vectors must match it.
 
 ## 14. Indexer and direct RPC
 
@@ -426,22 +435,13 @@ The indexer never becomes authoritative for votes, ranking inputs, lifecycle, ev
 
 ## 15. Migration and release posture
 
-The initial testnet and mainnet deployments should be upgradeable because product semantics are still young. The chain admin is an effective bond custodian, not a merely technical role: production requires a disclosed DAO or threshold multisig at least as strong as the governor, an externally reviewable migration proposal process, and a delay where the chosen authority can enforce one. No unilateral production admin may accept bonds.
+Migration design and rehearsal do not gate starting MVP implementation. Production upgrade policy is a launch concern. If launch is upgradeable, the chain admin remains an effective bond custodian and must be a disclosed DAO or threshold multisig; no unilateral production admin may accept bonds. Launch review must define version/CW2 checks, preservation and invariant checks for all canonical state, disclosure metadata, and the lack of automatic rollback.
 
-Before mainnet:
+Testnet smoke coverage must include duplicate, spam, insufficient participation, negative net signal, awaiting finalization, stale/block/reassign, snapshot mismatch, submission-only pause continuity, refunds, and the full distinct-verifier shipment predicate. Migration smoke is required only if the selected launch policy is upgradeable.
 
-- define a versioned `MigrateMsg` and source-version allowlist;
-- test migration with active requests in every non-terminal status;
-- preserve request IDs, vote receipts, tallies, bonds, assignments, evidence, attestations, and history;
-- publish contract version, schema version, checksum, code ID, contract address, admin, governor, steward, verifier, powers, and config;
-- export state before migration and compare invariants afterward;
-- state plainly that CosmWasm migration has no automatic rollback.
+## 16. Accepted decision disposition
 
-Testnet smoke coverage must include failure and recovery paths, not only the happy path: duplicate, spam, insufficient participation, negative net signal, awaiting finalization, stale/block/reassign, snapshot mismatch, pause, refunds, and migration.
-
-## 16. Decisions still requiring explicit acceptance
-
-### Architecture decisions
+### Accepted architecture decisions
 
 - Keep `SUPPORT / OPPOSE` rather than support-only voting.
 - Remove `ACCEPTED`; operational commitment begins with explicit builder assignment into `BUILDING`.
@@ -454,20 +454,11 @@ Testnet smoke coverage must include failure and recovery paths, not only the hap
 - Accept exact-height snapshot retention as an external chain trust assumption; keep total-power equality only as a consistency check.
 - Use submission-only pause, typed emergency recovery, signed-safe canonical ranking, category-aware indexes, and filter-bound full-key cursors.
 - Keep direct RPC primary for MVP.
-- Start with upgradeable deployments and rehearsed migrations.
+- Preserve chain-admin custody disclosure; production upgrade/migration policy is a launch concern and does not gate starting MVP implementation.
 
 ### Launch parameters
 
-Still unresolved and intentionally not fixed by this review:
-
-- production governor, steward, and chain admin addresses;
-- submission bond amount;
-- voting period in blocks;
-- quorum and support thresholds;
-- work inactivity timeout;
-- exact field/count limits;
-- exact testnet and mainnet deployment sequence;
-- design-system consumption method.
+The accepted canonical architecture selects the intended MVP profile: `juno-1` production target, `uni-7` exact-artifact smoke, 10 JUNO bond, 432,000-block voting and inactivity windows, 50 bps quorum, 5,001 bps support, documented Juno Agents DAO/Juno agent roles, and a pinned design-system source subtree. These are deployment inputs rather than universal protocol constants and require live pre-deployment revalidation; see canonical `ARCHITECTURE.md` for exact values and addresses.
 
 ## 17. Rejected alternatives for MVP
 
@@ -480,20 +471,10 @@ Still unresolved and intentionally not fixed by this review:
 - permissionless self-service work claims;
 - comments and discussion stored on-chain;
 - consensus-critical indexer/search;
-- immutable/no-admin first deployment before migration behavior is exercised.
 
-## 18. Gate before implementation
+## 18. Implementation disposition
 
-Behavior-complete contract implementation begins only when:
-
-- [ ] this V2 review is accepted or revised;
-- [ ] ADRs reflect the accepted voting, authority, bond, lifecycle, evidence, ranking, and recovery decisions;
-- [ ] the canonical architecture and product design no longer contradict those ADRs;
-- [ ] execute/query schemas and all field/count limits are explicit;
-- [ ] state and funds invariants are testable;
-- [ ] the migration/admin posture is explicit;
-- [ ] unresolved launch parameters are either fixed or clearly represented as instantiate values;
-- [ ] a final independent adversarial review finds no unresolved architecture blocker.
+Architecture V2 is accepted and canonical documents now govern implementation. The intended launch addresses and numeric profile are selected, while production migration design remains a launch concern. MVP work may begin; deployment, accepting funds, and production custody still require live revalidation, launch disclosures, retained-history checks, artifact smoke, and independent review specified by the canonical architecture and plan.
 
 ## Sources reviewed
 
