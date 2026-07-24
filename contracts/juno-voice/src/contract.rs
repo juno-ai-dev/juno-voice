@@ -3,7 +3,7 @@ use cw2::set_contract_version;
 
 use crate::bindings::JunoQuery;
 use crate::error::ContractError;
-use crate::execute::submit_request;
+use crate::execute::{cast_vote, submit_request};
 use crate::msg::{ExecuteMsg, InstantiateMsg};
 use crate::state::{
     BondTotals, Config, ProtocolAction, ProtocolActionRecord, RequestLimits, BOND_TOTALS, CONFIG,
@@ -119,6 +119,12 @@ pub fn execute(
             detail_uri,
             detail_digest,
         ),
+        ExecuteMsg::CastVote { request_id, choice } => {
+            if !info.funds.is_empty() {
+                return Err(ContractError::UnexpectedFunds);
+            }
+            cast_vote::execute(deps, env, info, request_id, choice)
+        }
         ExecuteMsg::ProposeGovernor { address, reason } => {
             if !info.funds.is_empty() {
                 return Err(ContractError::UnexpectedFunds);
