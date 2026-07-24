@@ -218,7 +218,10 @@ pub struct StatusHistoryRecord {
 /// to reproduce each request mutation; later execute tasks populate these records.
 #[cw_serde]
 pub enum RequestAction {
-    Submitted,
+    Submitted {
+        snapshot_height: u64,
+        total_power: Uint128,
+    },
     Finalized {
         qualified: bool,
     },
@@ -246,8 +249,9 @@ pub enum RequestAction {
         evidence_ids: Vec<u64>,
     },
     BondTransition {
-        from: BondState,
+        from: Option<BondState>,
         to: BondState,
+        amount: Uint128,
     },
     RefundWithdrawn {
         amount: Uint128,

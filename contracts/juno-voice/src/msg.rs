@@ -23,7 +23,22 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    ProposeGovernor { address: String, reason: String },
-    CancelGovernorTransfer { reason: String },
-    AcceptGovernor { reason: String },
+    SubmitRequest {
+        title: String,
+        summary: String,
+        acceptance_criteria: String,
+        category: String,
+        detail_uri: Option<String>,
+        detail_digest: Option<String>,
+    },
+    ProposeGovernor {
+        address: String,
+        reason: String,
+    },
+    CancelGovernorTransfer {
+        reason: String,
+    },
+    AcceptGovernor {
+        reason: String,
+    },
 }

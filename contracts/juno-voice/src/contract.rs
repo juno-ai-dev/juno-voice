@@ -3,6 +3,7 @@ use cw2::set_contract_version;
 
 use crate::bindings::JunoQuery;
 use crate::error::ContractError;
+use crate::execute::submit_request;
 use crate::msg::{ExecuteMsg, InstantiateMsg};
 use crate::state::{
     BondTotals, Config, ProtocolAction, ProtocolActionRecord, RequestLimits, BOND_TOTALS, CONFIG,
@@ -99,18 +100,43 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    if !info.funds.is_empty() {
-        return Err(ContractError::UnexpectedFunds);
-    }
-
     match msg {
+        ExecuteMsg::SubmitRequest {
+            title,
+            summary,
+            acceptance_criteria,
+            category,
+            detail_uri,
+            detail_digest,
+        } => submit_request::execute(
+            deps,
+            env,
+            info,
+            title,
+            summary,
+            acceptance_criteria,
+            category,
+            detail_uri,
+            detail_digest,
+        ),
         ExecuteMsg::ProposeGovernor { address, reason } => {
+            if !info.funds.is_empty() {
+                return Err(ContractError::UnexpectedFunds);
+            }
             execute_propose_governor(deps, env, info, address, reason)
         }
         ExecuteMsg::CancelGovernorTransfer { reason } => {
+            if !info.funds.is_empty() {
+                return Err(ContractError::UnexpectedFunds);
+            }
             execute_cancel_governor_transfer(deps, env, info, reason)
         }
-        ExecuteMsg::AcceptGovernor { reason } => execute_accept_governor(deps, env, info, reason),
+        ExecuteMsg::AcceptGovernor { reason } => {
+            if !info.funds.is_empty() {
+                return Err(ContractError::UnexpectedFunds);
+            }
+            execute_accept_governor(deps, env, info, reason)
+        }
     }
 }
 
