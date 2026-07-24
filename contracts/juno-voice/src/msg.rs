@@ -31,6 +31,10 @@ pub enum ExecuteMsg {
         detail_uri: Option<String>,
         detail_digest: Option<String>,
     },
+    CastVote {
+        request_id: u64,
+        choice: crate::state::VoteChoice,
+    },
     ProposeGovernor {
         address: String,
         reason: String,

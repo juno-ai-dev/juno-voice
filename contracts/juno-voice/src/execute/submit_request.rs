@@ -4,6 +4,7 @@ use cosmwasm_std::{DepsMut, Env, MessageInfo, QueryRequest, Response, Uint128};
 
 use crate::bindings::{JunoQuery, VotingPowerResponse};
 use crate::error::ContractError;
+use crate::rank::rank_key;
 use crate::state::{
     Bond, BondState, Request, RequestAction, RequestActionRecord, Status, BOND_TOTALS, CONFIG,
     NEXT_EVIDENCE_ID, NEXT_REQUEST_ACTION_ID, NEXT_REQUEST_ID, NEXT_STATUS_HISTORY_ID, REQUESTS,
@@ -147,7 +148,7 @@ pub fn execute(
         height: env.block.height,
         timestamp: env.block.time,
     };
-    let rank_key = initial_rank_key(id);
+    let rank_key = rank_key(Uint128::zero(), Uint128::zero(), id);
 
     REQUESTS.save(deps.storage, id, &request)?;
     NEXT_REQUEST_ID.save(deps.storage, &next_id)?;
@@ -191,14 +192,4 @@ fn valid_digest(digest: &str) -> bool {
             hex.bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
         })
-}
-
-fn initial_rank_key(request_id: u64) -> Vec<u8> {
-    let mut key = Vec::with_capacity(42);
-    key.push(1);
-    key.push(1); // zero net is nonnegative
-    key.extend_from_slice(&[0; 16]);
-    key.extend_from_slice(&[0; 16]);
-    key.extend_from_slice(&(u64::MAX - request_id).to_be_bytes());
-    key
 }

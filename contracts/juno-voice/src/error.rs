@@ -33,6 +33,30 @@ pub enum ContractError {
     #[error("total voting power must be a nonzero base-10 unsigned integer")]
     InvalidTotalVotingPower,
 
+    #[error("voter power must be a nonzero base-10 unsigned integer")]
+    InvalidVotingPower,
+
+    #[error("request {request_id} does not exist")]
+    UnknownRequest { request_id: u64 },
+
+    #[error("request is not open for voting at this height")]
+    VotingNotOpen,
+
+    #[error("voter already has an immutable receipt for this request")]
+    DuplicateVote,
+
+    #[error("snapshot total voting power differs from the immutable request total")]
+    SnapshotIntegrityMismatch,
+
+    #[error("voter power exceeds total voting power")]
+    VotingPowerExceedsTotal,
+
+    #[error("vote tally overflow")]
+    VoteTallyOverflow,
+
+    #[error("voter count overflow")]
+    VoterCountOverflow,
+
     #[error("request id overflow")]
     RequestIdOverflow,
 
