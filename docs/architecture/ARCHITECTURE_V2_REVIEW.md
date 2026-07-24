@@ -77,7 +77,7 @@ Rules:
 - `acceptance_criteria` is required, bounded, stored on-chain, and immutable.
 - `category` is a bounded lowercase slug matching `[a-z0-9-]`; it is not a closed Rust enum.
 - `detail_uri` is supplementary. The inline brief remains canonical. Detail fields accept only `(None, None)` or `(Some(uri), Some(digest))`; unpaired values are rejected.
-- A supplied URI must use `https://` or `ipfs://` and its digest must be `sha256:<64 lowercase hex>`.
+- A supplied URI must use `https://` or `ipfs://` followed by a non-empty locator, and its digest must be `sha256:<64 lowercase hex>`.
 - Submitted requests cannot be edited. Material corrections create a replacement request and may be linked through archival or duplicate metadata.
 
 ## 4. Fixed-snapshot voting and qualification
@@ -298,7 +298,7 @@ Evidence {
 }
 ```
 
-Evidence IDs are request-local and monotonically increasing. Every item requires an `https://` or `ipfs://` URI and a `sha256:<64 lowercase hex>` digest, regardless of URI scheme. The digest is a submitter assertion: the contract validates syntax and authority but does not fetch or hash external content.
+Evidence IDs are request-local and monotonically increasing. Every item requires an `https://` or `ipfs://` URI with a non-empty locator and a `sha256:<64 lowercase hex>` digest, regardless of URI scheme. The digest is a submitter assertion: the contract validates syntax and authority but does not fetch or hash external content.
 
 `RequestReview` carries a non-empty bounded list of unique evidence IDs. Every ID must belong to this request and current round and identify delivery-class evidence from the current builder; failure leaves the request in `BUILDING`.
 
@@ -372,7 +372,7 @@ Immediate:
 - governor transfer after acceptance; and
 - steward and verifier replacement after governor action.
 
-MVP evidence policy version 1 is immutable and permits only the kinds, schemes, digest syntax, and role/status matrix in Section 9. Existing requests are always completed under the copied policy and limits they were submitted with; configuration changes cannot dead-end active work.
+MVP evidence policy version 1 is fixed to exactly `1` at instantiate and permits only the kinds, schemes, digest syntax, and role/status matrix in Section 9. Instantiate and future-request limit updates require `max_uri_bytes >= 9`, `max_digest_bytes >= 71`, `max_evidence_items >= 2`, `max_review_evidence_refs >= 1`, and `max_attestation_evidence_refs >= 2`; the URI minimum admits a non-empty locator under either accepted scheme, both reference maxima must not exceed `max_evidence_items`, and every other byte/count limit is nonzero. Existing requests are always completed under the copied policy and limits they were submitted with; configuration changes cannot make required evidence, review, or shipment structurally unreachable.
 
 ## 13. Bounded public schema
 
