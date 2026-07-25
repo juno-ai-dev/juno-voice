@@ -1,0 +1,554 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecuteMsg",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "submit_request"
+      ],
+      "properties": {
+        "submit_request": {
+          "type": "object",
+          "required": [
+            "acceptance_criteria",
+            "category",
+            "summary",
+            "title"
+          ],
+          "properties": {
+            "acceptance_criteria": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "detail_digest": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "detail_uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "cast_vote"
+      ],
+      "properties": {
+        "cast_vote": {
+          "type": "object",
+          "required": [
+            "choice",
+            "request_id"
+          ],
+          "properties": {
+            "choice": {
+              "$ref": "#/definitions/VoteChoice"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "close_request"
+      ],
+      "properties": {
+        "close_request": {
+          "type": "object",
+          "required": [
+            "request_id"
+          ],
+          "properties": {
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "mark_spam"
+      ],
+      "properties": {
+        "mark_spam": {
+          "type": "object",
+          "required": [
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "mark_duplicate"
+      ],
+      "properties": {
+        "mark_duplicate": {
+          "type": "object",
+          "required": [
+            "canonical_request_id",
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "canonical_request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "archive_request"
+      ],
+      "properties": {
+        "archive_request": {
+          "type": "object",
+          "required": [
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "start_building"
+      ],
+      "properties": {
+        "start_building": {
+          "type": "object",
+          "required": [
+            "builder",
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "builder": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "block_building"
+      ],
+      "properties": {
+        "block_building": {
+          "type": "object",
+          "required": [
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "resume_building"
+      ],
+      "properties": {
+        "resume_building": {
+          "type": "object",
+          "required": [
+            "builder",
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "builder": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "reject_review"
+      ],
+      "properties": {
+        "reject_review": {
+          "type": "object",
+          "required": [
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "block_review"
+      ],
+      "properties": {
+        "block_review": {
+          "type": "object",
+          "required": [
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "add_evidence"
+      ],
+      "properties": {
+        "add_evidence": {
+          "type": "object",
+          "required": [
+            "digest",
+            "kind",
+            "note",
+            "request_id",
+            "uri"
+          ],
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/EvidenceKind"
+            },
+            "note": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "uri": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "request_review"
+      ],
+      "properties": {
+        "request_review": {
+          "type": "object",
+          "required": [
+            "evidence_ids",
+            "reason",
+            "request_id"
+          ],
+          "properties": {
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "reason": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "attest_shipment"
+      ],
+      "properties": {
+        "attest_shipment": {
+          "type": "object",
+          "required": [
+            "evidence_ids",
+            "rationale",
+            "request_id"
+          ],
+          "properties": {
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "rationale": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "withdraw_refund"
+      ],
+      "properties": {
+        "withdraw_refund": {
+          "type": "object",
+          "required": [
+            "request_id"
+          ],
+          "properties": {
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "propose_governor"
+      ],
+      "properties": {
+        "propose_governor": {
+          "type": "object",
+          "required": [
+            "address",
+            "reason"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "cancel_governor_transfer"
+      ],
+      "properties": {
+        "cancel_governor_transfer": {
+          "type": "object",
+          "required": [
+            "reason"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "accept_governor"
+      ],
+      "properties": {
+        "accept_governor": {
+          "type": "object",
+          "required": [
+            "reason"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "definitions": {
+    "EvidenceKind": {
+      "type": "string",
+      "enum": [
+        "pull_request",
+        "commit",
+        "release",
+        "deployment",
+        "document",
+        "test_report",
+        "audit_report",
+        "review_record"
+      ]
+    },
+    "VoteChoice": {
+      "type": "string",
+      "enum": [
+        "support",
+        "oppose"
+      ]
+    }
+  }
+}

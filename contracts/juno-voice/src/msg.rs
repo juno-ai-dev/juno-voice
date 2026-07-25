@@ -1,7 +1,10 @@
-use cosmwasm_schema::cw_serde;
+use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
 
-use crate::state::{EvidenceKind, RequestLimits};
+use crate::state::{
+    BondTotals, Config, Evidence, EvidenceKind, ProtocolActionRecord, Request, RequestActionRecord,
+    RequestLimits, ShipmentAttestation, StatusHistoryRecord, VoteReceipt,
+};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -103,4 +106,153 @@ pub enum ExecuteMsg {
     AcceptGovernor {
         reason: String,
     },
+}
+
+/// Canonical direct-RPC queries. List pages are bounded and weakly consistent while
+/// mutable state changes; clients should refresh page one for a current view.
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum QueryMsg {
+    #[returns(ConfigResponse)]
+    Config {},
+    #[returns(BondTotalsResponse)]
+    BondTotals {},
+    #[returns(RequestResponse)]
+    Request { id: u64 },
+    #[returns(ShipmentAttestationResponse)]
+    ShipmentAttestation { request_id: u64 },
+    #[returns(RequestsResponse)]
+    Requests {
+        status: Option<u8>,
+        category: Option<String>,
+        author: Option<String>,
+        start_after_id: Option<u64>,
+        limit: Option<u8>,
+    },
+    #[returns(VoteResponse)]
+    Vote { request_id: u64, voter: String },
+    #[returns(VotesResponse)]
+    Votes {
+        request_id: u64,
+        start_after_voter: Option<String>,
+        limit: Option<u8>,
+    },
+    #[returns(EvidenceResponse)]
+    Evidence {
+        request_id: u64,
+        start_after_id: Option<u64>,
+        limit: Option<u8>,
+    },
+    #[returns(StatusHistoryResponse)]
+    StatusHistory {
+        request_id: u64,
+        start_after_id: Option<u64>,
+        limit: Option<u8>,
+    },
+    #[returns(RequestActionsResponse)]
+    RequestActions {
+        request_id: u64,
+        start_after_id: Option<u64>,
+        limit: Option<u8>,
+    },
+    #[returns(ProtocolActionsResponse)]
+    ProtocolActions {
+        start_after_id: Option<u64>,
+        limit: Option<u8>,
+    },
+    #[returns(RankedRequestsResponse)]
+    RankedRequests {
+        status: u8,
+        category: Option<String>,
+        cursor: Option<String>,
+        limit: Option<u8>,
+    },
+}
+
+#[cw_serde]
+pub struct ConfigResponse {
+    pub config: Config,
+}
+
+#[cw_serde]
+pub struct BondTotalsResponse {
+    pub totals: BondTotals,
+}
+
+#[cw_serde]
+pub struct RequestResponse {
+    pub request: Request,
+}
+
+#[cw_serde]
+pub struct ShipmentAttestationResponse {
+    pub attestation: Option<ShipmentAttestation>,
+}
+
+/// A bounded ascending-ID page. Pagination is weakly consistent for mutable state;
+/// refresh page one to obtain a current view.
+#[cw_serde]
+pub struct RequestsResponse {
+    pub items: Vec<Request>,
+    pub next_start_after: Option<u64>,
+    pub query_height: u64,
+}
+
+#[cw_serde]
+pub struct VoteResponse {
+    pub vote: Option<VoteReceipt>,
+}
+
+/// A bounded ascending canonical-address page with weakly consistent pagination;
+/// refresh page one to obtain a current view.
+#[cw_serde]
+pub struct VotesResponse {
+    pub items: Vec<VoteReceipt>,
+    pub next_start_after: Option<String>,
+    pub query_height: u64,
+}
+
+/// A bounded ascending evidence-ID page. Pagination is weakly consistent while
+/// evidence is appended; refresh page one to obtain a current view.
+#[cw_serde]
+pub struct EvidenceResponse {
+    pub items: Vec<Evidence>,
+    pub next_start_after: Option<u64>,
+    pub query_height: u64,
+}
+
+/// A bounded ascending status-history-ID page. Pagination is weakly consistent while
+/// transitions are appended; refresh page one to obtain a current view.
+#[cw_serde]
+pub struct StatusHistoryResponse {
+    pub items: Vec<StatusHistoryRecord>,
+    pub next_start_after: Option<u64>,
+    pub query_height: u64,
+}
+
+/// A bounded ascending request-action-ID page. Pagination is weakly consistent while
+/// actions are appended; refresh page one to obtain a current view.
+#[cw_serde]
+pub struct RequestActionsResponse {
+    pub items: Vec<RequestActionRecord>,
+    pub next_start_after: Option<u64>,
+    pub query_height: u64,
+}
+
+/// A bounded ascending protocol-action-ID page. Pagination is weakly consistent while
+/// actions are appended; refresh page one to obtain a current view.
+#[cw_serde]
+pub struct ProtocolActionsResponse {
+    pub items: Vec<ProtocolActionRecord>,
+    pub next_start_after: Option<u64>,
+    pub query_height: u64,
+}
+
+/// A bounded canonical-rank page. It is weakly consistent while votes or statuses
+/// change; refresh page one for a current view.
+#[cw_serde]
+pub struct RankedRequestsResponse {
+    pub items: Vec<Request>,
+    pub next_cursor: Option<String>,
+    pub query_height: u64,
 }

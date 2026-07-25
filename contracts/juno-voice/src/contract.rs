@@ -1,4 +1,6 @@
-use cosmwasm_std::{entry_point, Addr, DepsMut, Env, MessageInfo, Response, Storage};
+use cosmwasm_std::{
+    entry_point, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Storage,
+};
 use cw2::set_contract_version;
 
 use crate::bindings::JunoQuery;
@@ -6,7 +8,7 @@ use crate::error::ContractError;
 use crate::execute::{
     add_evidence, cast_vote, close_request, set_status, submit_request, withdraw_refund,
 };
-use crate::msg::{ExecuteMsg, InstantiateMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{
     BondTotals, Config, ProtocolAction, ProtocolActionRecord, RequestLimits, BOND_TOTALS, CONFIG,
     NEXT_PROTOCOL_ACTION_ID, NEXT_REQUEST_ID, PROTOCOL_ACTIONS,
@@ -16,6 +18,11 @@ pub const CONTRACT_NAME: &str = "crates.io:juno-voice";
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const EVIDENCE_POLICY_VERSION: u16 = 1;
 const MAX_BPS: u16 = 10_000;
+
+#[entry_point]
+pub fn query(deps: Deps<JunoQuery>, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    crate::query::dispatch(deps, env, msg)
+}
 
 #[entry_point]
 pub fn instantiate(

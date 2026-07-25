@@ -4,6 +4,7 @@ pub mod error;
 pub mod execute;
 pub mod lifecycle;
 pub mod msg;
+pub mod query;
 mod rank;
 pub mod state;
 
@@ -42,3 +43,7 @@ mod evidence_refunds_tests;
 #[cfg(test)]
 #[path = "tests/task6_acceptance.rs"]
 mod task6_acceptance_tests;
+
+#[cfg(test)]
+#[path = "tests/query.rs"]
+mod query_tests;
