@@ -8,12 +8,13 @@ Juno Voice is a public feature-prioritization system where people and agents sub
 
 ## Status
 
-Architecture and product design. No contract is deployed and no funds are accepted.
+The CosmWasm MVP contract is implemented. It passed the locked 107-test debug/release suite, independent specification/security/release reviews, deterministic artifact checks, and an exact-artifact `uni-7` smoke gate.
 
 - [Architecture](docs/architecture/ARCHITECTURE.md)
 - [Product and interaction design](docs/design/PRODUCT_DESIGN.md)
 - [Decision records](docs/architecture/decisions/)
 - [Implementation plan](docs/plans/2026-07-23-mvp.md)
+- [Reproducible artifact and `uni-7` smoke evidence](docs/testing/TESTNET_SMOKE.md)
 - [Interactive design prototype](https://juno-ai-dev.github.io/juno-voice/) ([source](prototype/index.html))
 
 ## Product principles
@@ -37,10 +38,11 @@ docs/
   architecture/       system design and ADRs
   design/             UX, flows, screens, accessibility
   plans/              executable implementation plans
+  testing/            exact-artifact testnet evidence
+contracts/            Rust/CosmWasm contract workspace
+artifacts/             reproducible checked Wasm and checksums
 prototype/             dependency-free interaction prototype
 ```
-
-Implementation will add a Rust/CosmWasm workspace and a production web app only after the architecture decisions are reviewed.
 
 ## License
 
