@@ -1,0 +1,3526 @@
+{
+  "contract_name": "juno-voice",
+  "contract_version": "0.1.0",
+  "idl_version": "1.0.0",
+  "instantiate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "InstantiateMsg",
+    "type": "object",
+    "required": [
+      "default_query_limit",
+      "evidence_policy_version",
+      "governor",
+      "max_query_limit",
+      "max_reason_bytes",
+      "native_denom",
+      "quorum_bps",
+      "request_limits",
+      "steward",
+      "submission_bond",
+      "support_bps",
+      "verifier",
+      "voting_period_blocks",
+      "work_inactivity_blocks"
+    ],
+    "properties": {
+      "default_query_limit": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "evidence_policy_version": {
+        "type": "integer",
+        "format": "uint16",
+        "minimum": 0.0
+      },
+      "governor": {
+        "type": "string"
+      },
+      "max_query_limit": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      },
+      "max_reason_bytes": {
+        "type": "integer",
+        "format": "uint16",
+        "minimum": 0.0
+      },
+      "native_denom": {
+        "type": "string"
+      },
+      "quorum_bps": {
+        "type": "integer",
+        "format": "uint16",
+        "minimum": 0.0
+      },
+      "request_limits": {
+        "$ref": "#/definitions/RequestLimits"
+      },
+      "steward": {
+        "type": "string"
+      },
+      "submission_bond": {
+        "$ref": "#/definitions/Uint128"
+      },
+      "support_bps": {
+        "type": "integer",
+        "format": "uint16",
+        "minimum": 0.0
+      },
+      "verifier": {
+        "type": "string"
+      },
+      "voting_period_blocks": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      },
+      "work_inactivity_blocks": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
+      }
+    },
+    "additionalProperties": false,
+    "definitions": {
+      "RequestLimits": {
+        "type": "object",
+        "required": [
+          "max_acceptance_criteria_bytes",
+          "max_attestation_evidence_refs",
+          "max_category_bytes",
+          "max_digest_bytes",
+          "max_evidence_items",
+          "max_evidence_note_bytes",
+          "max_review_evidence_refs",
+          "max_summary_bytes",
+          "max_title_bytes",
+          "max_uri_bytes"
+        ],
+        "properties": {
+          "max_acceptance_criteria_bytes": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          },
+          "max_attestation_evidence_refs": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "max_category_bytes": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "max_digest_bytes": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "max_evidence_items": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          },
+          "max_evidence_note_bytes": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          },
+          "max_review_evidence_refs": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "max_summary_bytes": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          },
+          "max_title_bytes": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          },
+          "max_uri_bytes": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        },
+        "additionalProperties": false
+      },
+      "Uint128": {
+        "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+        "type": "string"
+      }
+    }
+  },
+  "execute": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ExecuteMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "submit_request"
+        ],
+        "properties": {
+          "submit_request": {
+            "type": "object",
+            "required": [
+              "acceptance_criteria",
+              "category",
+              "summary",
+              "title"
+            ],
+            "properties": {
+              "acceptance_criteria": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "detail_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail_uri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "cast_vote"
+        ],
+        "properties": {
+          "cast_vote": {
+            "type": "object",
+            "required": [
+              "choice",
+              "request_id"
+            ],
+            "properties": {
+              "choice": {
+                "$ref": "#/definitions/VoteChoice"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "close_request"
+        ],
+        "properties": {
+          "close_request": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "mark_spam"
+        ],
+        "properties": {
+          "mark_spam": {
+            "type": "object",
+            "required": [
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "mark_duplicate"
+        ],
+        "properties": {
+          "mark_duplicate": {
+            "type": "object",
+            "required": [
+              "canonical_request_id",
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "canonical_request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "archive_request"
+        ],
+        "properties": {
+          "archive_request": {
+            "type": "object",
+            "required": [
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "start_building"
+        ],
+        "properties": {
+          "start_building": {
+            "type": "object",
+            "required": [
+              "builder",
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "builder": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "block_building"
+        ],
+        "properties": {
+          "block_building": {
+            "type": "object",
+            "required": [
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "resume_building"
+        ],
+        "properties": {
+          "resume_building": {
+            "type": "object",
+            "required": [
+              "builder",
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "builder": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "reject_review"
+        ],
+        "properties": {
+          "reject_review": {
+            "type": "object",
+            "required": [
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "block_review"
+        ],
+        "properties": {
+          "block_review": {
+            "type": "object",
+            "required": [
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "add_evidence"
+        ],
+        "properties": {
+          "add_evidence": {
+            "type": "object",
+            "required": [
+              "digest",
+              "kind",
+              "note",
+              "request_id",
+              "uri"
+            ],
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/definitions/EvidenceKind"
+              },
+              "note": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "request_review"
+        ],
+        "properties": {
+          "request_review": {
+            "type": "object",
+            "required": [
+              "evidence_ids",
+              "reason",
+              "request_id"
+            ],
+            "properties": {
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              },
+              "reason": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "attest_shipment"
+        ],
+        "properties": {
+          "attest_shipment": {
+            "type": "object",
+            "required": [
+              "evidence_ids",
+              "rationale",
+              "request_id"
+            ],
+            "properties": {
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              },
+              "rationale": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "withdraw_refund"
+        ],
+        "properties": {
+          "withdraw_refund": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "propose_governor"
+        ],
+        "properties": {
+          "propose_governor": {
+            "type": "object",
+            "required": [
+              "address",
+              "reason"
+            ],
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "cancel_governor_transfer"
+        ],
+        "properties": {
+          "cancel_governor_transfer": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "accept_governor"
+        ],
+        "properties": {
+          "accept_governor": {
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ],
+    "definitions": {
+      "EvidenceKind": {
+        "type": "string",
+        "enum": [
+          "pull_request",
+          "commit",
+          "release",
+          "deployment",
+          "document",
+          "test_report",
+          "audit_report",
+          "review_record"
+        ]
+      },
+      "VoteChoice": {
+        "type": "string",
+        "enum": [
+          "support",
+          "oppose"
+        ]
+      }
+    }
+  },
+  "query": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "QueryMsg",
+    "description": "Canonical direct-RPC queries. List pages are bounded and weakly consistent while mutable state changes; clients should refresh page one for a current view.",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "bond_totals"
+        ],
+        "properties": {
+          "bond_totals": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "properties": {
+          "request": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "shipment_attestation"
+        ],
+        "properties": {
+          "shipment_attestation": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "requests"
+        ],
+        "properties": {
+          "requests": {
+            "type": "object",
+            "properties": {
+              "author": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "category": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "start_after_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "status": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "vote"
+        ],
+        "properties": {
+          "vote": {
+            "type": "object",
+            "required": [
+              "request_id",
+              "voter"
+            ],
+            "properties": {
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "voter": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "votes"
+        ],
+        "properties": {
+          "votes": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "start_after_voter": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "properties": {
+          "evidence": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "start_after_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "status_history"
+        ],
+        "properties": {
+          "status_history": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "start_after_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "request_actions"
+        ],
+        "properties": {
+          "request_actions": {
+            "type": "object",
+            "required": [
+              "request_id"
+            ],
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "request_id": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              "start_after_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "protocol_actions"
+        ],
+        "properties": {
+          "protocol_actions": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "start_after_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "ranked_requests"
+        ],
+        "properties": {
+          "ranked_requests": {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "category": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "status": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "migrate": null,
+  "sudo": null,
+  "responses": {
+    "bond_totals": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BondTotalsResponse",
+      "type": "object",
+      "required": [
+        "totals"
+      ],
+      "properties": {
+        "totals": {
+          "$ref": "#/definitions/BondTotals"
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "BondTotals": {
+          "type": "object",
+          "required": [
+            "forfeited",
+            "locked",
+            "refundable"
+          ],
+          "properties": {
+            "forfeited": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "locked": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "refundable": {
+              "$ref": "#/definitions/Uint128"
+            }
+          },
+          "additionalProperties": false
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "config": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ConfigResponse",
+      "type": "object",
+      "required": [
+        "config"
+      ],
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/Config"
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Config": {
+          "type": "object",
+          "required": [
+            "default_query_limit",
+            "evidence_policy_version",
+            "governor",
+            "max_query_limit",
+            "max_reason_bytes",
+            "native_denom",
+            "quorum_bps",
+            "request_limits",
+            "steward",
+            "submission_bond",
+            "submissions_paused",
+            "support_bps",
+            "verifier",
+            "voting_period_blocks",
+            "work_inactivity_blocks"
+          ],
+          "properties": {
+            "default_query_limit": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "evidence_policy_version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "governor": {
+              "$ref": "#/definitions/Addr"
+            },
+            "max_query_limit": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_reason_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "native_denom": {
+              "type": "string"
+            },
+            "pending_governor": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Addr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "quorum_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "request_limits": {
+              "$ref": "#/definitions/RequestLimits"
+            },
+            "steward": {
+              "$ref": "#/definitions/Addr"
+            },
+            "submission_bond": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "submissions_paused": {
+              "type": "boolean"
+            },
+            "support_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "verifier": {
+              "$ref": "#/definitions/Addr"
+            },
+            "voting_period_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_inactivity_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "RequestLimits": {
+          "type": "object",
+          "required": [
+            "max_acceptance_criteria_bytes",
+            "max_attestation_evidence_refs",
+            "max_category_bytes",
+            "max_digest_bytes",
+            "max_evidence_items",
+            "max_evidence_note_bytes",
+            "max_review_evidence_refs",
+            "max_summary_bytes",
+            "max_title_bytes",
+            "max_uri_bytes"
+          ],
+          "properties": {
+            "max_acceptance_criteria_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_attestation_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_category_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_digest_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_evidence_items": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_evidence_note_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_review_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_summary_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_title_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_uri_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "evidence": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EvidenceResponse",
+      "description": "A bounded ascending evidence-ID page. Pagination is weakly consistent while evidence is appended; refresh page one to obtain a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "next_start_after": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Evidence": {
+          "type": "object",
+          "required": [
+            "digest",
+            "id",
+            "kind",
+            "note",
+            "request_id",
+            "submitted_at",
+            "submitted_height",
+            "submitter",
+            "uri",
+            "work_round"
+          ],
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "kind": {
+              "$ref": "#/definitions/EvidenceKind"
+            },
+            "note": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "submitted_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "submitted_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "submitter": {
+              "$ref": "#/definitions/Addr"
+            },
+            "uri": {
+              "type": "string"
+            },
+            "work_round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "EvidenceKind": {
+          "type": "string",
+          "enum": [
+            "pull_request",
+            "commit",
+            "release",
+            "deployment",
+            "document",
+            "test_report",
+            "audit_report",
+            "review_record"
+          ]
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "protocol_actions": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ProtocolActionsResponse",
+      "description": "A bounded ascending protocol-action-ID page. Pagination is weakly consistent while actions are appended; refresh page one to obtain a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProtocolActionRecord"
+          }
+        },
+        "next_start_after": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "FutureRequestPolicy": {
+          "description": "Configuration copied into each newly opened request. Audit records retain both snapshots so later configuration changes cannot erase prior facts.",
+          "type": "object",
+          "required": [
+            "quorum_bps",
+            "request_limits",
+            "submission_bond",
+            "support_bps",
+            "voting_period_blocks",
+            "work_inactivity_blocks"
+          ],
+          "properties": {
+            "quorum_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "request_limits": {
+              "$ref": "#/definitions/RequestLimits"
+            },
+            "submission_bond": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "support_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "voting_period_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_inactivity_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "ProtocolAction": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "submissions_paused",
+                "submissions_unpaused"
+              ]
+            },
+            {
+              "type": "object",
+              "required": [
+                "config_updated"
+              ],
+              "properties": {
+                "config_updated": {
+                  "type": "object",
+                  "required": [
+                    "new_policy",
+                    "old_policy"
+                  ],
+                  "properties": {
+                    "new_policy": {
+                      "$ref": "#/definitions/FutureRequestPolicy"
+                    },
+                    "old_policy": {
+                      "$ref": "#/definitions/FutureRequestPolicy"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "governor_proposed"
+              ],
+              "properties": {
+                "governor_proposed": {
+                  "type": "object",
+                  "required": [
+                    "nominee"
+                  ],
+                  "properties": {
+                    "nominee": {
+                      "$ref": "#/definitions/Addr"
+                    },
+                    "previous_nominee": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/definitions/Addr"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "governor_transfer_cancelled"
+              ],
+              "properties": {
+                "governor_transfer_cancelled": {
+                  "type": "object",
+                  "required": [
+                    "nominee"
+                  ],
+                  "properties": {
+                    "nominee": {
+                      "$ref": "#/definitions/Addr"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "governor_accepted"
+              ],
+              "properties": {
+                "governor_accepted": {
+                  "type": "object",
+                  "required": [
+                    "governor",
+                    "previous"
+                  ],
+                  "properties": {
+                    "governor": {
+                      "$ref": "#/definitions/Addr"
+                    },
+                    "previous": {
+                      "$ref": "#/definitions/Addr"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "steward_replaced"
+              ],
+              "properties": {
+                "steward_replaced": {
+                  "type": "object",
+                  "required": [
+                    "previous",
+                    "steward"
+                  ],
+                  "properties": {
+                    "previous": {
+                      "$ref": "#/definitions/Addr"
+                    },
+                    "steward": {
+                      "$ref": "#/definitions/Addr"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "verifier_replaced"
+              ],
+              "properties": {
+                "verifier_replaced": {
+                  "type": "object",
+                  "required": [
+                    "previous",
+                    "verifier"
+                  ],
+                  "properties": {
+                    "previous": {
+                      "$ref": "#/definitions/Addr"
+                    },
+                    "verifier": {
+                      "$ref": "#/definitions/Addr"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "migrated"
+              ],
+              "properties": {
+                "migrated": {
+                  "type": "object",
+                  "required": [
+                    "from_version",
+                    "to_version"
+                  ],
+                  "properties": {
+                    "from_version": {
+                      "type": "string"
+                    },
+                    "to_version": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "ProtocolActionRecord": {
+          "type": "object",
+          "required": [
+            "action",
+            "actor",
+            "height",
+            "id",
+            "timestamp"
+          ],
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/ProtocolAction"
+            },
+            "actor": {
+              "$ref": "#/definitions/Addr"
+            },
+            "height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timestamp": {
+              "$ref": "#/definitions/Timestamp"
+            }
+          },
+          "additionalProperties": false
+        },
+        "RequestLimits": {
+          "type": "object",
+          "required": [
+            "max_acceptance_criteria_bytes",
+            "max_attestation_evidence_refs",
+            "max_category_bytes",
+            "max_digest_bytes",
+            "max_evidence_items",
+            "max_evidence_note_bytes",
+            "max_review_evidence_refs",
+            "max_summary_bytes",
+            "max_title_bytes",
+            "max_uri_bytes"
+          ],
+          "properties": {
+            "max_acceptance_criteria_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_attestation_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_category_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_digest_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_evidence_items": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_evidence_note_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_review_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_summary_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_title_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_uri_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "ranked_requests": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RankedRequestsResponse",
+      "description": "A bounded canonical-rank page. It is weakly consistent while votes or statuses change; refresh page one for a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Request"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Bond": {
+          "type": "object",
+          "required": [
+            "amount",
+            "state"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "state": {
+              "$ref": "#/definitions/BondState"
+            }
+          },
+          "additionalProperties": false
+        },
+        "BondState": {
+          "type": "string",
+          "enum": [
+            "locked",
+            "refundable",
+            "claimed",
+            "forfeited"
+          ]
+        },
+        "Request": {
+          "type": "object",
+          "required": [
+            "acceptance_criteria",
+            "author",
+            "bond",
+            "category",
+            "closes_height",
+            "created_at",
+            "evidence_policy_version",
+            "id",
+            "limits",
+            "opened_height",
+            "oppose_power",
+            "quorum_bps",
+            "snapshot_height",
+            "status",
+            "summary",
+            "support_bps",
+            "support_power",
+            "title",
+            "total_power",
+            "updated_at",
+            "voter_count",
+            "work_inactivity_blocks",
+            "work_round"
+          ],
+          "properties": {
+            "acceptance_criteria": {
+              "type": "string"
+            },
+            "author": {
+              "$ref": "#/definitions/Addr"
+            },
+            "bond": {
+              "$ref": "#/definitions/Bond"
+            },
+            "builder": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Addr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "canonical_request_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "category": {
+              "type": "string"
+            },
+            "closes_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "created_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "detail_digest": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "detail_uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence_policy_version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "limits": {
+              "$ref": "#/definitions/RequestLimits"
+            },
+            "opened_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "oppose_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "quorum_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "snapshot_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "status": {
+              "$ref": "#/definitions/Status"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "support_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "support_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "title": {
+              "type": "string"
+            },
+            "total_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "updated_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "voter_count": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_activity_height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_inactivity_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "RequestLimits": {
+          "type": "object",
+          "required": [
+            "max_acceptance_criteria_bytes",
+            "max_attestation_evidence_refs",
+            "max_category_bytes",
+            "max_digest_bytes",
+            "max_evidence_items",
+            "max_evidence_note_bytes",
+            "max_review_evidence_refs",
+            "max_summary_bytes",
+            "max_title_bytes",
+            "max_uri_bytes"
+          ],
+          "properties": {
+            "max_acceptance_criteria_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_attestation_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_category_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_digest_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_evidence_items": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_evidence_note_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_review_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_summary_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_title_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_uri_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "qualified",
+            "not_prioritized",
+            "duplicate",
+            "spam",
+            "building",
+            "review",
+            "blocked",
+            "archived",
+            "shipped"
+          ]
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "request": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RequestResponse",
+      "type": "object",
+      "required": [
+        "request"
+      ],
+      "properties": {
+        "request": {
+          "$ref": "#/definitions/Request"
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Bond": {
+          "type": "object",
+          "required": [
+            "amount",
+            "state"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "state": {
+              "$ref": "#/definitions/BondState"
+            }
+          },
+          "additionalProperties": false
+        },
+        "BondState": {
+          "type": "string",
+          "enum": [
+            "locked",
+            "refundable",
+            "claimed",
+            "forfeited"
+          ]
+        },
+        "Request": {
+          "type": "object",
+          "required": [
+            "acceptance_criteria",
+            "author",
+            "bond",
+            "category",
+            "closes_height",
+            "created_at",
+            "evidence_policy_version",
+            "id",
+            "limits",
+            "opened_height",
+            "oppose_power",
+            "quorum_bps",
+            "snapshot_height",
+            "status",
+            "summary",
+            "support_bps",
+            "support_power",
+            "title",
+            "total_power",
+            "updated_at",
+            "voter_count",
+            "work_inactivity_blocks",
+            "work_round"
+          ],
+          "properties": {
+            "acceptance_criteria": {
+              "type": "string"
+            },
+            "author": {
+              "$ref": "#/definitions/Addr"
+            },
+            "bond": {
+              "$ref": "#/definitions/Bond"
+            },
+            "builder": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Addr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "canonical_request_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "category": {
+              "type": "string"
+            },
+            "closes_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "created_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "detail_digest": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "detail_uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence_policy_version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "limits": {
+              "$ref": "#/definitions/RequestLimits"
+            },
+            "opened_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "oppose_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "quorum_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "snapshot_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "status": {
+              "$ref": "#/definitions/Status"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "support_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "support_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "title": {
+              "type": "string"
+            },
+            "total_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "updated_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "voter_count": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_activity_height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_inactivity_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "RequestLimits": {
+          "type": "object",
+          "required": [
+            "max_acceptance_criteria_bytes",
+            "max_attestation_evidence_refs",
+            "max_category_bytes",
+            "max_digest_bytes",
+            "max_evidence_items",
+            "max_evidence_note_bytes",
+            "max_review_evidence_refs",
+            "max_summary_bytes",
+            "max_title_bytes",
+            "max_uri_bytes"
+          ],
+          "properties": {
+            "max_acceptance_criteria_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_attestation_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_category_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_digest_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_evidence_items": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_evidence_note_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_review_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_summary_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_title_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_uri_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "qualified",
+            "not_prioritized",
+            "duplicate",
+            "spam",
+            "building",
+            "review",
+            "blocked",
+            "archived",
+            "shipped"
+          ]
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "request_actions": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RequestActionsResponse",
+      "description": "A bounded ascending request-action-ID page. Pagination is weakly consistent while actions are appended; refresh page one to obtain a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RequestActionRecord"
+          }
+        },
+        "next_start_after": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "BondState": {
+          "type": "string",
+          "enum": [
+            "locked",
+            "refundable",
+            "claimed",
+            "forfeited"
+          ]
+        },
+        "RequestAction": {
+          "description": "Typed request-level audit action. Variant payloads are the immutable facts needed to reproduce each request mutation; later execute tasks populate these records.",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "review_rejected"
+              ]
+            },
+            {
+              "type": "object",
+              "required": [
+                "submitted"
+              ],
+              "properties": {
+                "submitted": {
+                  "type": "object",
+                  "required": [
+                    "snapshot_height",
+                    "total_power"
+                  ],
+                  "properties": {
+                    "snapshot_height": {
+                      "type": "integer",
+                      "format": "uint64",
+                      "minimum": 0.0
+                    },
+                    "total_power": {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "finalized"
+              ],
+              "properties": {
+                "finalized": {
+                  "type": "object",
+                  "required": [
+                    "qualified"
+                  ],
+                  "properties": {
+                    "qualified": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "status_transition"
+              ],
+              "properties": {
+                "status_transition": {
+                  "type": "object",
+                  "required": [
+                    "from",
+                    "to"
+                  ],
+                  "properties": {
+                    "from": {
+                      "$ref": "#/definitions/Status"
+                    },
+                    "to": {
+                      "$ref": "#/definitions/Status"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "duplicate_linked"
+              ],
+              "properties": {
+                "duplicate_linked": {
+                  "type": "object",
+                  "required": [
+                    "canonical_request_id"
+                  ],
+                  "properties": {
+                    "canonical_request_id": {
+                      "type": "integer",
+                      "format": "uint64",
+                      "minimum": 0.0
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "builder_assigned"
+              ],
+              "properties": {
+                "builder_assigned": {
+                  "type": "object",
+                  "required": [
+                    "new_builder",
+                    "new_work_round",
+                    "previous_work_round"
+                  ],
+                  "properties": {
+                    "new_builder": {
+                      "$ref": "#/definitions/Addr"
+                    },
+                    "new_work_round": {
+                      "type": "integer",
+                      "format": "uint32",
+                      "minimum": 0.0
+                    },
+                    "previous_builder": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/definitions/Addr"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "previous_work_round": {
+                      "type": "integer",
+                      "format": "uint32",
+                      "minimum": 0.0
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "evidence_added"
+              ],
+              "properties": {
+                "evidence_added": {
+                  "type": "object",
+                  "required": [
+                    "evidence_id"
+                  ],
+                  "properties": {
+                    "evidence_id": {
+                      "type": "integer",
+                      "format": "uint64",
+                      "minimum": 0.0
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "review_requested"
+              ],
+              "properties": {
+                "review_requested": {
+                  "type": "object",
+                  "required": [
+                    "evidence_ids"
+                  ],
+                  "properties": {
+                    "evidence_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0.0
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "shipment_attested"
+              ],
+              "properties": {
+                "shipment_attested": {
+                  "type": "object",
+                  "required": [
+                    "evidence_ids"
+                  ],
+                  "properties": {
+                    "evidence_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0.0
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "bond_transition"
+              ],
+              "properties": {
+                "bond_transition": {
+                  "type": "object",
+                  "required": [
+                    "amount",
+                    "to"
+                  ],
+                  "properties": {
+                    "amount": {
+                      "$ref": "#/definitions/Uint128"
+                    },
+                    "from": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/definitions/BondState"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "to": {
+                      "$ref": "#/definitions/BondState"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "refund_withdrawn"
+              ],
+              "properties": {
+                "refund_withdrawn": {
+                  "type": "object",
+                  "required": [
+                    "amount"
+                  ],
+                  "properties": {
+                    "amount": {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "RequestActionRecord": {
+          "type": "object",
+          "required": [
+            "action",
+            "actor",
+            "height",
+            "id",
+            "request_id",
+            "timestamp"
+          ],
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/RequestAction"
+            },
+            "actor": {
+              "$ref": "#/definitions/Addr"
+            },
+            "height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "timestamp": {
+              "$ref": "#/definitions/Timestamp"
+            }
+          },
+          "additionalProperties": false
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "qualified",
+            "not_prioritized",
+            "duplicate",
+            "spam",
+            "building",
+            "review",
+            "blocked",
+            "archived",
+            "shipped"
+          ]
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "requests": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RequestsResponse",
+      "description": "A bounded ascending-ID page. Pagination is weakly consistent for mutable state; refresh page one to obtain a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Request"
+          }
+        },
+        "next_start_after": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Bond": {
+          "type": "object",
+          "required": [
+            "amount",
+            "state"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "state": {
+              "$ref": "#/definitions/BondState"
+            }
+          },
+          "additionalProperties": false
+        },
+        "BondState": {
+          "type": "string",
+          "enum": [
+            "locked",
+            "refundable",
+            "claimed",
+            "forfeited"
+          ]
+        },
+        "Request": {
+          "type": "object",
+          "required": [
+            "acceptance_criteria",
+            "author",
+            "bond",
+            "category",
+            "closes_height",
+            "created_at",
+            "evidence_policy_version",
+            "id",
+            "limits",
+            "opened_height",
+            "oppose_power",
+            "quorum_bps",
+            "snapshot_height",
+            "status",
+            "summary",
+            "support_bps",
+            "support_power",
+            "title",
+            "total_power",
+            "updated_at",
+            "voter_count",
+            "work_inactivity_blocks",
+            "work_round"
+          ],
+          "properties": {
+            "acceptance_criteria": {
+              "type": "string"
+            },
+            "author": {
+              "$ref": "#/definitions/Addr"
+            },
+            "bond": {
+              "$ref": "#/definitions/Bond"
+            },
+            "builder": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Addr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "canonical_request_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "category": {
+              "type": "string"
+            },
+            "closes_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "created_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "detail_digest": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "detail_uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence_policy_version": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "limits": {
+              "$ref": "#/definitions/RequestLimits"
+            },
+            "opened_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "oppose_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "quorum_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "snapshot_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "status": {
+              "$ref": "#/definitions/Status"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "support_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "support_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "title": {
+              "type": "string"
+            },
+            "total_power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "updated_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "voter_count": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_activity_height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_inactivity_blocks": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "work_round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "RequestLimits": {
+          "type": "object",
+          "required": [
+            "max_acceptance_criteria_bytes",
+            "max_attestation_evidence_refs",
+            "max_category_bytes",
+            "max_digest_bytes",
+            "max_evidence_items",
+            "max_evidence_note_bytes",
+            "max_review_evidence_refs",
+            "max_summary_bytes",
+            "max_title_bytes",
+            "max_uri_bytes"
+          ],
+          "properties": {
+            "max_acceptance_criteria_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_attestation_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_category_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_digest_bytes": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_evidence_items": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_evidence_note_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_review_evidence_refs": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "max_summary_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_title_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "max_uri_bytes": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "qualified",
+            "not_prioritized",
+            "duplicate",
+            "spam",
+            "building",
+            "review",
+            "blocked",
+            "archived",
+            "shipped"
+          ]
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "shipment_attestation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ShipmentAttestationResponse",
+      "type": "object",
+      "properties": {
+        "attestation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ShipmentAttestation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "ShipmentAttestation": {
+          "type": "object",
+          "required": [
+            "evidence_ids",
+            "rationale",
+            "submitted_at",
+            "submitted_height",
+            "verifier",
+            "work_round"
+          ],
+          "properties": {
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "rationale": {
+              "type": "string"
+            },
+            "submitted_at": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "submitted_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "verifier": {
+              "$ref": "#/definitions/Addr"
+            },
+            "work_round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "status_history": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "StatusHistoryResponse",
+      "description": "A bounded ascending status-history-ID page. Pagination is weakly consistent while transitions are appended; refresh page one to obtain a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StatusHistoryRecord"
+          }
+        },
+        "next_start_after": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "qualified",
+            "not_prioritized",
+            "duplicate",
+            "spam",
+            "building",
+            "review",
+            "blocked",
+            "archived",
+            "shipped"
+          ]
+        },
+        "StatusHistoryRecord": {
+          "type": "object",
+          "required": [
+            "actor",
+            "evidence_ids",
+            "from",
+            "height",
+            "id",
+            "request_id",
+            "timestamp",
+            "to"
+          ],
+          "properties": {
+            "actor": {
+              "$ref": "#/definitions/Addr"
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            "from": {
+              "$ref": "#/definitions/Status"
+            },
+            "height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "timestamp": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "to": {
+              "$ref": "#/definitions/Status"
+            }
+          },
+          "additionalProperties": false
+        },
+        "Timestamp": {
+          "description": "A point in time in nanosecond precision.\n\nThis type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.\n\n## Examples\n\n``` # use cosmwasm_std::Timestamp; let ts = Timestamp::from_nanos(1_000_000_202); assert_eq!(ts.nanos(), 1_000_000_202); assert_eq!(ts.seconds(), 1); assert_eq!(ts.subsec_nanos(), 202);\n\nlet ts = ts.plus_seconds(2); assert_eq!(ts.nanos(), 3_000_000_202); assert_eq!(ts.seconds(), 3); assert_eq!(ts.subsec_nanos(), 202); ```",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint64"
+            }
+          ]
+        },
+        "Uint64": {
+          "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
+          "type": "string"
+        }
+      }
+    },
+    "vote": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VoteResponse",
+      "type": "object",
+      "properties": {
+        "vote": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/VoteReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "VoteChoice": {
+          "type": "string",
+          "enum": [
+            "support",
+            "oppose"
+          ]
+        },
+        "VoteReceipt": {
+          "type": "object",
+          "required": [
+            "cast_height",
+            "choice",
+            "power",
+            "request_id",
+            "voter"
+          ],
+          "properties": {
+            "cast_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "choice": {
+              "$ref": "#/definitions/VoteChoice"
+            },
+            "power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "voter": {
+              "$ref": "#/definitions/Addr"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "votes": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VotesResponse",
+      "description": "A bounded ascending canonical-address page with weakly consistent pagination; refresh page one to obtain a current view.",
+      "type": "object",
+      "required": [
+        "items",
+        "query_height"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/VoteReceipt"
+          }
+        },
+        "next_start_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "query_height": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false,
+      "definitions": {
+        "Addr": {
+          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+          "type": "string"
+        },
+        "Uint128": {
+          "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+          "type": "string"
+        },
+        "VoteChoice": {
+          "type": "string",
+          "enum": [
+            "support",
+            "oppose"
+          ]
+        },
+        "VoteReceipt": {
+          "type": "object",
+          "required": [
+            "cast_height",
+            "choice",
+            "power",
+            "request_id",
+            "voter"
+          ],
+          "properties": {
+            "cast_height": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "choice": {
+              "$ref": "#/definitions/VoteChoice"
+            },
+            "power": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "request_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "voter": {
+              "$ref": "#/definitions/Addr"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}
