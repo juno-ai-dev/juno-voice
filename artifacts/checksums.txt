@@ -1,0 +1,1 @@
+fd264e53ae9af64231b8e62aff0da099e0ff21ba38d887c7a96d9c4ef755a96e  artifacts/juno_voice.wasm
