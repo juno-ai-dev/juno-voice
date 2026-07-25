@@ -15,6 +15,18 @@ pub enum ContractError {
     #[error("request submissions are paused")]
     SubmissionsPaused,
 
+    #[error("submissions are already in the requested pause state")]
+    PauseStateUnchanged,
+
+    #[error("snapshot recovery requires paused submissions")]
+    SubmissionsNotPaused,
+
+    #[error("configuration update must supply and change future-request policy")]
+    ConfigUnchanged,
+
+    #[error("replacement must differ from the current role address")]
+    RoleUnchanged,
+
     #[error("invalid or oversized required brief field: {field}")]
     InvalidBrief { field: &'static str },
 

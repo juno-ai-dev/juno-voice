@@ -6,7 +6,7 @@ use cw2::set_contract_version;
 use crate::bindings::JunoQuery;
 use crate::error::ContractError;
 use crate::execute::{
-    add_evidence, cast_vote, close_request, set_status, submit_request, withdraw_refund,
+    add_evidence, cast_vote, close_request, governance, set_status, submit_request, withdraw_refund,
 };
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{
@@ -212,6 +212,41 @@ pub fn execute(
             reject_funds(&info)?;
             withdraw_refund::execute(deps, env, info, request_id)
         }
+        ExecuteMsg::PauseSubmissions { reason } => {
+            reject_funds(&info)?;
+            governance::pause(deps, env, info, true, reason)
+        }
+        ExecuteMsg::UnpauseSubmissions { reason } => {
+            reject_funds(&info)?;
+            governance::pause(deps, env, info, false, reason)
+        }
+        ExecuteMsg::EmergencyArchiveOpen { request_id, reason } => {
+            reject_funds(&info)?;
+            governance::emergency_archive(deps, env, info, request_id, reason)
+        }
+        ExecuteMsg::UpdateConfig {
+            submission_bond,
+            voting_period_blocks,
+            quorum_bps,
+            support_bps,
+            work_inactivity_blocks,
+            request_limits,
+            reason,
+        } => {
+            reject_funds(&info)?;
+            governance::update_config(
+                deps,
+                env,
+                info,
+                submission_bond,
+                voting_period_blocks,
+                quorum_bps,
+                support_bps,
+                work_inactivity_blocks,
+                request_limits,
+                reason,
+            )
+        }
         ExecuteMsg::ProposeGovernor { address, reason } => {
             if !info.funds.is_empty() {
                 return Err(ContractError::UnexpectedFunds);
@@ -229,6 +264,14 @@ pub fn execute(
                 return Err(ContractError::UnexpectedFunds);
             }
             execute_accept_governor(deps, env, info, reason)
+        }
+        ExecuteMsg::ReplaceSteward { address, reason } => {
+            reject_funds(&info)?;
+            governance::replace_role(deps, env, info, address, reason, true)
+        }
+        ExecuteMsg::ReplaceVerifier { address, reason } => {
+            reject_funds(&info)?;
+            governance::replace_role(deps, env, info, address, reason, false)
         }
     }
 }
@@ -334,7 +377,10 @@ fn execute_accept_governor(
     Ok(action_response("accept_governor", id))
 }
 
-fn validate_reason(reason: String, max_reason_bytes: u16) -> Result<String, ContractError> {
+pub(crate) fn validate_reason(
+    reason: String,
+    max_reason_bytes: u16,
+) -> Result<String, ContractError> {
     if reason.len() > usize::from(max_reason_bytes) {
         return Err(ContractError::InvalidReason);
     }
@@ -345,15 +391,20 @@ fn validate_reason(reason: String, max_reason_bytes: u16) -> Result<String, Cont
     Ok(trimmed.to_owned())
 }
 
-fn checked_protocol_action_ids(storage: &dyn Storage) -> Result<(u64, u64), ContractError> {
+pub(crate) fn checked_protocol_action_ids(
+    storage: &dyn Storage,
+) -> Result<(u64, u64), ContractError> {
     let id = NEXT_PROTOCOL_ACTION_ID.load(storage)?;
     let next_id = id
         .checked_add(1)
         .ok_or(ContractError::ProtocolActionIdOverflow)?;
+    if PROTOCOL_ACTIONS.may_load(storage, id)?.is_some() {
+        return Err(ContractError::AuditInvariant);
+    }
     Ok((id, next_id))
 }
 
-fn persist_protocol_action(
+pub(crate) fn persist_protocol_action(
     storage: &mut dyn Storage,
     config: &Config,
     record: &ProtocolActionRecord,
@@ -365,13 +416,13 @@ fn persist_protocol_action(
     Ok(())
 }
 
-fn action_response(action: &str, id: u64) -> Response {
+pub(crate) fn action_response(action: &str, id: u64) -> Response {
     Response::new()
         .add_attribute("action", action)
         .add_attribute("protocol_action_id", id.to_string())
 }
 
-fn validate_address(
+pub(crate) fn validate_address(
     api: &dyn cosmwasm_std::Api,
     address: &str,
     role: &'static str,
@@ -380,7 +431,7 @@ fn validate_address(
         .map_err(|_| ContractError::InvalidAddress { role })
 }
 
-fn validate_threshold(field: &'static str, value: u16) -> Result<(), ContractError> {
+pub(crate) fn validate_threshold(field: &'static str, value: u16) -> Result<(), ContractError> {
     if !(1..=MAX_BPS).contains(&value) {
         return Err(ContractError::InvalidThreshold { field, value });
     }

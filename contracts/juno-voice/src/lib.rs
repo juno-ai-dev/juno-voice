@@ -47,3 +47,11 @@ mod task6_acceptance_tests;
 #[cfg(test)]
 #[path = "tests/query.rs"]
 mod query_tests;
+
+#[cfg(test)]
+#[path = "tests/task8.rs"]
+mod task8_tests;
+
+#[cfg(test)]
+#[path = "tests/task8_hardening.rs"]
+mod task8_hardening_tests;
