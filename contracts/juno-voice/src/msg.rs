@@ -24,6 +24,12 @@ pub struct InstantiateMsg {
     pub evidence_policy_version: u16,
 }
 
+/// The only governance judgment accepted by snapshot-history recovery.
+#[cw_serde]
+pub enum RecoveryReason {
+    SnapshotHistoryRisk,
+}
+
 #[cw_serde]
 pub enum ExecuteMsg {
     SubmitRequest {
@@ -96,6 +102,25 @@ pub enum ExecuteMsg {
     WithdrawRefund {
         request_id: u64,
     },
+    PauseSubmissions {
+        reason: String,
+    },
+    UnpauseSubmissions {
+        reason: String,
+    },
+    EmergencyArchiveOpen {
+        request_id: u64,
+        reason: RecoveryReason,
+    },
+    UpdateConfig {
+        submission_bond: Option<Uint128>,
+        voting_period_blocks: Option<u64>,
+        quorum_bps: Option<u16>,
+        support_bps: Option<u16>,
+        work_inactivity_blocks: Option<u64>,
+        request_limits: Option<RequestLimits>,
+        reason: String,
+    },
     ProposeGovernor {
         address: String,
         reason: String,
@@ -104,6 +129,14 @@ pub enum ExecuteMsg {
         reason: String,
     },
     AcceptGovernor {
+        reason: String,
+    },
+    ReplaceSteward {
+        address: String,
+        reason: String,
+    },
+    ReplaceVerifier {
+        address: String,
         reason: String,
     },
 }

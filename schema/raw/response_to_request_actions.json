@@ -43,6 +43,13 @@
         "forfeited"
       ]
     },
+    "RecoveryReason": {
+      "description": "The only governance judgment accepted by snapshot-history recovery.",
+      "type": "string",
+      "enum": [
+        "snapshot_history_risk"
+      ]
+    },
     "RequestAction": {
       "description": "Typed request-level audit action. Variant payloads are the immutable facts needed to reproduce each request mutation; later execute tasks populate these records.",
       "oneOf": [
@@ -315,6 +322,27 @@
               "properties": {
                 "amount": {
                   "$ref": "#/definitions/Uint128"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "emergency_archived"
+          ],
+          "properties": {
+            "emergency_archived": {
+              "type": "object",
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reason": {
+                  "$ref": "#/definitions/RecoveryReason"
                 }
               },
               "additionalProperties": false

@@ -2,6 +2,8 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Timestamp, Uint128};
 use cw_storage_plus::{Item, Map};
 
+use crate::msg::RecoveryReason;
+
 #[cw_serde]
 pub struct RequestLimits {
     pub max_title_bytes: u16,
@@ -255,6 +257,9 @@ pub enum RequestAction {
     },
     RefundWithdrawn {
         amount: Uint128,
+    },
+    EmergencyArchived {
+        reason: RecoveryReason,
     },
 }
 
