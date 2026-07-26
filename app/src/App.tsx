@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createDataSource, type VoiceDataSource } from './client';
-import { loadConfig, type AppConfig } from './config';
+import type { AppConfig } from './config';
 import { Detail } from './Detail';
 import { Ledger } from './Ledger';
 import { PublicTransactions, WalletConnection, type TransactionReceipt } from './wallet';
 import { TransactionReceiptView, WalletButton } from './WalletActions';
 
 function route(): number | null { const match = window.location.pathname.match(/^\/requests\/(\d+)\/?$/); return match ? Number(match[1]) : null; }
-export function App({ source: suppliedSource, config: suppliedConfig }: { source?: VoiceDataSource; config?: AppConfig }) {
-  const config = suppliedConfig ?? loadConfig({ VITE_CHAIN_ID: import.meta.env.VITE_CHAIN_ID, VITE_CONTRACT_ADDRESS: import.meta.env.VITE_CONTRACT_ADDRESS, VITE_RPC_URL: import.meta.env.VITE_RPC_URL });
+export function App({ source: suppliedSource, config }: { source?: VoiceDataSource; config: AppConfig }) {
   const source = useMemo(() => suppliedSource ?? createDataSource(config), [suppliedSource, config]);
   const wallet = useMemo(() => new WalletConnection(config), [config]);
   const transactions = useMemo(() => new PublicTransactions(config, { config: () => source.loadContractConfig ? source.loadContractConfig() : Promise.reject(new Error('Write queries unavailable.')), request: (id) => source.loadRequest ? source.loadRequest(id) : Promise.reject(new Error('Write queries unavailable.')) }, wallet), [config, source, wallet]);

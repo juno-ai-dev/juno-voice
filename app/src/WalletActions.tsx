@@ -25,7 +25,8 @@ export function RequestActions({request,account,transactions,onSuccess=()=>undef
 
 export function TransactionReceiptView({receipt}:{receipt:TransactionReceipt}){
   const pending=receipt.status==='confirmation_pending';
-  return <div className={`tx-success ${pending?'tx-pending':''}`} role="status"><strong>{pending?'Broadcast accepted — confirmation pending':'Canonical transaction confirmed'}</strong>{pending&&<p>This transaction was accepted by the network. Confirm is disabled to prevent a duplicate broadcast.</p>}{receipt.detail&&<p>{receipt.detail}</p>}<a href={receipt.explorerUrl} target="_blank" rel="noopener noreferrer">View {receipt.hash} on Mintscan</a></div>;
+  const unknown=receipt.status==='broadcast_unknown';
+  return <div className={`tx-success ${pending||unknown?'tx-pending':''}`} role="status"><strong>{unknown?'Broadcast outcome unknown — verification required':pending?'Broadcast submitted — confirmation pending':'Canonical transaction confirmed'}</strong>{pending&&<p>The transaction was submitted, but confirmation is still pending. Confirm is disabled to prevent a duplicate broadcast.</p>}{unknown&&<p>The broadcast may have occurred. Confirm is disabled; verify the account on chain or in an explorer before taking any further action.</p>}{receipt.detail&&<p>{receipt.detail}</p>}{receipt.explorerUrl&&receipt.hash&&<a href={receipt.explorerUrl} target="_blank" rel="noopener noreferrer">View {receipt.hash} on Mintscan</a>}</div>;
 }
 function Review({review,transactions,onCancel,onSuccess}:{review:TransactionReview;transactions:PublicTransactions;onCancel:()=>void;onSuccess:ReceiptHandler}){
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[receipt,setReceipt]=useState<TransactionReceipt|null>(null);

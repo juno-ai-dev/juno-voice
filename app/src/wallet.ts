@@ -1,5 +1,5 @@
 import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
-import { GasPrice } from '@cosmjs/stargate';
+import { BroadcastTxError, GasPrice, TimeoutError } from '@cosmjs/stargate';
 import type { OfflineSigner } from '@cosmjs/proto-signing';
 import { toUtf8 } from '@cosmjs/encoding';
 import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx';
@@ -10,7 +10,7 @@ export interface Coin { denom: string; amount: string }
 export interface SubmitInput { title: string; summary: string; acceptance_criteria: string; category: string; detail_uri: string; detail_digest: string }
 export type PublicExecuteMessage = { submit_request: { title:string; summary:string; acceptance_criteria:string; category:string; detail_uri:string|null; detail_digest:string|null } } | { withdraw_refund: { request_id:number } };
 export interface TransactionReview { kind:'submit'|'refund'; chainId:string; sender:string; contract:string; message:PublicExecuteMessage; funds:Coin[]; implications:string[]; fingerprint:string }
-export interface TransactionReceipt { status:'confirmed'|'confirmation_pending'; hash:string; explorerUrl:string; requestId:number|null; detail?:string }
+export interface TransactionReceipt { status:'confirmed'|'confirmation_pending'|'broadcast_unknown'; hash:string|null; explorerUrl:string|null; requestId:number|null; detail?:string }
 export interface ExecuteResult { code:number; transactionHash:string; rawLog?:string; events?:readonly { type:string; attributes:readonly { key:string; value:string }[] }[] }
 export interface SigningClient { execute(sender:string, contract:string, message:PublicExecuteMessage, fee:'auto', memo:string, funds:readonly Coin[]):Promise<ExecuteResult>; disconnect():void }
 
@@ -33,6 +33,7 @@ export class WalletConnection {
   private extension:WalletExtension|null=null;
   private listeners=new Set<()=>void>();
   private browserListeners: Array<{name:string; callback:EventListener}>=[];
+  private generation=0;
   constructor(private config:AppConfig,private browser:WalletWindow=window as WalletWindow,private connectSigning:SigningConnector=async(rpc,signer)=>{
     const client=await SigningCosmWasmClient.connectWithSigner(rpc,signer,{gasPrice:GasPrice.fromString('0.04ujunox')});
     return {execute:(sender,contract,message,fee,memo,funds)=>client.signAndBroadcast(sender,[{typeUrl:'/cosmwasm.wasm.v1.MsgExecuteContract',value:MsgExecuteContract.fromPartial({sender,contract,msg:toUtf8(JSON.stringify(message)),funds:[...funds]})}],fee,memo),disconnect:()=>client.disconnect()};
@@ -40,23 +41,37 @@ export class WalletConnection {
   account:string|null=null;
 
   async connect():Promise<string>{
-    this.disconnect();
+    const generation=++this.generation;
+    this.clearConnection();
     const extension=this.browser.keplr??this.browser.leap;
     if(!extension) throw new Error('No compatible wallet found. Install or unlock Keplr or Leap.');
+    let createdClient:SigningClient|null=null;
+    const assertCurrent=()=>{if(this.generation!==generation)throw new Error('Wallet connection attempt was superseded.')};
     try {
       await extension.experimentalSuggestChain?.(chainInfo(this.config));
+      assertCurrent();
       await extension.enable(this.config.chainId);
+      assertCurrent();
       const observed=await extension.getChainId?.();
+      assertCurrent();
       if(observed&&observed!==this.config.chainId) throw new Error(`Wrong chain: wallet returned ${observed}; uni-7 is required.`);
       const signer=extension.getOfflineSigner(this.config.chainId);
       const accounts=await signer.getAccounts();
+      assertCurrent();
       if(accounts.length!==1||!accounts[0].address.startsWith('juno1')) throw new Error('Wallet did not provide one valid Juno account.');
-      this.client=await this.connectSigning(this.config.rpc,signer);
+      createdClient=await this.connectSigning(this.config.rpc,signer);
+      assertCurrent();
+      this.client=createdClient;
       this.extension=extension;
       this.account=accounts[0].address;
       this.listen();
       return this.account;
-    } catch(error){this.disconnect();throw mapTransactionError(error)}
+    } catch(error){
+      if(createdClient&&createdClient!==this.client)createdClient.disconnect();
+      // Never let cleanup from a stale attempt tear down a newer winning attempt.
+      if(this.generation===generation){this.generation++;this.clearConnection()}
+      throw mapTransactionError(error);
+    }
   }
 
   private listen(){
@@ -82,7 +97,8 @@ export class WalletConnection {
     // An event may have disconnected the wallet while the extension calls were pending.
     if(!this.client||this.account!==sender)throw new Error('Wallet connection changed. Review the transaction again.');
   }
-  disconnect(){this.removeBrowserListeners();this.client?.disconnect();this.client=null;this.extension=null;this.account=null}
+  private clearConnection(){this.removeBrowserListeners();this.client?.disconnect();this.client=null;this.extension=null;this.account=null}
+  disconnect(){this.generation++;this.clearConnection()}
 }
 
 function validateText(value:string,max:number,label:string){if(!value.trim())throw new Error(`${label} is required.`);if(utf8Length(value)>max)throw new Error(`${label} exceeds the live ${max}-byte limit.`)}
@@ -131,7 +147,14 @@ export class PublicTransactions {
     // wallet-event races by reading both chain and signer accounts directly from the extension.
     await this.wallet.revalidateIdentity(review.chainId,review.sender);
     let result:ExecuteResult;
-    try{result=await this.wallet.signingClient().execute(review.sender,review.contract,review.message,'auto','Juno Voice',review.funds)}catch(error){throw mapTransactionError(error)}
+    try{result=await this.wallet.signingClient().execute(review.sender,review.contract,review.message,'auto','Juno Voice',review.funds)}catch(error){
+      if(error instanceof TimeoutError){
+        const hash=error.txId;
+        return {status:'confirmation_pending',hash,explorerUrl:`${this.config.explorer}/tx/${encodeURIComponent(hash)}`,requestId:null,detail:'The transaction was submitted, but CosmJS timed out waiting for inclusion. Verify this hash on chain; do not broadcast this reviewed transaction again.'};
+      }
+      if(isDefinitelyPrebroadcast(error)||error instanceof BroadcastTxError)throw mapTransactionError(error);
+      return {status:'broadcast_unknown',hash:null,explorerUrl:null,requestId:null,detail:'The wallet or RPC stopped responding while broadcasting. The transaction may have been submitted. Verify the account on chain or in an explorer before taking any further action; do not broadcast this reviewed transaction again.'};
+    }
     if(result.code!==0)throw new Error(`Transaction failed with code ${result.code}${result.rawLog?`: ${result.rawLog}`:'.'}`);
     const explorerUrl=`${this.config.explorer}/tx/${encodeURIComponent(result.transactionHash)}`;
     const requestId=review.kind==='refund'&&'withdraw_refund'in review.message?review.message.withdraw_refund.request_id:eventRequestId(result);
@@ -155,4 +178,5 @@ export class PublicTransactions {
     return {status:'confirmed',hash:result.transactionHash,explorerUrl,requestId};
   }
 }
-export function mapTransactionError(error:unknown):Error{const message=error instanceof Error?error.message:String(error);if(/reject|denied|cancel/i.test(message))return new Error('Wallet request rejected. No transaction was broadcast.');if(/lock/i.test(message))return new Error('Wallet is locked. Unlock it and try again.');if(/wrong chain|chain.*mismatch|unsupported chain/i.test(message))return new Error(`Wrong chain. Switch the wallet to uni-7. (${message})`);if(/insufficient funds/i.test(message))return new Error('Insufficient funds for the bond and network fee.');if(/timeout|network|fetch|rpc|socket/i.test(message))return new Error('Network or RPC failure. No success has been assumed.');return new Error(`Transaction unavailable: ${message}`)}
+function isDefinitelyPrebroadcast(error:unknown):boolean{const message=error instanceof Error?error.message:String(error);return /reject|denied|cancel|lock|wrong chain|chain.*mismatch|unsupported chain|insufficient funds/i.test(message)}
+export function mapTransactionError(error:unknown):Error{const message=error instanceof Error?error.message:String(error);if(/reject|denied|cancel/i.test(message))return new Error('Wallet request rejected. No transaction was broadcast.');if(/lock/i.test(message))return new Error('Wallet is locked. Unlock it and try again.');if(/wrong chain|chain.*mismatch|unsupported chain/i.test(message))return new Error(`Wrong chain. Switch the wallet to uni-7. (${message})`);if(/insufficient funds/i.test(message))return new Error('Insufficient funds for the bond and network fee.');if(/timeout|network|fetch|rpc|socket/i.test(message))return new Error('Network or RPC failure.');return new Error(`Transaction unavailable: ${message}`)}
