@@ -4,11 +4,11 @@ import { actionLabel, compactAddress, formatPower, formatTimestamp, netPower, st
 import type { AppConfig } from './config';
 import { useAsync } from './useAsync';
 import { safeUri } from './uri';
-import type { PublicTransactions } from './wallet';
+import type { PublicTransactions, TransactionReceipt } from './wallet';
 import { RequestActions } from './WalletActions';
 
-export function Detail({ source, config, id, onBack, account=null, transactions, onSuccess=()=>undefined }: { source: VoiceDataSource; config: AppConfig; id: number; onBack: () => void; account?:string|null; transactions?:PublicTransactions; onSuccess?:()=>void }) {
-  const load = useMemo(() => () => source.loadDetail(id), [source, id]);
+export function Detail({ source, config, id, onBack, account=null, transactions, onSuccess=()=>undefined, refreshToken=0 }: { source: VoiceDataSource; config: AppConfig; id: number; onBack: () => void; account?:string|null; transactions?:PublicTransactions; onSuccess?:(receipt:TransactionReceipt)=>void; refreshToken?:number }) {
+  const load = useMemo(() => { void refreshToken; return () => source.loadDetail(id); }, [source, id, refreshToken]);
   const [state, retry] = useAsync(load, id);
   if (state.kind === 'loading') return <main><ViewState title={`Receiving request ${id}…`} /></main>;
   if (state.kind === 'error') return <main><button className="back" onClick={onBack}>← Signal ledger</button><ViewState title="Request unavailable" detail={state.message}><button className="button primary" onClick={retry}>Retry query</button></ViewState></main>;

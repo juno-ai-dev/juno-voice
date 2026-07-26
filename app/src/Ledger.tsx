@@ -5,13 +5,13 @@ import { compactAddress, formatPower, netPower, statusLabels } from './format';
 import type { AppConfig } from './config';
 import { useAsync } from './useAsync';
 import type { Request } from './types';
-import type { PublicTransactions } from './wallet';
+import type { PublicTransactions, TransactionReceipt } from './wallet';
 import { SubmitAction } from './WalletActions';
 
-interface Props { source: VoiceDataSource; config: AppConfig; onOpen: (id: number) => void; account?:string|null; transactions?:PublicTransactions; onSuccess?:()=>void }
+interface Props { source: VoiceDataSource; config: AppConfig; onOpen: (id: number) => void; account?:string|null; transactions?:PublicTransactions; onSuccess?:(receipt:TransactionReceipt)=>void; refreshToken?:number }
 const filters: StatusFilter[] = ['all', 'open', 'qualified', 'not_prioritized', 'duplicate', 'spam', 'building', 'review', 'blocked', 'archived', 'shipped'];
-export function Ledger({ source, config, onOpen, account=null, transactions, onSuccess=()=>undefined }: Props) {
-  const load = useMemo(() => () => source.loadLedger(), [source]);
+export function Ledger({ source, config, onOpen, account=null, transactions, onSuccess=()=>undefined, refreshToken=0 }: Props) {
+  const load = useMemo(() => { void refreshToken; return () => source.loadLedger(); }, [source,refreshToken]);
   const [state, retry] = useAsync(load, 'ledger');
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
