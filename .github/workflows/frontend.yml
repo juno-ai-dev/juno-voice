@@ -1,6 +1,7 @@
 name: Frontend CI
 
 on:
+  workflow_dispatch:
   pull_request:
     paths: ['app/**', '.github/workflows/frontend.yml']
   push:
@@ -28,3 +29,4 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm audit --audit-level=high
