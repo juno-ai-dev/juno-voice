@@ -5,10 +5,12 @@ import { compactAddress, formatPower, netPower, statusLabels } from './format';
 import type { AppConfig } from './config';
 import { useAsync } from './useAsync';
 import type { Request } from './types';
+import type { PublicTransactions } from './wallet';
+import { SubmitAction } from './WalletActions';
 
-interface Props { source: VoiceDataSource; config: AppConfig; onOpen: (id: number) => void }
+interface Props { source: VoiceDataSource; config: AppConfig; onOpen: (id: number) => void; account?:string|null; transactions?:PublicTransactions; onSuccess?:()=>void }
 const filters: StatusFilter[] = ['all', 'open', 'qualified', 'not_prioritized', 'duplicate', 'spam', 'building', 'review', 'blocked', 'archived', 'shipped'];
-export function Ledger({ source, config, onOpen }: Props) {
+export function Ledger({ source, config, onOpen, account=null, transactions, onSuccess=()=>undefined }: Props) {
   const load = useMemo(() => () => source.loadLedger(), [source]);
   const [state, retry] = useAsync(load, 'ledger');
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -26,7 +28,7 @@ export function Ledger({ source, config, onOpen }: Props) {
       <aside className="facts" aria-label="Live chain facts"><Fact label="Network" value="TESTNET / UNI-7" /><Fact label="Chain ID" value={config.chainId} /><Fact label="Contract" value={compactAddress(config.contract)} title={config.contract} href={`${config.explorer}/address/${encodeURIComponent(config.contract)}`} /><Fact label="Code ID" value={String(config.codeId)} /><Fact label="RPC height" value={state.data.queryHeight.toLocaleString()} /><div className="fact"><span>Refreshed</span><strong><time dateTime={state.data.refreshedAt.toISOString()}>{state.data.refreshedAt.toLocaleTimeString()}</time></strong></div><span className={`freshness ${stale ? 'stale' : ''}`} role="status">{stale ? 'Stale · refresh recommended' : 'Fresh direct-RPC data'}</span><small>Multi-query snapshot · heights may differ slightly.</small></aside>
     </section>
     <section className="overview" aria-label="Protocol configuration"><Fact label="Native denom" value={state.data.config.native_denom} /><Fact label="Submission bond" value={formatPower(state.data.config.submission_bond)} /><Fact label="Locked bonds" value={formatPower(state.data.bonds.locked)} /><Fact label="Refundable" value={formatPower(state.data.bonds.refundable)} /><Fact label="Submissions" value={state.data.config.submissions_paused ? 'Paused' : 'Open'} /></section>
-    <section aria-labelledby="ledger-title"><div className="toolbar"><div><h2 id="ledger-title">Signal ledger</h2><div className="tabs" aria-label="Filter requests">{filters.map((value) => <button key={value} className={`tab ${filter === value ? 'active' : ''}`} aria-pressed={filter === value} onClick={() => setFilter(value)}>{value === 'all' ? 'All requests' : statusLabels[value]}</button>)}</div></div><label className="search-label">Filter loaded results ({loaded.length})<input className="search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Title, category, author…" /></label></div>
+    {transactions&&<SubmitAction account={account} transactions={transactions} live={state.data.config} onSuccess={onSuccess}/>}<section aria-labelledby="ledger-title"><div className="toolbar"><div><h2 id="ledger-title">Signal ledger</h2><div className="tabs" aria-label="Filter requests">{filters.map((value) => <button key={value} className={`tab ${filter === value ? 'active' : ''}`} aria-pressed={filter === value} onClick={() => setFilter(value)}>{value === 'all' ? 'All requests' : statusLabels[value]}</button>)}</div></div><label className="search-label">Filter loaded results ({loaded.length})<input className="search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Title, category, author…" /></label></div>
       <div className="ledger"><div className="ledger-head" aria-hidden="true"><span>ID</span><span>Request</span><span>State</span><span>Net signal</span><span>Voters</span></div>{rows.length === 0 ? <State title={loaded.length === 0 && filter === 'all' ? 'No on-chain requests yet' : 'No matching signal'} detail={loaded.length === 0 && filter === 'all' ? 'The contract returned no requests.' : 'Adjust the status filter or search.'} /> : rows.map((request) => <RequestRow key={request.id} request={request} onOpen={onOpen} />)}</div>
     </section>
   </main>;

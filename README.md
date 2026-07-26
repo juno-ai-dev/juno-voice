@@ -6,9 +6,11 @@ Juno Voice is a public feature-prioritization system where people and agents sub
 
 > `suggest → prioritize → build → verify → ship`
 
-## Maintained read-only application
+## Maintained public application
 
-[`app/`](app/) is the maintained React/TypeScript/Vite frontend. It is explicitly labeled **TESTNET / UNI-7** and reads authoritative data directly from the deployed CosmWasm contract. It has no sample fallback, wallet, signing, or transaction controls. [`prototype/`](prototype/) remains unchanged as a historical visual reference; its embedded sample rows are not application data.
+[`app/`](app/) is the maintained React/TypeScript/Vite frontend. It is explicitly labeled **TESTNET / UNI-7** and reads authoritative data directly from the deployed CosmWasm contract without requiring a wallet. It has no sample fallback. Keplr and Leap can be used for the bounded public submit and eligible bond-refund flows; privileged controls are never rendered. Voting execution is explicitly disabled because direct typed historical voter power cannot currently be verified—current balance is never presented as snapshot power. [`prototype/`](prototype/) remains unchanged as a historical visual reference; its embedded sample rows are not application data.
+
+Every enabled write re-queries canonical state before constructing the message, presents chain, sender, contract, decoded message, funds, and implications before signing, checks transaction code zero, and requires canonical post-transaction confirmation before reporting success. Transaction success links use Mintscan. Wallet/account or chain changes disconnect the signing session while leaving direct-RPC reading available.
 
 Pinned live facts:
 
@@ -61,7 +63,7 @@ The CosmWasm MVP contract passed the locked 107-test debug/release suite, indepe
 ## Repository shape
 
 ```text
-app/                   maintained read-only uni-7 web application
+app/                   maintained uni-7 read + bounded public-write application
 contracts/             Rust/CosmWasm contract workspace
 schema/                checked-in canonical contract schemas
 docs/                  architecture, design, plans, and testnet evidence

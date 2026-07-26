@@ -4,8 +4,10 @@ import { actionLabel, compactAddress, formatPower, formatTimestamp, netPower, st
 import type { AppConfig } from './config';
 import { useAsync } from './useAsync';
 import { safeUri } from './uri';
+import type { PublicTransactions } from './wallet';
+import { RequestActions } from './WalletActions';
 
-export function Detail({ source, config, id, onBack }: { source: VoiceDataSource; config: AppConfig; id: number; onBack: () => void }) {
+export function Detail({ source, config, id, onBack, account=null, transactions, onSuccess=()=>undefined }: { source: VoiceDataSource; config: AppConfig; id: number; onBack: () => void; account?:string|null; transactions?:PublicTransactions; onSuccess?:()=>void }) {
   const load = useMemo(() => () => source.loadDetail(id), [source, id]);
   const [state, retry] = useAsync(load, id);
   if (state.kind === 'loading') return <main><ViewState title={`Receiving request ${id}…`} /></main>;
@@ -22,7 +24,7 @@ export function Detail({ source, config, id, onBack }: { source: VoiceDataSource
       <h2>Bond</h2><p><span className="badge">{request.bond.state}</span> {formatPower(request.bond.amount)} {request.bond.amount === '1' ? '' : 'units'}</p>
       <h2>Evidence</h2>{sectionErrors.evidence && <SectionError section="evidence" message={sectionErrors.evidence} />}{evidence.length ? evidence.map((item) => { const uri = safeUri(item.uri); return <section className="evidence" key={item.id}><strong>{item.kind.replaceAll('_', ' ')}</strong><p>{uri ? <a href={uri.href} target="_blank" rel="noopener noreferrer">{item.uri}</a> : <span>{item.uri} (not linked)</span>}</p><p>{item.note}</p><code>{item.digest}</code><small>By {compactAddress(item.submitter)} · height {item.submitted_height.toLocaleString()} · <ChainTime value={item.submitted_at} /></small></section>; }) : <Empty text="No evidence attached." />}
       <h2>Shipment attestation</h2>{sectionErrors.attestation && <SectionError section="shipment attestation" message={sectionErrors.attestation} />}{attestation ? <section className="attestation"><strong>Verified by {compactAddress(attestation.verifier)}</strong><p>{attestation.rationale}</p><small>Evidence IDs: {attestation.evidence_ids.join(', ') || 'None'} · height {attestation.submitted_height.toLocaleString()} · <ChainTime value={attestation.submitted_at} /></small></section> : <Empty text="No shipment attestation recorded." />}
-      <div className="later"><strong>Read-only foundation</strong><p>Wallet transactions and signing arrive in a later slice.</p></div></aside></div>
+      {transactions?<RequestActions request={request} account={account} transactions={transactions} onSuccess={onSuccess}/>:<div className="later"><strong>Read-only test harness</strong><p>Wallet transactions and signing require the public transaction service.</p></div>}</aside></div>
   </main>;
 }
 function ChainTime({ value }: { value: string }) { const date = new Date(Number(BigInt(value) / 1_000_000n)); return <time dateTime={date.toISOString()}>{formatTimestamp(value)}</time>; }
