@@ -1,0 +1,343 @@
+{
+  "actions": {
+    "items": [
+      {
+        "action": {
+          "submitted": {
+            "snapshot_height": 16141377,
+            "total_power": "226105793108"
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141378,
+        "id": 1,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942240519435002"
+      },
+      {
+        "action": {
+          "bond_transition": {
+            "amount": "1000000",
+            "from": null,
+            "to": "locked"
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141378,
+        "id": 2,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942240519435002"
+      },
+      {
+        "action": {
+          "finalized": {
+            "qualified": true
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141410,
+        "id": 3,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942320431340942"
+      },
+      {
+        "action": {
+          "status_transition": {
+            "from": "open",
+            "to": "qualified"
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141410,
+        "id": 4,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942320431340942"
+      },
+      {
+        "action": {
+          "bond_transition": {
+            "amount": "1000000",
+            "from": "locked",
+            "to": "refundable"
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141410,
+        "id": 5,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942320431340942"
+      },
+      {
+        "action": {
+          "builder_assigned": {
+            "new_builder": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+            "new_work_round": 1,
+            "previous_builder": null,
+            "previous_work_round": 0
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141414,
+        "id": 6,
+        "reason": "assign distinct smoke builder",
+        "request_id": 1,
+        "timestamp": "1784942330419059113"
+      },
+      {
+        "action": {
+          "status_transition": {
+            "from": "qualified",
+            "to": "building"
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141414,
+        "id": 7,
+        "reason": "assign distinct smoke builder",
+        "request_id": 1,
+        "timestamp": "1784942330419059113"
+      },
+      {
+        "action": {
+          "evidence_added": {
+            "evidence_id": 1
+          }
+        },
+        "actor": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+        "height": 16141416,
+        "id": 8,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942335300961218"
+      },
+      {
+        "action": {
+          "review_requested": {
+            "evidence_ids": [
+              1
+            ]
+          }
+        },
+        "actor": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+        "height": 16141417,
+        "id": 9,
+        "reason": "artifact and lifecycle ready for verification",
+        "request_id": 1,
+        "timestamp": "1784942337764308748"
+      },
+      {
+        "action": {
+          "status_transition": {
+            "from": "building",
+            "to": "review"
+          }
+        },
+        "actor": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+        "height": 16141417,
+        "id": 10,
+        "reason": "artifact and lifecycle ready for verification",
+        "request_id": 1,
+        "timestamp": "1784942337764308748"
+      },
+      {
+        "action": {
+          "evidence_added": {
+            "evidence_id": 2
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141418,
+        "id": 11,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942340260910035"
+      },
+      {
+        "action": {
+          "shipment_attested": {
+            "evidence_ids": [
+              1,
+              2
+            ]
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141420,
+        "id": 12,
+        "reason": "Exact artifact and distinct delivery and verification evidence passed the uni-7 gate.",
+        "request_id": 1,
+        "timestamp": "1784942345239611758"
+      },
+      {
+        "action": {
+          "status_transition": {
+            "from": "review",
+            "to": "shipped"
+          }
+        },
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "height": 16141420,
+        "id": 13,
+        "reason": "Exact artifact and distinct delivery and verification evidence passed the uni-7 gate.",
+        "request_id": 1,
+        "timestamp": "1784942345239611758"
+      }
+    ],
+    "next_start_after": null,
+    "query_height": 16177677
+  },
+  "attestation": {
+    "attestation": {
+      "evidence_ids": [
+        1,
+        2
+      ],
+      "rationale": "Exact artifact and distinct delivery and verification evidence passed the uni-7 gate.",
+      "submitted_at": "1784942345239611758",
+      "submitted_height": 16141420,
+      "verifier": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+      "work_round": 1
+    }
+  },
+  "captured_from": {
+    "chain_id": "uni-7",
+    "contract": "juno1t7ajx85pkw8e0yl8vgnlxvnlq4yf0h6a3eahuystnf6e9jfhwvvsv4jcel",
+    "rpc": "https://juno-testnet-rpc.cogwheel.zone"
+  },
+  "evidence": {
+    "items": [
+      {
+        "digest": "sha256:fd264e53ae9af64231b8e62aff0da099e0ff21ba38d887c7a96d9c4ef755a96e",
+        "id": 1,
+        "kind": "release",
+        "note": "Exact optimized artifact release evidence.",
+        "request_id": 1,
+        "submitted_at": "1784942335300961218",
+        "submitted_height": 16141416,
+        "submitter": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+        "uri": "https://github.com/juno-ai-dev/juno-voice",
+        "work_round": 1
+      },
+      {
+        "digest": "sha256:9af3aead9fc4cc65e974a409676dd96a791fd36380fbc2ce24437634c21c86b6",
+        "id": 2,
+        "kind": "test_report",
+        "note": "Independent verification-class smoke evidence.",
+        "request_id": 1,
+        "submitted_at": "1784942340260910035",
+        "submitted_height": 16141418,
+        "submitter": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "uri": "https://github.com/juno-ai-dev/juno-voice/blob/main/docs/testing/TESTNET_SMOKE.md",
+        "work_round": 1
+      }
+    ],
+    "next_start_after": null,
+    "query_height": 16177676
+  },
+  "history": {
+    "items": [
+      {
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "evidence_ids": [],
+        "from": "open",
+        "height": 16141410,
+        "id": 1,
+        "reason": null,
+        "request_id": 1,
+        "timestamp": "1784942320431340942",
+        "to": "qualified"
+      },
+      {
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "evidence_ids": [],
+        "from": "qualified",
+        "height": 16141414,
+        "id": 2,
+        "reason": "assign distinct smoke builder",
+        "request_id": 1,
+        "timestamp": "1784942330419059113",
+        "to": "building"
+      },
+      {
+        "actor": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+        "evidence_ids": [
+          1
+        ],
+        "from": "building",
+        "height": 16141417,
+        "id": 3,
+        "reason": "artifact and lifecycle ready for verification",
+        "request_id": 1,
+        "timestamp": "1784942337764308748",
+        "to": "review"
+      },
+      {
+        "actor": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+        "evidence_ids": [
+          1,
+          2
+        ],
+        "from": "review",
+        "height": 16141420,
+        "id": 4,
+        "reason": "Exact artifact and distinct delivery and verification evidence passed the uni-7 gate.",
+        "request_id": 1,
+        "timestamp": "1784942345239611758",
+        "to": "shipped"
+      }
+    ],
+    "next_start_after": null,
+    "query_height": 16177676
+  },
+  "request": {
+    "request": {
+      "acceptance_criteria": "The recorded lifecycle and evidence queries match the documented gate.",
+      "author": "juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76",
+      "bond": {
+        "amount": "1000000",
+        "state": "refundable"
+      },
+      "builder": "juno1z0897h3hjq7saulmcnn8cq4z2nr36x26nwnny0",
+      "canonical_request_id": null,
+      "category": "smoke",
+      "closes_height": 16141398,
+      "created_at": "1784942240519435002",
+      "detail_digest": null,
+      "detail_uri": null,
+      "evidence_policy_version": 1,
+      "id": 1,
+      "limits": {
+        "max_acceptance_criteria_bytes": 4000,
+        "max_attestation_evidence_refs": 16,
+        "max_category_bytes": 32,
+        "max_digest_bytes": 71,
+        "max_evidence_items": 64,
+        "max_evidence_note_bytes": 1024,
+        "max_review_evidence_refs": 16,
+        "max_summary_bytes": 2000,
+        "max_title_bytes": 120,
+        "max_uri_bytes": 512
+      },
+      "opened_height": 16141378,
+      "oppose_power": "0",
+      "quorum_bps": 1,
+      "snapshot_height": 16141377,
+      "status": "shipped",
+      "summary": "Exact-artifact uni-7 smoke evidence",
+      "support_bps": 5001,
+      "support_power": "27000000",
+      "title": "Delivery path",
+      "total_power": "226105793108",
+      "updated_at": "1784942345239611758",
+      "voter_count": 1,
+      "work_activity_height": 16141416,
+      "work_inactivity_blocks": 50,
+      "work_round": 1
+    }
+  }
+}
