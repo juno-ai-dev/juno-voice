@@ -13,6 +13,11 @@ describe('real request detail', () => {
     expect(screen.getByText('Tests passed')).toBeInTheDocument();
     expect(screen.getByText('No shipment attestation recorded.')).toBeInTheDocument();
     expect(screen.getByText(/Wallet transactions and signing/)).toBeInTheDocument();
+    expect(screen.getByText('0.0042 JUNOX')).toBeInTheDocument();
+    expect(screen.getByText('0.0002 JUNOX')).toBeInTheDocument();
+    expect(screen.getByText('+0.004 JUNOX')).toBeInTheDocument();
+    expect(screen.getByText('0.005 JUNOX')).toBeInTheDocument();
+    expect(screen.getByText(/1 JUNOX/)).toBeInTheDocument();
   });
   it('renders unsafe detail URIs as text rather than links', async () => {
     const unsafe = { ...detail, request: { ...detail.request, detail_uri: 'javascript:alert(1)' } };

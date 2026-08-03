@@ -4,6 +4,8 @@ import type { OfflineSigner } from '@cosmjs/proto-signing';
 import { toUtf8 } from '@cosmjs/encoding';
 import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx';
 import type { AppConfig } from './config';
+import { NATIVE_TOKEN } from './denom';
+import { formatJuno } from './format';
 import type { ContractConfig, Request } from './types';
 
 export interface Coin { denom: string; amount: string }
@@ -24,7 +26,7 @@ export type SigningConnector = (rpc:string, signer:OfflineSigner)=>Promise<Signi
 const utf8Length=(value:string)=>new TextEncoder().encode(value).length;
 const stable=(value:unknown)=>JSON.stringify(value);
 export function chainInfo(config:AppConfig):ChainInfo {
-  const currency={coinDenom:'JUNOX',coinMinimalDenom:'ujunox',coinDecimals:6,gasPriceStep:{low:.025,average:.04,high:.075}};
+  const currency={coinDenom:NATIVE_TOKEN.displayDenom,coinMinimalDenom:NATIVE_TOKEN.minimalDenom,coinDecimals:NATIVE_TOKEN.decimals,gasPriceStep:{low:.025,average:.04,high:.075}};
   return {chainId:config.chainId,chainName:'Juno Testnet (uni-7)',rpc:config.rpc,rest:'https://juno-testnet-api.polkachu.com',bip44:{coinType:118},bech32Config:{bech32PrefixAccAddr:'juno',bech32PrefixAccPub:'junopub',bech32PrefixValAddr:'junovaloper',bech32PrefixValPub:'junovaloperpub',bech32PrefixConsAddr:'junovalcons',bech32PrefixConsPub:'junovalconspub'},currencies:[currency],feeCurrencies:[currency],stakeCurrency:currency,features:['cosmwasm']};
 }
 
@@ -35,7 +37,7 @@ export class WalletConnection {
   private browserListeners: Array<{name:string; callback:EventListener}>=[];
   private generation=0;
   constructor(private config:AppConfig,private browser:WalletWindow=window as WalletWindow,private connectSigning:SigningConnector=async(rpc,signer)=>{
-    const client=await SigningCosmWasmClient.connectWithSigner(rpc,signer,{gasPrice:GasPrice.fromString('0.04ujunox')});
+    const client=await SigningCosmWasmClient.connectWithSigner(rpc,signer,{gasPrice:GasPrice.fromString(`0.04${NATIVE_TOKEN.minimalDenom}`)});
     return {execute:(sender,contract,message,fee,memo,funds)=>client.signAndBroadcast(sender,[{typeUrl:'/cosmwasm.wasm.v1.MsgExecuteContract',value:MsgExecuteContract.fromPartial({sender,contract,msg:toUtf8(JSON.stringify(message)),funds:[...funds]})}],fee,memo),disconnect:()=>client.disconnect()};
   }){}
   account:string|null=null;
@@ -104,7 +106,7 @@ export class WalletConnection {
 function validateText(value:string,max:number,label:string){if(!value.trim())throw new Error(`${label} is required.`);if(utf8Length(value)>max)throw new Error(`${label} exceeds the live ${max}-byte limit.`)}
 export function buildSubmitReview(config:AppConfig,sender:string,live:ContractConfig,input:SubmitInput):TransactionReview {
   if(live.submissions_paused)throw new Error('Submissions are currently paused on chain.');
-  if(live.native_denom!=='ujunox')throw new Error('Unsupported live bond denomination.');
+  if(live.native_denom!==NATIVE_TOKEN.minimalDenom)throw new Error('Unsupported live bond denomination.');
   if(!/^\d+$/.test(live.submission_bond)||BigInt(live.submission_bond)<=0n)throw new Error('Invalid live submission bond.');
   const limits=live.request_limits;
   validateText(input.title,limits.max_title_bytes,'Title');validateText(input.summary,limits.max_summary_bytes,'Summary');validateText(input.acceptance_criteria,limits.max_acceptance_criteria_bytes,'Acceptance criteria');
@@ -115,14 +117,14 @@ export function buildSubmitReview(config:AppConfig,sender:string,live:ContractCo
   if(digest&&(!/^sha256:[0-9a-f]{64}$/.test(digest)||utf8Length(digest)>limits.max_digest_bytes))throw new Error('Detail digest must be sha256: followed by 64 lowercase hex characters.');
   const message:PublicExecuteMessage={submit_request:{title:input.title,summary:input.summary,acceptance_criteria:input.acceptance_criteria,category:input.category,detail_uri:uri||null,detail_digest:digest||null}};
   const funds=[{denom:live.native_denom,amount:live.submission_bond}];
-  const base={kind:'submit' as const,chainId:config.chainId,sender,contract:config.contract,message,funds,implications:['Creates a permanent public request.','The exact submission bond is locked and is refundable only if the contract later marks it refundable; spam bonds may be forfeited.']};
+  const base={kind:'submit' as const,chainId:config.chainId,sender,contract:config.contract,message,funds,implications:['Creates a permanent public request.',`Locks a ${formatJuno(live.submission_bond)} submission bond. It is refundable only if the contract later marks it refundable; spam bonds may be forfeited.`]};
   return {...base,fingerprint:stable(base)};
 }
 export function refundEligible(request:Request,sender:string):boolean{return request.author===sender&&request.bond.state==='refundable'&&/^\d+$/.test(request.bond.amount)&&BigInt(request.bond.amount)>0n}
 export function buildRefundReview(config:AppConfig,sender:string,request:Request):TransactionReview {
   if(!refundEligible(request,sender))throw new Error('Refund unavailable: only the author can withdraw a positive refundable bond.');
   const message:PublicExecuteMessage={withdraw_refund:{request_id:request.id}};
-  const base={kind:'refund' as const,chainId:config.chainId,sender,contract:config.contract,message,funds:[] as Coin[],implications:[`Withdraws ${request.bond.amount} ujunox to the request author.`,'This claim is irreversible and changes the bond state to claimed.']};
+  const base={kind:'refund' as const,chainId:config.chainId,sender,contract:config.contract,message,funds:[] as Coin[],implications:[`Withdraws ${formatJuno(request.bond.amount)} to the request author.`,'This claim is irreversible and changes the bond state to claimed.']};
   return {...base,fingerprint:stable(base)};
 }
 function eventRequestId(result:ExecuteResult):number|null{for(const event of result.events??[])for(const attr of event.attributes)if(attr.key==='request_id'&&/^\d+$/.test(attr.value)){const id=Number(attr.value);if(Number.isSafeInteger(id)&&id>0)return id}return null}

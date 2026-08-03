@@ -10,6 +10,8 @@ Juno Voice is a public feature-prioritization system where people and agents sub
 
 [`app/`](app/) is the maintained React/TypeScript/Vite frontend. It is explicitly labeled **TESTNET / UNI-7** and reads authoritative data directly from the deployed CosmWasm contract without requiring a wallet. It has no sample fallback. Keplr and Leap can be used for the bounded public submit and eligible bond-refund flows; privileged controls are never rendered. Voting execution is explicitly disabled because direct typed historical voter power cannot currently be verified—current balance is never presented as snapshot power. [`prototype/`](prototype/) remains unchanged as a historical visual reference; its embedded sample rows are not application data.
 
+Contract queries and signed transactions retain canonical integer `ujunox` amounts. Human-facing bond and voting-power values are rendered losslessly in six-decimal `JUNOX` display units; exact pre-sign reviews show both the readable amount and the canonical payload.
+
 Every enabled write re-queries canonical state before constructing the message, presents chain, sender, contract, decoded message, funds, and implications before signing, checks transaction code zero, and requires canonical post-transaction confirmation before reporting success. Transaction success links use Mintscan. Wallet/account or chain changes disconnect the signing session while leaving direct-RPC reading available.
 
 Pinned live facts:
@@ -45,12 +47,13 @@ The `ALL REQUESTS` ledger exhausts ID pagination without inventing a cross-statu
 
 The CosmWasm MVP contract passed the locked 107-test debug/release suite, independent specification/security/release reviews, deterministic artifact checks, and an exact-artifact `uni-7` smoke gate.
 
-- [Architecture](docs/architecture/ARCHITECTURE.md)
-- [Product and interaction design](docs/design/PRODUCT_DESIGN.md)
-- [Decision records](docs/architecture/decisions/)
-- [Implementation plan](docs/plans/2026-07-23-mvp.md)
-- [Reproducible artifact and `uni-7` smoke evidence](docs/testing/TESTNET_SMOKE.md)
+- [Architecture](docs/architecture/ARCHITECTURE.md) — current contract behavior and trust boundaries
+- [Product design](docs/design/PRODUCT_DESIGN.md) — current application hierarchy and interaction rules
+- [Decision records](docs/architecture/decisions/) — rationale for durable architecture choices
+- [Reproducible artifact and `uni-7` smoke evidence](docs/testing/TESTNET_SMOKE.md) — deployment record
 - [Historical interactive prototype](https://juno-ai-dev.github.io/juno-voice/)
+
+The architecture and product-design files are the two maintained specifications. Decision records explain why; test evidence records what was verified. Completed plans and superseded review drafts are not kept as parallel specifications.
 
 ## Product principles
 

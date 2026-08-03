@@ -1,8 +1,28 @@
 # Juno Voice architecture
 
-**Status:** Accepted (Architecture V2)
-**Scope:** MVP architecture; no deployment authorization  
+**Status:** Implemented MVP architecture
+**Scope:** Current contract semantics; `uni-7` smoke deployment only, no production authorization
 **Chain dependency:** Juno v30 `x/voting-snapshot`
+
+This is the single canonical architecture specification. The [decision records](./decisions/) preserve rationale, while [testnet smoke evidence](../testing/TESTNET_SMOKE.md) records the verified deployment. Product hierarchy and interface behavior live in [the product-design specification](../design/PRODUCT_DESIGN.md).
+
+## System at a glance
+
+```text
+wallet / agent
+      │ query or signed execute
+      ▼
+Juno Voice contract ───── historical power query ────► Juno voting-snapshot
+      │
+      ├── immutable requests and vote receipts
+      ├── lifecycle, assignments, evidence, and attestations
+      └── independent bond accounting and typed action logs
+      │ direct RPC queries
+      ▼
+public web app (derived presentation; never authoritative)
+```
+
+The contract is the canonical record. Juno supplies historical voting power. The web app reads RPC directly and signs only bounded public actions. External evidence URIs and optional derived indexes do not become contract truth.
 
 ## 1. Product boundary
 

@@ -1,3 +1,5 @@
 /target/
 /app/node_modules/
 /app/dist/
+.env.local
+.env
