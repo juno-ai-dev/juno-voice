@@ -1,0 +1,3 @@
+[submodule "deps/dao-contracts"]
+	path = deps/dao-contracts
+	url = https://github.com/juno-ai-dev/dao-contracts.git

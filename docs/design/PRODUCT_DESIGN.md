@@ -1,152 +1,143 @@
-# Juno Voice product design
+# Juno Voice product behavior
 
-**Status:** Current application design
-**Applies to:** [`app/`](../../app/)
-**Design source:** [Juno Design System](https://github.com/juno-ai-dev/juno-design-system), commit `0dc0ae9`
+**Status:** Accepted Juno Voice v1 target; not implemented
 
-## Product posture
+**Implementation scope:** Backend behavior is in scope for [GOAL.md](../../GOAL.md); frontend work is deferred
 
-Juno Voice is a public work signal, not a social feed or a governance console. The interface should answer three questions quickly:
+**Prototype:** [`app/`](../../app/) is a pre-release `uni-7` implementation reference
 
-1. What does Juno want built?
-2. Why does a request have this signal and status?
-3. What evidence shows that the work moved or shipped?
+## Product promise
 
-The application reads canonical testnet data directly from the contract. It must identify the `uni-7` environment, avoid implying production demand, and describe prioritization as non-binding.
+Juno Voice is a public market for desired work. People describe an outcome, pool native Juno behind it, ratify delivery, and allow successful projects to graduate into recurring Hack Juno incentives.
 
-## Simplification principle
+The product should answer four questions without requiring protocol expertise:
 
-Each screen has one primary reading task. Information needed for that task is visible; protocol diagnostics and immutable provenance use progressive disclosure.
+1. What outcome is being requested and how much is committed?
+2. Who may decide whether the delivery earns the bounty?
+3. What was delivered and how was the decision reached?
+4. Which projects may receive the current Hack Juno allocation?
 
-| Layer | Visible by default | Available on demand |
-|---|---|---|
-| Roadmap | purpose, request count, submission state, bond, filters, ranked rows | contract, code ID, RPC height, refresh time, aggregate bonds |
-| Request | title, status, summary, acceptance criteria, activity, tally, evidence | author/provenance, exact snapshot facts, bond state, typed action log |
-| Transaction | human-readable action and amount | exact chain, sender, contract, message, and canonical funds |
+The chain is the authoritative ledger. Indexers may improve discovery but must not invent balances, states, eligibility, voting power, or outcomes.
 
-This is information prioritization, not information removal. Exact chain facts remain inspectable.
+## Core objects
 
-## Information architecture
+### Bounty
 
-The maintained MVP has two product screens:
+A bounty contains an immutable brief, acceptance criteria, native-denom contribution ledger, current round, delivery proposal, contributor ballot, and settlement history.
 
-- **Signal ledger** — browse, search, and filter requests; start a submission.
-- **Request detail** — understand the immutable brief, signal, lifecycle, evidence, and eligible public actions.
+A person can create a bounty; other people can add to it until delivery is proposed. Contributions are not transferable. Each round preserves the contribution amounts and voting outcome needed to audit settlement.
 
-The global header contains only the product identity, environment, and wallet connection. The wordmark returns to the ledger, so a second “Signal” navigation link is unnecessary.
+### Delivery proposal
 
-Separate Build log, Protocol, and Wallet areas are not current MVP surfaces. Their underlying information is present in request activity, network details, and contextual wallet actions. A separate area should be added only when it supports a real cross-request workflow.
+A delivery proposal identifies the submitter and content-addressed evidence. It never pays by itself.
 
-## Screen hierarchy
+- With exactly one contributor, that contributor explicitly confirms or rejects the proposal.
+- With two or more contributors, proposal submission starts a fixed 72-hour ballot.
+- Voting weight equals each address's contribution in the round.
+- Contributors may change their vote until the deadline.
+- Settlement is unavailable before the deadline.
+- After the deadline, `YES > NO` pays the proposed recipient. Every other result resets the bounty for another delivery round.
 
-### Signal ledger
+Abstaining does not become an implicit yes. There is no early majority shortcut because contributors must retain the full promised review period.
 
-1. A short product statement and explicit testnet note.
-2. Three useful summary facts: request count, submission state, and request bond.
-3. A compact request-submission entry point.
-4. The ledger with one status select and one search field.
-5. Collapsed network and RPC details.
+### Project
 
-Rows remain dense rather than becoming a card mosaic. Each row includes request ID, title, one-line summary, status/category, net signal, support, and voter count.
+A project has a stable project ID, metadata digest, payout address, admission path, status, and status history. A graduated bounty can create or link a project without a registration bond. An existing project may apply with a refundable anti-spam bond.
 
-All statuses remain filterable. A select is used because eleven equal-weight tabs create visual noise and poor small-screen behavior.
+Only active projects appear as gauge options. Suspension removes an option from future resolution without rewriting earlier epochs. Payout-address changes use an explicit delay so stakers can see where an allocation will be sent.
 
-### Request detail
+### Hack Juno epoch
 
-1. Request ID, category, title, status, and summary.
-2. Acceptance criteria.
-3. Human-readable status activity.
-4. Signal totals and evidence.
-5. Contextual wallet actions.
+An epoch has a fixed budget, fixed project option set, fixed Juno-stake snapshot height, ballot window, minimum turnout rule, and terminal allocation record. Juno stakers allocate historical power among eligible projects. A reserved `do-not-distribute` option lets them intentionally leave funds unallocated.
 
-Author, heights, contract, detail digest, snapshot mechanics, bond state, and typed action records remain accessible in disclosures. Evidence and shipment attestation stay visible because they are central to the product promise.
+## Primary journeys
 
-## Primary flows
+### Request and fund work
 
-### Browse
+1. A creator publishes a brief and acceptance criteria with an initial `ujuno` contribution.
+2. Other accounts inspect the same terms and add contributions.
+3. The ledger exposes total escrow, contributor count, and current state.
+4. Until a delivery proposal locks the round, contributors may use only the withdrawal behavior explicitly allowed by the contract.
 
-1. Scan the current ledger.
-2. Narrow by status or search.
-3. Open a request.
-4. Read acceptance criteria before protocol metadata.
-5. Inspect signal, activity, and evidence.
+The backend must make every balance transition independently auditable. Human interfaces may render Juno decimals, but signed messages and queries retain canonical integer `ujuno`.
 
-The application must not invent a cross-status rank. “All statuses” presents contract request order; status-filtered results use the contract’s status-bound ranking.
+### Propose and ratify delivery
 
-### Submit
+1. A submitter attaches a delivery/evidence digest and proposed payout address.
+2. The contract freezes the round's contributor set and contribution weights.
+3. The sole contributor confirms directly, or all contributors receive a 72-hour voting period.
+4. The result is finalized permissionlessly after the deadline.
+5. A successful result makes the payout claimable; an unsuccessful result clears the proposal and opens the next round.
 
-1. Connect Keplr or Leap from the header.
-2. Open the compact submission form.
-3. Enter title, category, summary, and required acceptance criteria.
-4. Optionally disclose the supporting-reference fields.
-5. Review the readable bond and exact transaction.
-6. Confirm in the wallet and wait for canonical confirmation.
+The Agent Operations DAO can hide spam from curated discovery or stop unsafe entry points, but it cannot cast contributor votes, shorten the window, choose the recipient, or force settlement.
 
-The form is one page. Optional digest-pinned references do not compete with the required brief.
+### Graduate a project
 
-### Review delivery
+1. A bounty pays successfully.
+2. The Agent Operations DAO checks the public graduation policy and registers or links the project.
+3. The registry gives the project a stable ID and records provenance from the bounty.
+4. The project becomes eligible for a later gauge epoch when included in that epoch's fixed option set.
 
-1. Read the immutable acceptance criteria.
-2. Follow lifecycle activity.
-3. Inspect delivery evidence and any shipment attestation.
-4. Open protocol details only when provenance or exact mechanics matter.
+Graduation is admission to future competition, not a promise of incentives.
 
-Use “attested shipment” or “delivery attestation,” never “proof of correctness.”
+### Register an existing project
 
-### Claim a refund
+1. An applicant submits project metadata and the required native bond.
+2. The Agent Operations DAO accepts, rejects, or requests a replacement application under bounded policy.
+3. Acceptance activates a stable project record; rejection or expiry follows the configured bond disposition.
+4. The registry caps active gauge options so epoch execution cannot grow without bound.
 
-The refund control appears only in request context. It is available only when the connected account is the author and the canonical bond state is refundable. The exact amount and transaction payload are shown before signing.
+### Direct Hack Juno incentives
 
-## Safety and transaction rules
+1. Juno governance funds a loss-bounded epoch tranche in the Program Vault.
+2. The epoch records its project set and historical Juno-stake snapshot.
+3. Stakers allocate snapshot voting power during the window.
+4. After the window, anyone may finalize if turnout and safety rules pass.
+5. The gauge emits only adapter-validated payments for the funded budget. Unallocated value remains in the Program Vault under tranche policy.
 
-- Reading never requires a wallet.
-- Current wallet balance is never substituted for historical snapshot power.
-- Voting controls remain safety-gated until typed historical voter power can be verified.
-- Every enabled write re-queries canonical state before constructing the message.
-- Pre-sign review names chain, sender, contract, decoded action, exact funds, and implications.
-- Pending or unknown broadcasts disable repeat confirmation and direct the user to verify on chain.
-- Privileged governor, steward, verifier, and builder controls are not exposed by the public application.
+## Required product states
 
-## Visual language
+Backends, schemas, and eventual interfaces must use explicit states rather than infer them from timestamps or balances.
 
-The visual direction is a restrained signal ledger:
+| Object | Required states |
+|---|---|
+| Bounty | open, delivery proposed, ratifying, passed/claimable, reset, paid, cancelled, stopped |
+| Project | pending, active, suspended, rejected, exited |
+| Epoch | draft, funded, voting, finalizable, executed, stopped, failed/expired |
 
-- dark maroon/void ground and a subtle 32px coordinate grid;
-- cream content and muted bone metadata;
-- coral reserved for links, primary action, focus, and positive signal;
-- Space Mono for IDs, statuses, heights, addresses, and transaction facts;
-- hairline enclosures and small radii;
-- whitespace and section order establish hierarchy before additional containers do.
+The exact contract enums may be more granular, but every state transition must be queryable and emit a stable event.
 
-Avoid dashboard mosaics, decorative charts, neon effects, large telemetry panels, and duplicated environment labels.
+## Safety and trust communication
 
-## Content rules
+- Label contributor ratification separately from Juno governance and Juno-staker gauge voting.
+- Never describe Agent Operations DAO curation as community approval.
+- Never describe graduation as guaranteed gauge funding.
+- Display snapshot height, voting window, option set, budget, turnout, and unallocated treatment for every epoch.
+- Display contribution weight and ballot state to each contributor.
+- Treat delivery evidence as an attestation and review input, not cryptographic proof of correctness.
+- Make stopped and suspended states visible, including who invoked the action and which authority can resume.
+- Do not present a broadcast transaction as complete until canonical state confirms it.
 
-- Prefer plain labels such as “Submit a request,” “Signal,” “Evidence,” and “Network details.”
-- Explain irreversible actions and funds directly.
-- Do not use hype, emoji, or language implying a community mandate.
-- Format canonical `ujunox` values as lossless six-decimal `JUNOX` amounts for people; retain the integer payload in exact transaction review.
-- Label stale and weakly consistent RPC data without presenting it as contract failure.
-- Keep testnet status explicit but do not repeat it in every section.
+## Deferred interface direction
 
-## Responsive behavior
+Frontend implementation is not part of the current backend goal. When it resumes, the smallest useful surface is:
 
-- At desktop widths, the ledger uses dense columns and request detail uses a main reading column plus a rail.
-- On tablet, request detail becomes one column and the rail becomes a two-panel row.
-- On mobile, all content is one column, filters stack, and secondary row values receive their own lines.
-- Controls have at least 44px touch targets.
-- No sticky action may cover content.
+- a bounty ledger and bounty detail/ratification flow;
+- a project registry with provenance and status;
+- a Hack Juno epoch view with snapshot facts, allocations, and results;
+- an exact transaction review for every state-changing action.
 
-## Accessibility
+The prototype layout and Juno Design System assets can inform presentation, but its request statuses, roles, and non-binding ranking semantics are not part of v1.
 
-- Meet WCAG 2.2 AA contrast and preserve visible focus.
-- Use landmarks, ordered headings, labels, buttons, and native `details`/`summary`, `select`, and search controls.
-- Do not encode state or support/opposition by color alone.
-- Request rows expose a complete accessible name.
-- Transaction and RPC states use `status` or `alert` semantics as appropriate.
-- Addresses may truncate visually but retain the full value as available text or title.
-- Respect `prefers-reduced-motion`.
+## Accessibility and data integrity
 
-## Historical prototype
+- Every state and vote result must have a non-color label.
+- Addresses and digests may truncate visually but retain full copyable values.
+- Time displays must include an exact UTC value and derive eligibility from chain time, not the browser clock.
+- Pagination and cursors must be opaque and deterministic.
+- Weakly consistent multi-query views must expose their observed height or clearly disclose the limitation.
+- Wallet-free reading remains a requirement.
 
-[`prototype/`](../../prototype/) is an unchanged visual reference with sample data. It is not the maintained information architecture, a product specification, or an application data source.
+## Prototype isolation
+
+The current [`app/`](../../app/) implements an earlier non-binding request-prioritization prototype. It is not silently reinterpreted as social-bounty or Hack Juno functionality and creates no migration requirement for v1.
