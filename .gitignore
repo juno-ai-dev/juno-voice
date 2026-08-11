@@ -1,5 +1,7 @@
 /target/
 /app/node_modules/
 /app/dist/
+__pycache__/
+*.pyc
 .env.local
 .env

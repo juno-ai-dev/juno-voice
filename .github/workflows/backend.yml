@@ -1,0 +1,251 @@
+name: Backend v1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backend.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "contracts/juno-voice-bounties/**"
+      - "contracts/hack-juno-registry-adapter/**"
+      - "deployment/**"
+      - "integration/**"
+      - "release/**"
+      - "scripts/build-release.sh"
+      - "scripts/generate-build-manifest.py"
+      - "scripts/test_generate_build_manifest.py"
+      - "scripts/validate-v1-wasm.sh"
+      - "deps/dao-contracts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backend.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "contracts/juno-voice-bounties/**"
+      - "contracts/hack-juno-registry-adapter/**"
+      - "deployment/**"
+      - "integration/**"
+      - "release/**"
+      - "scripts/build-release.sh"
+      - "scripts/generate-build-manifest.py"
+      - "scripts/test_generate_build_manifest.py"
+      - "scripts/validate-v1-wasm.sh"
+      - "deps/dao-contracts"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  juno-voice:
+    name: Juno Voice workspace
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact recursive source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install root Rust toolchain
+        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # 1.85.1
+        with:
+          toolchain: 1.85.1
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust build data
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo +1.85.1 fmt --all -- --check
+
+      - name: Run locked tests
+        run: cargo +1.85.1 test --workspace --locked
+
+      - name: Deny warnings
+        run: >-
+          cargo +1.85.1 clippy --workspace --locked --all-targets
+          --all-features -- -D warnings
+
+      - name: Regenerate owned schemas
+        run: |
+          (cd contracts/juno-voice-bounties && cargo +1.85.1 run --locked --example juno-voice-bounties-schema)
+          (cd contracts/hack-juno-registry-adapter && cargo +1.85.1 run --locked --example hack-juno-registry-adapter-schema)
+          git diff --exit-code -- \
+            contracts/juno-voice-bounties/schema \
+            contracts/hack-juno-registry-adapter/schema
+
+      - name: Build owned Wasm
+        env:
+          RUSTFLAGS: "-C link-arg=-s"
+        run: >-
+          cargo +1.85.1 build --locked --release --lib
+          --target wasm32-unknown-unknown
+          -p juno-voice-bounties
+          -p hack-juno-registry-adapter
+
+      - name: Validate owned Wasm for Juno v30 wasmvm
+        run: |
+          cargo +1.85.1 install cosmwasm-check --version 3.0.4 --locked --root "$RUNNER_TEMP/cwcheck-v3"
+          "$RUNNER_TEMP/cwcheck-v3/bin/cosmwasm-check" \
+            target/wasm32-unknown-unknown/release/juno_voice_bounties.wasm
+          "$RUNNER_TEMP/cwcheck-v3/bin/cosmwasm-check" \
+            target/wasm32-unknown-unknown/release/hack_juno_registry_adapter.wasm
+
+      - name: Validate deployment and release tooling
+        run: |
+          bash -n scripts/build-release.sh
+          bash -n scripts/validate-v1-wasm.sh
+          python3 -m json.tool deployment/config.schema.json >/dev/null
+          python3 -m json.tool release/gas-report.schema.json >/dev/null
+          python3 -m json.tool release/release-decision.schema.json >/dev/null
+          python3 -m json.tool release/evidence.schema.json >/dev/null
+          python3 -m py_compile \
+            deployment/juno_voice_deploy.py \
+            scripts/generate-build-manifest.py \
+            release/capture_release_evidence.py \
+            release/gas_report.py \
+            release/release_decision.py \
+            release/release_manifest.py
+          python3 -m unittest discover -s deployment -p 'test_*.py'
+          python3 -m unittest discover -s release -p 'test_*.py'
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+
+  dao-contracts:
+    name: Pinned dao-contracts workspace
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: deps/dao-contracts
+    steps:
+      - name: Checkout exact recursive source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install upstream Rust toolchain
+        uses: dtolnay/rust-toolchain@86b6a489cb6118ffdbe1fc3d68f3a1fe98e5b017 # 1.81.0
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust build data
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: deps/dao-contracts -> target
+          cache-on-failure: true
+
+      - name: Install native test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libclang-dev
+
+      - name: Check formatting
+        run: cargo +1.81.0 fmt --all -- --check
+
+      - name: Run full locked upstream workspace
+        run: cargo +1.81.0 test --workspace --locked
+
+      - name: Deny warnings in changed gauge packages
+        run: >-
+          cargo +1.81.0 clippy --locked --all-targets
+          -p gauge-interface
+          -p gauge-orchestrator
+          -p gauge-adapter
+          -p gauge-budget-allocator
+          -- -D warnings
+
+      - name: Regenerate deployed upstream schemas
+        run: |
+          (cd contracts/dao-dao-core && cargo +1.81.0 run --locked -p dao-dao-core@2.8.0-alpha.2 --example schema && rm -rf schema/raw)
+          (cd contracts/voting/dao-voting-juno-staked && cargo +1.81.0 run --locked -p dao-voting-juno-staked@2.8.0-alpha.2 --example schema && rm -rf schema/raw)
+          (cd contracts/gauges/gauge && cargo +1.81.0 run --locked -p gauge-orchestrator@2.8.0-alpha.2 --example gauge-orchestrator-schema && rm -rf schema/raw)
+          git diff --exit-code -- \
+            contracts/dao-dao-core/schema \
+            contracts/voting/dao-voting-juno-staked/schema \
+            contracts/gauges/gauge/schema
+
+      - name: Build and test packaged gauges
+        run: scripts/test-gauge-packages.sh
+
+      - name: Build exact upstream release Wasm
+        env:
+          RUSTFLAGS: "-C link-arg=-s -C link-arg=--allow-undefined"
+        run: >-
+          cargo +1.81.0 build --locked --release --lib
+          --target wasm32-unknown-unknown
+          -p dao-dao-core@2.8.0-alpha.2
+          -p dao-voting-juno-staked@2.8.0-alpha.2
+          -p gauge-orchestrator@2.8.0-alpha.2
+
+      - name: Validate upstream Wasm compatibility
+        run: |
+          cargo +1.81.0 install cosmwasm-check --version 1.5.11 --locked --root "$RUNNER_TEMP/cwcheck-v1"
+          for artifact in dao_dao_core dao_voting_juno_staked gauge_orchestrator; do
+            "$RUNNER_TEMP/cwcheck-v1/bin/cosmwasm-check" \
+              "target/wasm32-unknown-unknown/release/${artifact}.wasm"
+          done
+
+  integration:
+    name: Cross-generation integration tooling
+    needs: [juno-voice, dao-contracts]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact recursive source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Validate integration schemas and harness
+        run: |
+          python3 -m json.tool integration/transcript.schema.json >/dev/null
+          python3 -m py_compile integration/uni7_capture.py
+          python3 -m unittest discover -s integration -p 'test_*.py'
+
+  release-candidate:
+    name: Deterministic release candidate
+    if: github.event_name == 'workflow_dispatch'
+    needs: [juno-voice, dao-contracts, integration]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact recursive source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install native schema dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libclang-dev
+
+      - name: Install schema toolchains
+        run: |
+          rustup toolchain install 1.85.1 --profile minimal
+          rustup toolchain install 1.81.0 --profile minimal
+
+      - name: Install exact validators
+        run: |
+          cargo +1.81.0 install cosmwasm-check --version 1.5.11 --locked --root "$RUNNER_TEMP/cwcheck-v1"
+          cargo +1.85.1 install cosmwasm-check --version 3.0.4 --locked --root "$RUNNER_TEMP/cwcheck-v3"
+          cargo +1.85.1 install wasm-tools --version 1.254.0 --locked
+
+      - name: Build twice from clean recursive clones
+        env:
+          COSMWASM_CHECK_V1: ${{ runner.temp }}/cwcheck-v1/bin/cosmwasm-check
+          COSMWASM_CHECK_V3: ${{ runner.temp }}/cwcheck-v3/bin/cosmwasm-check
+        run: scripts/build-release.sh artifacts/v1
+
+      - name: Upload non-deployed release candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: juno-voice-v1-wasm
+          if-no-files-found: error
+          path: artifacts/v1

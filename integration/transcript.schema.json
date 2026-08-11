@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juno-voice.invalid/schema/uni7-scenario-transcript-v1.json",
+  "title": "Juno Voice uni-7 scenario transcript v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "scenario_id", "chain_id", "config_sha256",
+    "code_checksums", "code_ids", "addresses", "mock_components",
+    "transactions", "transaction_evidence", "queries", "balances",
+    "assertions", "passed"
+  ],
+  "properties": {
+    "schema_version": {"const": "juno-voice/uni7-scenario-transcript/v1"},
+    "scenario_id": {
+      "enum": [
+        "multi_fund_ratify_pay", "reset_renominate_pay",
+        "moderate_expire_pull_refunds", "paid_bounty_graduation",
+        "bonded_registration_approval", "snapshot_turnout_distribution",
+        "failed_turnout_no_distribution", "suspension_before_execution",
+        "guardian_stop_governor_recovery", "consecutive_epoch_isolation"
+      ]
+    },
+    "chain_id": {"const": "uni-7"},
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "code_checksums": {"$ref": "#/$defs/codeChecksums"},
+    "code_ids": {"$ref": "#/$defs/codeIds"},
+    "addresses": {"$ref": "#/$defs/addresses"},
+    "mock_components": {"type": "array", "maxItems": 0},
+    "transactions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/transactionHash"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "transaction_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/transactionEvidence"}
+    },
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/queryEvidence"}
+    },
+    "balances": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/balanceEvidence"}
+    },
+    "assertions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/linkedAssertion"}
+    },
+    "passed": {"const": true}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "transactionHash": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "junoAddress": {
+      "type": "string",
+      "pattern": "^juno1[023456789acdefghjklmnpqrstuvwxyz]{38,58}$",
+      "maxLength": 63
+    },
+    "codeChecksums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "juno_voice_bounties", "hack_juno_registry_adapter", "dao_dao_core",
+        "dao_voting_juno_staked", "gauge_orchestrator"
+      ],
+      "properties": {
+        "juno_voice_bounties": {"$ref": "#/$defs/sha256"},
+        "hack_juno_registry_adapter": {"$ref": "#/$defs/sha256"},
+        "dao_dao_core": {"$ref": "#/$defs/sha256"},
+        "dao_voting_juno_staked": {"$ref": "#/$defs/sha256"},
+        "gauge_orchestrator": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "codeIds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "juno_voice_bounties", "hack_juno_registry_adapter", "dao_dao_core",
+        "dao_voting_juno_staked", "gauge_orchestrator"
+      ],
+      "properties": {
+        "juno_voice_bounties": {"type": "integer", "minimum": 1},
+        "hack_juno_registry_adapter": {"type": "integer", "minimum": 1},
+        "dao_dao_core": {"type": "integer", "minimum": 1},
+        "dao_voting_juno_staked": {"type": "integer", "minimum": 1},
+        "gauge_orchestrator": {"type": "integer", "minimum": 1}
+      }
+    },
+    "addresses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "program_vault", "voting_module", "gauge", "bounty", "registry",
+        "agent_operations"
+      ],
+      "properties": {
+        "program_vault": {"$ref": "#/$defs/junoAddress"},
+        "voting_module": {"$ref": "#/$defs/junoAddress"},
+        "gauge": {"$ref": "#/$defs/junoAddress"},
+        "bounty": {"$ref": "#/$defs/junoAddress"},
+        "registry": {"$ref": "#/$defs/junoAddress"},
+        "agent_operations": {"$ref": "#/$defs/junoAddress"}
+      }
+    },
+    "eventAttribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "value": {"type": "string"},
+        "index": {"type": "boolean"}
+      }
+    },
+    "transactionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "attributes"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "attributes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/eventAttribute"}
+        }
+      }
+    },
+    "transactionMessage": {
+      "type": "object",
+      "minProperties": 1,
+      "required": ["@type"],
+      "properties": {
+        "@type": {"type": "string", "minLength": 1}
+      }
+    },
+    "transactionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hash", "height", "code", "gas_wanted", "gas_used", "response_sha256",
+        "response", "messages", "events"
+      ],
+      "properties": {
+        "hash": {"$ref": "#/$defs/transactionHash"},
+        "height": {"type": "integer", "minimum": 1},
+        "code": {"type": "integer", "minimum": 0},
+        "gas_wanted": {"type": "integer", "minimum": 1},
+        "gas_used": {"type": "integer", "minimum": 1},
+        "response_sha256": {"$ref": "#/$defs/sha256"},
+        "response": {"type": "object", "minProperties": 1},
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/transactionMessage"}
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/transactionEvent"}
+        }
+      }
+    },
+    "queryEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["height", "contract", "query", "response", "response_sha256"],
+      "properties": {
+        "height": {"type": "integer", "minimum": 1},
+        "contract": {"$ref": "#/$defs/junoAddress"},
+        "query": {"type": "object", "minProperties": 1},
+        "response": true,
+        "response_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "balanceEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "height", "address", "denom", "amount"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "address": {"$ref": "#/$defs/junoAddress"},
+        "denom": {"const": "ujuno"},
+        "amount": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "maxLength": 39}
+      }
+    },
+    "linkedAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "predicate", "source", "expected", "actual", "passed"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "predicate": {
+          "enum": [
+            "query_response_equals", "balance_delta_equals",
+            "transaction_event_equals", "transaction_message_equals",
+            "matching_events_equal", "transaction_code_equals"
+          ]
+        },
+        "source": {"type": "object"},
+        "expected": true,
+        "actual": true,
+        "passed": {"const": true}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"predicate": {"const": "query_response_equals"}}},
+          "then": {"properties": {"source": {"$ref": "#/$defs/querySource"}}}
+        },
+        {
+          "if": {"properties": {"predicate": {"const": "balance_delta_equals"}}},
+          "then": {"properties": {"source": {"$ref": "#/$defs/balanceSource"}}}
+        },
+        {
+          "if": {"properties": {"predicate": {"const": "transaction_event_equals"}}},
+          "then": {"properties": {"source": {"$ref": "#/$defs/eventSource"}}}
+        },
+        {
+          "if": {"properties": {"predicate": {"const": "transaction_message_equals"}}},
+          "then": {"properties": {"source": {"$ref": "#/$defs/messageSource"}}}
+        },
+        {
+          "if": {"properties": {"predicate": {"const": "matching_events_equal"}}},
+          "then": {"properties": {"source": {"$ref": "#/$defs/matchingEventsSource"}}}
+        },
+        {
+          "if": {"properties": {"predicate": {"const": "transaction_code_equals"}}},
+          "then": {"properties": {"source": {"$ref": "#/$defs/transactionSource"}}}
+        }
+      ]
+    },
+    "querySource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query_index"],
+      "properties": {"query_index": {"type": "integer", "minimum": 0}}
+    },
+    "balanceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before_index", "after_index"],
+      "properties": {
+        "before_index": {"type": "integer", "minimum": 0},
+        "after_index": {"type": "integer", "minimum": 0}
+      }
+    },
+    "transactionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction_hash"],
+      "properties": {"transaction_hash": {"$ref": "#/$defs/transactionHash"}}
+    },
+    "eventSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction_hash", "event_index"],
+      "properties": {
+        "transaction_hash": {"$ref": "#/$defs/transactionHash"},
+        "event_index": {"type": "integer", "minimum": 0}
+      }
+    },
+    "messageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction_hash", "message_index"],
+      "properties": {
+        "transaction_hash": {"$ref": "#/$defs/transactionHash"},
+        "message_index": {"type": "integer", "minimum": 0}
+      }
+    },
+    "matchingEventsSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction_hashes", "event_type", "attributes"],
+      "properties": {
+        "transaction_hashes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/transactionHash"}
+        },
+        "event_type": {"type": "string", "minLength": 1},
+        "attributes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    }
+  }
+}

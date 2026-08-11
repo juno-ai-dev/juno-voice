@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juno-voice.invalid/schema/release-evidence-v1.json",
+  "title": "Juno Voice v1 release evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "build_manifest", "deployment_verification",
+    "upstream_review", "security_review", "public_testnet", "gas", "canary",
+    "runbooks", "operations_rehearsal", "release_signoff"
+  ],
+  "properties": {
+    "schema_version": {"const": "juno-voice/release-evidence/v1"},
+    "build_manifest": {"$ref": "#/$defs/file"},
+    "deployment_verification": {"$ref": "#/$defs/file"},
+    "upstream_review": {"$ref": "#/$defs/upstreamReview"},
+    "security_review": {"$ref": "#/$defs/securityReview"},
+    "public_testnet": {"$ref": "#/$defs/publicTestnet"},
+    "gas": {"$ref": "#/$defs/gas"},
+    "canary": {"$ref": "#/$defs/canary"},
+    "runbooks": {"$ref": "#/$defs/runbooks"},
+    "operations_rehearsal": {"$ref": "#/$defs/operationsRehearsal"},
+    "release_signoff": {"$ref": "#/$defs/releaseSignoff"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "hex40": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "transactionHash": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "uint": {
+      "oneOf": [
+        {"type": "integer", "minimum": 0, "maximum": 340282366920938463463374607431768211455},
+        {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "maxLength": 39}
+      ]
+    },
+    "positiveUint": {
+      "oneOf": [
+        {"type": "integer", "minimum": 1, "maximum": 340282366920938463463374607431768211455},
+        {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 39}
+      ]
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "pattern": "^[^/]"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "codeChecksums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "juno_voice_bounties", "hack_juno_registry_adapter", "dao_dao_core",
+        "dao_voting_juno_staked", "gauge_orchestrator"
+      ],
+      "properties": {
+        "juno_voice_bounties": {"$ref": "#/$defs/sha256"},
+        "hack_juno_registry_adapter": {"$ref": "#/$defs/sha256"},
+        "dao_dao_core": {"$ref": "#/$defs/sha256"},
+        "dao_voting_juno_staked": {"$ref": "#/$defs/sha256"},
+        "gauge_orchestrator": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "upstreamReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "repository", "commit", "review_url", "accepted_by", "attestation"],
+      "properties": {
+        "status": {"const": "accepted"},
+        "repository": {"type": "string", "pattern": "^https://", "minLength": 9},
+        "commit": {"$ref": "#/$defs/hex40"},
+        "review_url": {"type": "string", "pattern": "^https://", "minLength": 9},
+        "accepted_by": {"type": "string", "minLength": 1},
+        "attestation": {"$ref": "#/$defs/file"}
+      }
+    },
+    "lowerFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "disposition", "rationale"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "severity": {"enum": ["medium", "low", "informational"]},
+        "disposition": {"enum": ["resolved", "accepted"]},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "securityReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status", "reviewer", "scope_parent_commit", "scope_dao_contracts_commit",
+        "report", "attestation", "open_critical", "open_high", "lower_findings"
+      ],
+      "properties": {
+        "status": {"const": "passed"},
+        "reviewer": {"type": "string", "minLength": 1},
+        "scope_parent_commit": {"$ref": "#/$defs/hex40"},
+        "scope_dao_contracts_commit": {"$ref": "#/$defs/hex40"},
+        "report": {"$ref": "#/$defs/file"},
+        "attestation": {"$ref": "#/$defs/file"},
+        "open_critical": {"const": 0},
+        "open_high": {"const": 0},
+        "lower_findings": {"type": "array", "items": {"$ref": "#/$defs/lowerFinding"}}
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "transactions", "assertion_count", "evidence"],
+      "properties": {
+        "id": {
+          "enum": [
+            "multi_fund_ratify_pay", "reset_renominate_pay",
+            "moderate_expire_pull_refunds", "paid_bounty_graduation",
+            "bonded_registration_approval", "snapshot_turnout_distribution",
+            "failed_turnout_no_distribution", "suspension_before_execution",
+            "guardian_stop_governor_recovery", "consecutive_epoch_isolation"
+          ]
+        },
+        "status": {"const": "passed"},
+        "transactions": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/transactionHash"}
+        },
+        "assertion_count": {"$ref": "#/$defs/positiveUint"},
+        "evidence": {"$ref": "#/$defs/file"}
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {"$ref": "#/$defs/scenario"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "multi_fund_ratify_pay"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "reset_renominate_pay"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "moderate_expire_pull_refunds"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "paid_bounty_graduation"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "bonded_registration_approval"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "snapshot_turnout_distribution"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "failed_turnout_no_distribution"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "suspension_before_execution"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "guardian_stop_governor_recovery"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "consecutive_epoch_isolation"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "stakeChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hash", "height", "kind", "transaction_evidence"],
+      "properties": {
+        "hash": {"$ref": "#/$defs/transactionHash"},
+        "height": {"$ref": "#/$defs/positiveUint"},
+        "kind": {"enum": ["delegate", "undelegate", "redelegate"]},
+        "transaction_evidence": {"$ref": "#/$defs/capturedTransaction"}
+      }
+    },
+    "historicalPowerQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "observed_at_height", "contract", "query", "response", "response_sha256"],
+      "properties": {
+        "name": {
+          "enum": [
+            "first_voter_before_change", "first_total_before_change",
+            "first_voter_after_change", "first_total_after_change",
+            "second_voter_after_change", "second_total_after_change"
+          ]
+        },
+        "observed_at_height": {"$ref": "#/$defs/positiveUint"},
+        "contract": {"type": "string", "minLength": 1},
+        "query": {"type": "object", "minProperties": 1},
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["power", "height"],
+          "properties": {
+            "power": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "maxLength": 39},
+            "height": {"$ref": "#/$defs/positiveUint"}
+          }
+        },
+        "response_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "historicalPowerQueries": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/historicalPowerQuery"},
+      "allOf": [
+        {"contains": {"properties": {"name": {"const": "first_voter_before_change"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "first_total_before_change"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "first_voter_after_change"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "first_total_after_change"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "second_voter_after_change"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"name": {"const": "second_total_after_change"}}, "required": ["name"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "module_activation_height", "export_boundary", "observed_retention_blocks",
+        "required_retention_blocks", "liquid_staking_allowlist", "power_basis",
+        "stake_change_transactions", "voter_address", "first_epoch_height",
+        "second_epoch_height", "historical_power_queries", "evidence"
+      ],
+      "properties": {
+        "module_activation_height": {"$ref": "#/$defs/positiveUint"},
+        "export_boundary": {"const": "EndBlock"},
+        "observed_retention_blocks": {"$ref": "#/$defs/uint"},
+        "required_retention_blocks": {"$ref": "#/$defs/positiveUint"},
+        "liquid_staking_allowlist": {"type": "array", "maxItems": 0},
+        "power_basis": {"const": "native bonded Juno stake at the exported snapshot height"},
+        "stake_change_transactions": {
+          "type": "array", "minItems": 2, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/stakeChange"}
+        },
+        "voter_address": {"type": "string", "minLength": 1},
+        "first_epoch_height": {"$ref": "#/$defs/positiveUint"},
+        "second_epoch_height": {"$ref": "#/$defs/positiveUint"},
+        "historical_power_queries": {"$ref": "#/$defs/historicalPowerQueries"},
+        "evidence": {"$ref": "#/$defs/file"}
+      }
+    },
+    "publicTestnet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chain_id", "config_sha256", "code_checksums", "scenarios", "snapshot", "evidence_report"],
+      "properties": {
+        "chain_id": {"const": "uni-7"},
+        "config_sha256": {"$ref": "#/$defs/sha256"},
+        "code_checksums": {"$ref": "#/$defs/codeChecksums"},
+        "scenarios": {"$ref": "#/$defs/scenarios"},
+        "snapshot": {"$ref": "#/$defs/snapshot"},
+        "evidence_report": {"$ref": "#/$defs/file"}
+      }
+    },
+    "gasMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case", "configured_max", "measurement_kind", "height", "contract",
+        "operation", "request", "gas_limit", "gas_used", "response_bytes",
+        "response", "response_sha256", "transaction"
+      ],
+      "properties": {
+        "case": {
+          "enum": [
+            "bounty_max_contributors", "registry_max_projects", "gauge_max_options",
+            "adapter_max_messages", "query_max_pagination", "bounty_max_history",
+            "gauge_max_cleanup_batch"
+          ]
+        },
+        "configured_max": {"$ref": "#/$defs/positiveUint"},
+        "measurement_kind": {"enum": ["smart_query", "execute"]},
+        "height": {"$ref": "#/$defs/positiveUint"},
+        "contract": {"type": "string", "minLength": 1},
+        "operation": {
+          "enum": [
+            "contributions", "projects", "epoch_allocations",
+            "sample_gauge_msgs", "bounties", "history", "cleanup_epoch"
+          ]
+        },
+        "request": {"type": "object", "minProperties": 1},
+        "gas_limit": {"$ref": "#/$defs/positiveUint"},
+        "gas_used": {"$ref": "#/$defs/positiveUint"},
+        "response_bytes": {"$ref": "#/$defs/positiveUint"},
+        "response": {"type": "object", "minProperties": 1},
+        "response_sha256": {"$ref": "#/$defs/sha256"},
+        "transaction": {"$ref": "#/$defs/transactionHash"}
+      }
+    },
+    "gasMeasurements": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/gasMeasurement"},
+      "allOf": [
+        {"contains": {"properties": {"case": {"const": "bounty_max_contributors"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "registry_max_projects"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "gauge_max_options"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "adapter_max_messages"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "query_max_pagination"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "bounty_max_history"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "gauge_max_cleanup_batch"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "gas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["safety_margin_bps", "measurements", "report"],
+      "properties": {
+        "safety_margin_bps": {"type": "integer", "minimum": 1000, "maximum": 10000},
+        "measurements": {"$ref": "#/$defs/gasMeasurements"},
+        "report": {"$ref": "#/$defs/file"}
+      }
+    },
+    "eventAttribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "value": {"type": "string"},
+        "index": {"type": "boolean"}
+      }
+    },
+    "transactionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "attributes"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "attributes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/eventAttribute"}}
+      }
+    },
+    "transactionMessage": {
+      "type": "object",
+      "required": ["@type"],
+      "properties": {"@type": {"type": "string", "minLength": 1}}
+    },
+    "capturedTransaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hash", "height", "code", "gas_wanted", "gas_used", "response_sha256",
+        "response", "messages", "events"
+      ],
+      "properties": {
+        "hash": {"$ref": "#/$defs/transactionHash"},
+        "height": {"$ref": "#/$defs/positiveUint"},
+        "code": {"$ref": "#/$defs/uint"},
+        "gas_wanted": {"$ref": "#/$defs/positiveUint"},
+        "gas_used": {"$ref": "#/$defs/positiveUint"},
+        "response_sha256": {"$ref": "#/$defs/sha256"},
+        "response": {"type": "object", "minProperties": 1},
+        "messages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/transactionMessage"}},
+        "events": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/transactionEvent"}}
+      }
+    },
+    "canaryEpochQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_at_height", "contract", "query", "response", "response_sha256"],
+      "properties": {
+        "observed_at_height": {"$ref": "#/$defs/positiveUint"},
+        "contract": {"type": "string", "minLength": 1},
+        "query": {"type": "object", "minProperties": 1},
+        "response": {"type": "object", "minProperties": 1},
+        "response_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "canaryEpoch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "epoch", "snapshot_height", "outcome", "distributed_value", "transaction",
+        "transaction_evidence", "epoch_query"
+      ],
+      "properties": {
+        "epoch": {"$ref": "#/$defs/positiveUint"},
+        "snapshot_height": {"$ref": "#/$defs/positiveUint"},
+        "outcome": {"const": "distributed"},
+        "distributed_value": {"$ref": "#/$defs/positiveUint"},
+        "transaction": {"$ref": "#/$defs/transactionHash"},
+        "transaction_evidence": {"$ref": "#/$defs/capturedTransaction"},
+        "epoch_query": {"$ref": "#/$defs/canaryEpochQuery"}
+      }
+    },
+    "canary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "epochs", "maximum_total_value", "report", "governance_decision"],
+      "properties": {
+        "status": {"const": "passed"},
+        "epochs": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/canaryEpoch"}},
+        "maximum_total_value": {"$ref": "#/$defs/positiveUint"},
+        "report": {"$ref": "#/$defs/file"},
+        "governance_decision": {"$ref": "#/$defs/file"}
+      }
+    },
+    "runbooks": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/file"},
+      "allOf": [
+        {"contains": {"properties": {"path": {"const": "deployment/runbooks/DEPLOYMENT.md"}}, "required": ["path"]}},
+        {"contains": {"properties": {"path": {"const": "deployment/runbooks/MONITORING.md"}}, "required": ["path"]}},
+        {"contains": {"properties": {"path": {"const": "deployment/runbooks/PAUSE_AND_RECOVERY.md"}}, "required": ["path"]}},
+        {"contains": {"properties": {"path": {"const": "deployment/runbooks/REFUNDS_AND_EXPIRY.md"}}, "required": ["path"]}},
+        {"contains": {"properties": {"path": {"const": "deployment/runbooks/SUBMODULE_UPDATE.md"}}, "required": ["path"]}},
+        {"contains": {"properties": {"path": {"const": "deployment/runbooks/RELEASE.md"}}, "required": ["path"]}}
+      ]
+    },
+    "operationalRehearsalCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case", "status", "transactions", "transaction_evidence",
+        "assertion_count", "evidence"
+      ],
+      "properties": {
+        "case": {
+          "enum": [
+            "pause_new_activity", "failed_epoch", "adapter_failure",
+            "governor_recovery", "refund_and_expiry", "unused_funds_recovery"
+          ]
+        },
+        "status": {"const": "passed"},
+        "transactions": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/transactionHash"}
+        },
+        "transaction_evidence": {
+          "type": "array", "minItems": 1,
+          "items": {"$ref": "#/$defs/capturedTransaction"}
+        },
+        "assertion_count": {"$ref": "#/$defs/positiveUint"},
+        "evidence": {"$ref": "#/$defs/file"}
+      }
+    },
+    "operationalRehearsalCases": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/operationalRehearsalCase"},
+      "allOf": [
+        {"contains": {"properties": {"case": {"const": "pause_new_activity"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "failed_epoch"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "adapter_failure"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "governor_recovery"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "refund_and_expiry"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"case": {"const": "unused_funds_recovery"}}, "required": ["case"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "operationsRehearsal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "chain_id", "config_sha256", "performed_by", "reviewed_by", "cases", "report"],
+      "properties": {
+        "status": {"const": "passed"},
+        "chain_id": {"const": "uni-7"},
+        "config_sha256": {"$ref": "#/$defs/sha256"},
+        "performed_by": {"type": "string", "minLength": 1},
+        "reviewed_by": {"type": "string", "minLength": 1},
+        "cases": {"$ref": "#/$defs/operationalRehearsalCases"},
+        "report": {"$ref": "#/$defs/file"}
+      }
+    },
+    "releaseSignoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "maintainers", "security_reviewer", "operations_reviewer", "decision"],
+      "properties": {
+        "status": {"const": "approved_testnet_candidate"},
+        "maintainers": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "security_reviewer": {"type": "string", "minLength": 1},
+        "operations_reviewer": {"type": "string", "minLength": 1},
+        "decision": {"$ref": "#/$defs/file"}
+      }
+    }
+  }
+}
