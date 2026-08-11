@@ -35,9 +35,10 @@ const MAX_HARD_LIFETIME_SECONDS: u64 = 366 * 24 * 60 * 60;
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    nonpayable(&info)?;
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let config = Config {
@@ -232,6 +233,9 @@ fn execute_create(
             max_bounty_total: config.max_bounty_total,
             max_contributors: config.max_contributors,
             max_rounds: config.max_rounds,
+            max_evidence_uri_bytes: config.limits.max_uri_bytes,
+            max_rationale_bytes: config.limits.max_rationale_bytes,
+            max_reason_bytes: config.limits.max_reason_bytes,
         },
         project_candidate,
         status: BountyStatus::Open,
@@ -388,16 +392,28 @@ fn execute_nominate(
     if bounty.next_round > bounty.terms.max_rounds {
         return Err(ContractError::RoundLimit);
     }
-    validate_required(&evidence_uri, "evidence_uri", config.limits.max_uri_bytes)?;
+    validate_required(
+        &evidence_uri,
+        "evidence_uri",
+        bounty.terms.max_evidence_uri_bytes,
+    )?;
     validate_digest(&evidence_digest)?;
-    validate_required(&rationale, "rationale", config.limits.max_rationale_bytes)?;
+    validate_required(&rationale, "rationale", bounty.terms.max_rationale_bytes)?;
     let recipient = deps.api.addr_validate(&recipient)?;
 
     let number = bounty.next_round;
     let (rule, closes_at, status) = if bounty.contributor_count == 1 {
+        let confirmation_deadline = env
+            .block
+            .time
+            .plus_seconds(bounty.terms.ratification_seconds);
         (
             RoundRule::SoleConfirmation,
-            None,
+            Some(if confirmation_deadline < bounty.expires_at {
+                confirmation_deadline
+            } else {
+                bounty.expires_at
+            }),
             BountyStatus::SingleConfirmation,
         )
     } else {
@@ -489,6 +505,10 @@ fn execute_confirm_sole(
     ensure_contributor(deps.storage, bounty_id, number, &info.sender)?;
 
     let mut round = ROUNDS.load(deps.storage, (bounty_id, number))?;
+    let closes_at = round.closes_at.ok_or(ContractError::InvalidState)?;
+    if env.block.time >= closes_at || env.block.time >= bounty.expires_at {
+        return Err(ContractError::VotingClosed);
+    }
     round.outcome = RoundOutcome::Paid;
     round.finalized_at = Some(env.block.time);
     let recipient = round.nomination.recipient.clone();
@@ -533,15 +553,18 @@ fn execute_decline_sole(
     reason: String,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    validate_required(&reason, "reason", config.limits.max_reason_bytes)?;
     let mut bounty = load_bounty(deps.storage, bounty_id)?;
+    validate_required(&reason, "reason", bounty.terms.max_reason_bytes)?;
     ensure_round(&bounty, number)?;
     if bounty.status != BountyStatus::SingleConfirmation || bounty.contributor_count != 1 {
         return Err(ContractError::InvalidState);
     }
     ensure_contributor(deps.storage, bounty_id, number, &info.sender)?;
     let mut round = ROUNDS.load(deps.storage, (bounty_id, number))?;
+    let closes_at = round.closes_at.ok_or(ContractError::InvalidState)?;
+    if env.block.time >= closes_at || env.block.time >= bounty.expires_at {
+        return Err(ContractError::VotingClosed);
+    }
     round.outcome = RoundOutcome::Declined;
     round.finalized_at = Some(env.block.time);
     reset_or_refund_state(&mut bounty, env.block.time)?;
@@ -578,11 +601,10 @@ fn execute_vote(
     rationale: Option<String>,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    if let Some(value) = &rationale {
-        validate_optional(value, "rationale", config.limits.max_rationale_bytes)?;
-    }
     let mut bounty = load_bounty(deps.storage, bounty_id)?;
+    if let Some(value) = &rationale {
+        validate_optional(value, "rationale", bounty.terms.max_rationale_bytes)?;
+    }
     ensure_round(&bounty, number)?;
     if bounty.status != BountyStatus::Ratifying {
         return Err(ContractError::InvalidState);
@@ -678,7 +700,8 @@ fn execute_finalize(
     let config = CONFIG.load(deps.storage)?;
     let mut bounty = load_bounty(deps.storage, bounty_id)?;
     ensure_round(&bounty, number)?;
-    if bounty.status != BountyStatus::Ratifying {
+    if bounty.status != BountyStatus::Ratifying && bounty.status != BountyStatus::SingleConfirmation
+    {
         return Err(ContractError::InvalidState);
     }
     let mut round = ROUNDS.load(deps.storage, (bounty_id, number))?;
@@ -687,7 +710,7 @@ fn execute_finalize(
         return Err(ContractError::RatificationOpen);
     }
     let participating = round.yes_weight.checked_add(round.no_weight)?;
-    let outcome = if participating.is_zero() {
+    let outcome = if round.rule == RoundRule::SoleConfirmation || participating.is_zero() {
         RoundOutcome::NoVotes
     } else if round.yes_weight == round.no_weight {
         RoundOutcome::Tie
@@ -716,6 +739,16 @@ fn execute_finalize(
                 config.native_denom.clone(),
             )],
         });
+    } else if round.rule == RoundRule::SoleConfirmation {
+        let reason = if env.block.time >= bounty.expires_at {
+            RefundReason::Expired
+        } else {
+            RefundReason::SoleConfirmationTimeout
+        };
+        enter_refunding(&mut bounty, reason);
+        let mut accounting = ACCOUNTING.load(deps.storage)?;
+        apply_failed_round_accounting(&bounty, &mut accounting)?;
+        ACCOUNTING.save(deps.storage, &accounting)?;
     } else {
         reset_or_refund_state(&mut bounty, env.block.time)?;
         let mut accounting = ACCOUNTING.load(deps.storage)?;
@@ -755,9 +788,8 @@ fn execute_cancel(
     reason: String,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    validate_required(&reason, "reason", config.limits.max_reason_bytes)?;
     let mut bounty = load_bounty(deps.storage, bounty_id)?;
+    validate_required(&reason, "reason", bounty.terms.max_reason_bytes)?;
     if info.sender != bounty.creator {
         return Err(ContractError::Unauthorized);
     }
@@ -894,8 +926,8 @@ fn execute_moderate(
     if info.sender != config.agent {
         return Err(ContractError::Unauthorized);
     }
-    validate_required(&reason, "reason", config.limits.max_reason_bytes)?;
     let mut bounty = load_bounty(deps.storage, bounty_id)?;
+    validate_required(&reason, "reason", bounty.terms.max_reason_bytes)?;
     if bounty.status != BountyStatus::Open {
         return Err(ContractError::InvalidState);
     }

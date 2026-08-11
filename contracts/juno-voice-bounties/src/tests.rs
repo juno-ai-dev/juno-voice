@@ -273,6 +273,16 @@ fn assert_accounting_identity(deps: &TestDeps) {
 fn instantiate_and_creation_enforce_denom_metadata_lifetime_and_funds() {
     let mut deps = mock_dependencies();
     let env = mock_env();
+    let funded = instantiate(
+        deps.as_mut(),
+        env.clone(),
+        message_info(&addr("deployer"), &[coin(1, "ujuno")]),
+        instantiate_msg(),
+    )
+    .unwrap_err();
+    assert_eq!(funded, ContractError::UnexpectedFunds);
+
+    let mut deps = mock_dependencies();
     let mut msg = instantiate_msg();
     msg.native_denom = "uatom".into();
     let err = instantiate(
@@ -360,7 +370,7 @@ fn contributions_aggregate_count_exactly_and_nomination_freezes_terms() {
 }
 
 #[test]
-fn sole_confirmation_is_explicit_and_decline_after_expiry_refunds() {
+fn sole_confirmation_is_explicit_and_expiry_finalizes_refunds() {
     let (mut deps, env) = init();
     let id = create(&mut deps, &env, CREATOR, 100, 1_000);
     nominate(&mut deps, &env, id);
@@ -411,7 +421,7 @@ fn sole_confirmation_is_explicit_and_decline_after_expiry_refunds() {
     nominate(&mut deps, &env, id2);
     let mut after_expiry = env.clone();
     after_expiry.block.time = env.block.time.plus_seconds(100);
-    let response = execute(
+    let late_decline = execute(
         deps.as_mut(),
         after_expiry.clone(),
         message_info(&addr(CREATOR), &[]),
@@ -421,16 +431,125 @@ fn sole_confirmation_is_explicit_and_decline_after_expiry_refunds() {
             reason: "Delivery is incomplete".into(),
         },
     )
+    .unwrap_err();
+    assert_eq!(late_decline, ContractError::VotingClosed);
+    let response = execute(
+        deps.as_mut(),
+        after_expiry,
+        message_info(&addr(ALICE), &[]),
+        ExecuteMsg::FinalizePayout {
+            bounty_id: id2,
+            round: 1,
+        },
+    )
     .unwrap();
     assert_wire_event(
         &response,
-        "juno_voice_bounties.sole_payout_declined",
-        &["bounty_id", "round", "contributor", "reason", "next_status"],
+        "juno_voice_bounties.ratification_finalized",
+        &[
+            "bounty_id",
+            "round",
+            "outcome",
+            "yes_weight",
+            "no_weight",
+            "participating_weight",
+            "next_status",
+        ],
     );
     let bounty = BOUNTIES.load(&deps.storage, id2).unwrap();
     assert_eq!(bounty.status, BountyStatus::Refunding);
     assert_eq!(bounty.refund_reason, Some(RefundReason::Expired));
     assert_accounting_identity(&deps);
+}
+
+#[test]
+fn sole_confirmation_has_a_deadline_and_anyone_can_finalize_to_refunds() {
+    let (mut deps, env) = init();
+    let id = create(&mut deps, &env, CREATOR, 100, 500_000);
+    nominate(&mut deps, &env, id);
+
+    let round = ROUNDS.load(&deps.storage, (id, 1)).unwrap();
+    assert_eq!(
+        round.closes_at,
+        Some(env.block.time.plus_seconds(RATIFICATION_SECONDS))
+    );
+
+    let mut one_ns_early = env.clone();
+    one_ns_early.block.time = Timestamp::from_nanos(round.closes_at.unwrap().nanos() - 1);
+    let early = execute(
+        deps.as_mut(),
+        one_ns_early,
+        message_info(&addr(BOB), &[]),
+        ExecuteMsg::FinalizePayout {
+            bounty_id: id,
+            round: 1,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(early, ContractError::RatificationOpen);
+
+    let mut at_deadline = env.clone();
+    at_deadline.block.time = round.closes_at.unwrap();
+    let late_decline = execute(
+        deps.as_mut(),
+        at_deadline.clone(),
+        message_info(&addr(CREATOR), &[]),
+        ExecuteMsg::DeclineSolePayout {
+            bounty_id: id,
+            round: 1,
+            reason: "Too late to decline".into(),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(late_decline, ContractError::VotingClosed);
+
+    let response = execute(
+        deps.as_mut(),
+        at_deadline.clone(),
+        message_info(&addr(BOB), &[]),
+        ExecuteMsg::FinalizePayout {
+            bounty_id: id,
+            round: 1,
+        },
+    )
+    .unwrap();
+    assert!(response.messages.is_empty());
+    assert_wire_event(
+        &response,
+        "juno_voice_bounties.ratification_finalized",
+        &[
+            "bounty_id",
+            "round",
+            "outcome",
+            "yes_weight",
+            "no_weight",
+            "participating_weight",
+            "next_status",
+        ],
+    );
+    let bounty = BOUNTIES.load(&deps.storage, id).unwrap();
+    assert_eq!(bounty.status, BountyStatus::Refunding);
+    assert_eq!(
+        bounty.refund_reason,
+        Some(RefundReason::SoleConfirmationTimeout)
+    );
+    assert_eq!(
+        ROUNDS.load(&deps.storage, (id, 1)).unwrap().outcome,
+        RoundOutcome::NoVotes
+    );
+    assert_accounting_identity(&deps);
+
+    let late_confirmation = execute(
+        deps.as_mut(),
+        at_deadline,
+        message_info(&addr(CREATOR), &[]),
+        ExecuteMsg::ConfirmSolePayout {
+            bounty_id: id,
+            round: 1,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(late_confirmation, ContractError::WrongRound);
 }
 
 #[test]
@@ -948,6 +1067,9 @@ fn future_config_changes_do_not_mutate_live_bounty_limits_or_duration() {
     assert_eq!(bounty.terms.max_contributors, 5);
     assert_eq!(bounty.terms.max_rounds, 5);
     assert_eq!(bounty.terms.ratification_seconds, RATIFICATION_SECONDS);
+    assert_eq!(bounty.terms.max_evidence_uri_bytes, 256);
+    assert_eq!(bounty.terms.max_rationale_bytes, 256);
+    assert_eq!(bounty.terms.max_reason_bytes, 128);
     contribute(&mut deps, &env, id, ALICE, 50);
     contribute(&mut deps, &env, id, BOB, 50);
     nominate(&mut deps, &env, id);
@@ -955,6 +1077,48 @@ fn future_config_changes_do_not_mutate_live_bounty_limits_or_duration() {
         ROUNDS.load(&deps.storage, (id, 1)).unwrap().closes_at,
         Some(env.block.time.plus_seconds(RATIFICATION_SECONDS))
     );
+}
+
+#[test]
+fn funded_bounty_metadata_limits_ignore_later_governor_increases() {
+    let (mut deps, env) = init();
+    let id = create(&mut deps, &env, CREATOR, 100, 500_000);
+    let mut expanded = limits();
+    expanded.max_uri_bytes = 512;
+    expanded.max_rationale_bytes = 512;
+    expanded.max_reason_bytes = 512;
+    execute(
+        deps.as_mut(),
+        env.clone(),
+        message_info(&addr(GOVERNOR), &[]),
+        ExecuteMsg::UpdateConfig {
+            update: ConfigUpdate {
+                min_contribution: None,
+                max_bounty_total: None,
+                min_lifetime_seconds: None,
+                max_lifetime_seconds: None,
+                max_contributors: None,
+                max_rounds: None,
+                limits: Some(expanded),
+            },
+        },
+    )
+    .unwrap();
+
+    let oversized = execute(
+        deps.as_mut(),
+        env,
+        message_info(&addr(CREATOR), &[]),
+        ExecuteMsg::NominatePayout {
+            bounty_id: id,
+            recipient: address(RECIPIENT),
+            evidence_uri: "u".repeat(257),
+            evidence_digest: digest('b'),
+            rationale: "The acceptance criteria are met".into(),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(oversized, ContractError::InvalidMetadata(_)));
 }
 
 #[test]

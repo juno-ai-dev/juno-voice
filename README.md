@@ -6,7 +6,7 @@ Juno Voice v1 combines social bounties with stake-weighted Hack Juno incentives:
 
 > `request → fund → deliver → ratify → graduate → incentivize`
 
-The target system lets anyone publish a bounded bounty and lets other accounts add to it. A sole contributor confirms a payout directly. When a bounty has multiple contributors, the proposed delivery enters a fixed 72-hour on-chain ratification period in which each contributor's vote is weighted by the amount they contributed. A strict majority decides: `YES > NO` pays, while `NO > YES`, a tie, or no votes resets the bounty without paying the submitter.
+The target system lets anyone publish a bounded bounty and lets other accounts add to it. A sole contributor confirms a payout directly within a bounded confirmation window; after that deadline or bounty expiry, anyone can finalize the nomination into refunds. When a bounty has multiple contributors, the proposed delivery enters a fixed 72-hour on-chain ratification period in which each contributor's vote is weighted by the amount they contributed. A strict majority decides: `YES > NO` pays atomically, while `NO > YES`, a tie, or no votes resets the bounty without paying the submitter.
 
 Graduated projects and registered existing projects can participate in recurring Hack Juno gauge epochs. Juno stakers direct the epoch allocation using historical voting power from `x/voting-snapshot` through `dao-voting-juno-staked`.
 
@@ -83,11 +83,15 @@ git submodule update --init --recursive
 app/                    pre-release interface prototype
 contracts/              Juno Voice-owned CosmWasm contracts
 deps/dao-contracts/     exact upstream DAO DAO source pin (submodule)
-schema/                 checked-in Juno Voice contract schemas
+schema/                 canonical v1 prototype-contract schema set
 docs/architecture/      target architecture and decision records
 docs/design/            governance report and product behavior
 artifacts/               reproducible Juno Voice Wasm artifacts
 prototype/              earlier interaction prototype
+deployment/             validated deployment planning and runbooks
+integration/            exact-artifact scenario capture and validation
+release/                release evidence, readiness, and decision gates
+contracts/*/schema/     canonical v1 owned-contract schemas
 ```
 
 ## Prototype application

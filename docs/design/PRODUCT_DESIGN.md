@@ -1,8 +1,9 @@
 # Juno Voice product behavior
 
-**Status:** Accepted Juno Voice v1 target; not implemented
+**Status:** Accepted Juno Voice v1 behavior; implemented locally but not
+release-approved or deployed
 
-**Implementation scope:** Backend behavior is in scope for [GOAL.md](../../GOAL.md); frontend work is deferred
+**Implementation scope:** Backend behavior is in scope for [GOAL.md](../../GOAL.md). A prototype frontend redesign exists in [`app/`](../../app/), but it remains pre-release, is not the v1 protocol surface, and is outside backend release approval.
 
 **Prototype:** [`app/`](../../app/) is a pre-release `uni-7` implementation reference
 
@@ -31,7 +32,7 @@ A person can create a bounty; other people can add to it until delivery is propo
 
 A delivery proposal identifies the submitter and content-addressed evidence. It never pays by itself.
 
-- With exactly one contributor, that contributor explicitly confirms or rejects the proposal.
+- With exactly one contributor, that contributor explicitly confirms or rejects the proposal before a bounded deadline; after the deadline or bounty expiry, anyone may finalize it into refunds.
 - With two or more contributors, proposal submission starts a fixed 72-hour ballot.
 - Voting weight equals each address's contribution in the round.
 - Contributors may change their vote until the deadline.
@@ -65,9 +66,9 @@ The backend must make every balance transition independently auditable. Human in
 
 1. A submitter attaches a delivery/evidence digest and proposed payout address.
 2. The contract freezes the round's contributor set and contribution weights.
-3. The sole contributor confirms directly, or all contributors receive a 72-hour voting period.
+3. The sole contributor confirms directly within the bounded confirmation window, or all contributors receive a 72-hour voting period.
 4. The result is finalized permissionlessly after the deadline.
-5. A successful result makes the payout claimable; an unsuccessful result clears the proposal and opens the next round.
+5. A successful result marks the bounty paid and emits the full-pot bank send in the same atomic transaction; there is no intermediate claimable payout state. An unsuccessful multi-contributor result clears the proposal and opens the next round or refunds an expired bounty; an unconfirmed sole-contributor result enters refunds at its deadline.
 
 The Agent Operations DAO can hide spam from curated discovery or stop unsafe entry points, but it cannot cast contributor votes, shorten the window, choose the recipient, or force settlement.
 
@@ -101,7 +102,7 @@ Backends, schemas, and eventual interfaces must use explicit states rather than 
 
 | Object | Required states |
 |---|---|
-| Bounty | open, delivery proposed, ratifying, passed/claimable, reset, paid, cancelled, stopped |
+| Bounty | open, sole confirmation, ratifying, reset, refunding/refunded, paid, cancelled, stopped |
 | Project | pending, active, suspended, rejected, exited |
 | Epoch | draft, funded, voting, finalizable, executed, stopped, failed/expired |
 
@@ -118,16 +119,16 @@ The exact contract enums may be more granular, but every state transition must b
 - Make stopped and suspended states visible, including who invoked the action and which authority can resume.
 - Do not present a broadcast transaction as complete until canonical state confirms it.
 
-## Deferred interface direction
+## Prototype interface direction
 
-Frontend implementation is not part of the current backend goal. When it resumes, the smallest useful surface is:
+Frontend release work is not part of the current backend goal. The checked-in prototype has undergone a redesign, but remains an implementation reference rather than a release-approved v1 interface. A future v1-aligned surface should include:
 
 - a bounty ledger and bounty detail/ratification flow;
 - a project registry with provenance and status;
 - a Hack Juno epoch view with snapshot facts, allocations, and results;
 - an exact transaction review for every state-changing action.
 
-The prototype layout and Juno Design System assets can inform presentation, but its request statuses, roles, and non-binding ranking semantics are not part of v1.
+The redesigned prototype layout and Juno Design System assets can inform presentation, but its request statuses, roles, and non-binding ranking semantics are not part of v1.
 
 ## Accessibility and data integrity
 

@@ -192,7 +192,7 @@ The agent DAO is a screening and fallback service, not a required payout oracle.
 
 ### 3.4 Single-contributor payout
 
-If the snapshotted contributor count is one, no 72-hour vote is required. The sole contributor must explicitly confirm the exact nomination. Confirmation pays the full bounty to the nominated address atomically.
+If the snapshotted contributor count is one, no contributor ballot is required. The sole contributor must explicitly confirm the exact nomination before the earlier of bounty expiry and the 72-hour bounded confirmation deadline. Confirmation pays the full bounty to the nominated address atomically. If the contributor does not act, any account may finalize at the deadline and move the full principal into pull refunds.
 
 The nomination transaction should not silently count as confirmation. A separate confirmation gives wallets an exact transaction review of the recipient, total, and evidence, while still allowing immediate settlement in the next transaction.
 
@@ -236,11 +236,12 @@ The complete state machine is:
 
 ```text
                          nomination (one contributor)
-                        +--------------------------+
                         |                          v
-CREATE -> OPEN -> SINGLE_CONFIRMATION ----------> PAID
-            |           |
-            |           +-- sole contributor declines --> OPEN
+                        |                          v
+    CREATE -> OPEN -> SINGLE_CONFIRMATION ----------> PAID
+                |           |
+                |           +-- sole contributor declines before close --> OPEN
+                |           +-- timeout/expiry finalized by anyone --> REFUNDING
             |
             +-- nomination (multiple contributors) --> RATIFYING
             |                                             |

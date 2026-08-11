@@ -16,7 +16,7 @@ Implement bounties and payout ratification in one purpose-built escrow contract.
 
 - The first release accepts native `ujuno` only.
 - Contributions are committed, non-transferable weights.
-- A sole contributor separately confirms or declines a nomination.
+- A sole contributor separately confirms or declines a nomination before the earlier of bounty expiry and the bounded confirmation deadline; afterward anyone may finalize it into refunds.
 - Multiple contributors receive exactly `259_200` seconds to vote `YES` or `NO` and may revise votes until close.
 - No payout may finalize early.
 - After close, positive participation and `YES > NO` pays the full escrow. `NO > YES`, a tie, or no votes resets without payment.

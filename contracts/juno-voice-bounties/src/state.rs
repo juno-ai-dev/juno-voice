@@ -51,6 +51,9 @@ pub struct Terms {
     pub max_bounty_total: Uint128,
     pub max_contributors: u32,
     pub max_rounds: u32,
+    pub max_evidence_uri_bytes: u32,
+    pub max_rationale_bytes: u32,
+    pub max_reason_bytes: u32,
 }
 
 #[cw_serde]
@@ -66,6 +69,7 @@ pub enum BountyStatus {
 #[cw_serde]
 pub enum RefundReason {
     Expired,
+    SoleConfirmationTimeout,
     Cancelled {
         reason: String,
     },
