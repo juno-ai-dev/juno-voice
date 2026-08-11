@@ -1,6 +1,6 @@
 # GOAL: build the Juno Voice v1 backend
 
-**Status:** Ready for implementation
+**Status:** In progress — local implementation complete; release gates pending
 
 **Scope owner:** Juno Voice backend
 
@@ -31,7 +31,7 @@ The result is backend-complete when the contracts, upstream gauge changes, schem
 - Independent integration with pinned `dao-dao-core`, `dao-voting-juno-staked`, proposal/CW4 components for Agent Operations, and the gauge stack.
 - Versioned JSON schemas, stable events, bounded queries, and deployment configuration.
 - Deterministic Wasm builds and a release manifest binding source to deployed identities.
-- Unit, model, property, integration, migration, gas, and exact-artifact `uni-7` testing.
+- Unit, model, property, integration, gas, and exact-artifact `uni-7` testing.
 - Operational runbooks for configuration, deployment, monitoring, pause, recovery, submodule updates, and releases.
 
 ### Out of scope
@@ -61,7 +61,7 @@ Do not add `deps/dao-contracts` packages to the root Cargo workspace. The reposi
 
 All gauge-orchestrator changes are authored and reviewed in the upstream `dao-contracts` repository. After upstream acceptance, advance the Juno Voice gitlink to the exact commit. Do not ship with a dirty submodule.
 
-The existing `contracts/juno-voice` package is a pre-release prototype. It is not a v1 migration source and must not appear in the v1 release manifest. Removing or archiving its code can be a separate cleanup once no build tooling depends on it.
+The existing `contracts/juno-voice` package is a pre-release prototype. It is not a v1 migration source and must not appear in the v1 release manifest. The bounty, registry, Program Vault, Juno voting module, and snapshot gauge are instantiated fresh; migrating prototype state or an existing gauge instance is outside this goal. A separately reviewed Agent Operations DAO may still be bound by address without migrating it. Removing or archiving the prototype code can be a separate cleanup once no build tooling depends on it.
 
 ## Workstream A: bounty escrow
 
@@ -101,7 +101,7 @@ The implementation must enforce:
 - reset for no majority, tie, or no votes, with expired resets entering refunds;
 - full-pot, one-recipient payout only;
 - pull refunds with no loop over contributors; and
-- no agent, governor, or migration path that can redirect active bounty principal.
+- no agent or governor runtime path that can redirect active bounty principal.
 
 State changes precede bank messages so CosmWasm transaction atomicity protects accounting. Every execute except creation and contribution rejects funds.
 
@@ -244,7 +244,7 @@ Create a validated, environment-specific configuration format containing:
 - every Wasm checksum and expected code identity;
 - Juno `x/gov` module account used as external admin;
 - Program Vault, voting module, gauge, bounty, registry, and Agent Operations addresses or instantiate definitions;
-- migration admin and application governor separately;
+- CosmWasm code admin and application governor separately;
 - bounty limits and immutable 72-hour duration;
 - registration bond and disposition destinations;
 - gauge snapshot mode, epoch duration, turnout, share/selection caps, project capacity, and epoch ceiling;
@@ -325,7 +325,7 @@ Before funded production use:
 - measure target-chain gas at configured maxima: contributors, projects, selected options, messages, pagination, history, and cleanup;
 - run exact-artifact public-testnet scenarios and publish transaction/evidence references;
 - document snapshot-retention, balance-liability, overdue-finalization, stopped-state, adapter-failure, and tranche-balance alerts;
-- document pause, refund, epoch failure, role replacement, migration, and unused-funds recovery procedures; and
+- document pause, refund, epoch failure, role replacement, and unused-funds recovery procedures; and
 - complete at least two low-value canary epochs before proposing a larger recurring tranche.
 
 The canary's actual economic settings are deployment/governance inputs, not contract constants. Recommended values in the design report are hypotheses to validate, not defaults to hide in code.
@@ -362,7 +362,7 @@ The backend goal is complete only when all of the following are true:
 - [ ] Clean recursive-clone deterministic Wasm checks pass and the release manifest is complete.
 - [ ] Exact-artifact `uni-7` flows and maximum-bound gas evidence are published.
 - [ ] Independent security review has no unresolved critical/high findings.
-- [ ] Deployment, monitoring, pause, recovery, upgrade, and submodule-update runbooks are usable.
+- [ ] Deployment, monitoring, pause, recovery, and submodule-update runbooks are usable.
 - [ ] No frontend, mainnet deployment, funding transfer, or prototype migration was smuggled into the goal.
 
 Completion produces a backend release candidate and evidence packet. Uploading it to mainnet, assigning live admins, transferring community-pool funds, or enabling a production tranche requires a separate explicit authorization.

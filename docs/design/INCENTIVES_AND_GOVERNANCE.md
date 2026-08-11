@@ -474,7 +474,7 @@ All amounts use checked arithmetic. Strings, evidence counts, project counts, se
 | Program-vault compromise | Community funding is tranche-bounded, adapter spending is epoch-capped, and renewal requires a new `x/gov` decision. |
 | Snapshot pruning or restart | Enforce activation boundary and monitor live retention beyond the longest proposal/epoch plus margin. |
 | Keeper failure | Finalize, expire, refund, gauge execute, and bounded cleanup are public; alert on overdue rounds and epochs. |
-| Upgrade capture | Juno `x/gov` is the disclosed code administrator; migrations are version-gated, tested against populated state, and separately proposed. |
+| Upgrade capture | Juno `x/gov` is the disclosed code administrator. V1 is freshly instantiated; any future migration requires its own version-gated specification, populated-state tests, and proposal. |
 
 ## 9. Product behavior
 
@@ -498,7 +498,7 @@ The project page should keep three concepts visually separate:
 
 The gauge UI must display snapshot height, total snapshot power, participating power, turnout threshold, total allocated power, caps, unallocated share, `do-not-distribute` share, epoch budget, and actual transfers. It must not present participating-voter percentages as percentages of all Juno stake.
 
-## 10. Deployment and migration plan
+## 10. Deployment plan
 
 ### Phase 1 — social bounties
 

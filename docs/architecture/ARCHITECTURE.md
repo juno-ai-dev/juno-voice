@@ -311,7 +311,7 @@ Stop powers are intentionally asymmetric:
 - Existing contributor votes, finalization, expiry, claims, and refunds continue so funds are not trapped.
 - Agent Operations cannot unpause, resume, increase caps, or change recipients.
 - Program Vault governance can recover after Juno `x/gov` authorization and can replace the agent role.
-- Contract migration remains under the disclosed Juno governance admin path and uses CW2/version-gated migrations.
+- The bounty, registry, Program Vault, Juno voting module, and snapshot gauge are instantiated fresh. Prototype and existing-gauge migrations are outside the backend goal; a separately reviewed Agent Operations DAO may be bound without migrating it. The disclosed Juno governance code admin remains a trust boundary, but any future upgrade or state migration requires a separate specification and test plan.
 
 Keepers are optional. All deadline-based progress calls are public and idempotent under their state preconditions.
 
@@ -324,7 +324,7 @@ Gauge changes land upstream first. Juno Voice then advances the gitlink to a rev
 - parent repository commit and submodule commit;
 - Rust/toolchain and optimizer identity;
 - Wasm SHA-256 checksums and schema versions;
-- chain ID, code IDs, instantiated addresses, and migration admins; and
+- chain ID, code IDs, instantiated addresses, and CosmWasm code admins; and
 - every authority address and economic configuration value.
 
 No deployment resolves a moving branch or an unpinned package.
