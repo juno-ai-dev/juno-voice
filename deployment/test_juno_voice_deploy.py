@@ -86,15 +86,22 @@ class DeploymentPlannerTests(unittest.TestCase):
                 "proposal_module_address": address(5),
                 "proposal_code_id": 32,
                 "proposal_checksum": "32" * 32,
-                "cw4_group_address": address(6),
-                "cw4_group_code_id": 33,
-                "cw4_group_checksum": "33" * 32,
-                "members": [
-                    {"address": address(7), "weight": 1},
-                    {"address": address(8), "weight": 2},
-                ],
-                "threshold_weight": 2,
-                "voting_duration_seconds": 86_400,
+                "membership": {
+                    "kind": "cw721_roles",
+                    "nft_address": address(6),
+                    "nft_code_id": 33,
+                    "nft_checksum": "33" * 32,
+                    "minter": address(3),
+                    "tokens": [
+                        {"token_id": "agent:builder", "owner": address(7), "role": "builder", "weight": 1},
+                        {"token_id": "agent:steward", "owner": address(8), "role": "steward", "weight": 2},
+                    ],
+                    "total_power": 3,
+                },
+                "proposal": {
+                    "threshold": {"kind": "threshold_quorum", "threshold": "majority", "quorum": "0.33"},
+                    "voting_duration_seconds": 86_400,
+                },
                 "review_reference": {
                     "path": "evidence/agent-operations-review.json",
                     "sha256": deploy.sha256_file(agent_review),
@@ -230,7 +237,7 @@ class DeploymentPlannerTests(unittest.TestCase):
         limits = schema["$defs"]["bounty_limits"]
         self.assertEqual(set(self.config["bounty"]["limits"]), set(limits["required"]))
         self.assertFalse(limits["additionalProperties"])
-        self.assertEqual(100, schema["$defs"]["agent_operations"]["properties"]["members"]["maxItems"])
+        self.assertEqual(2, len(schema["$defs"]["agent_membership"]["oneOf"]))
         self.assertEqual(259_200, schema["$defs"]["bounty"]["properties"]["ratification_seconds"]["const"])
         self.assertEqual(99, schema["$defs"]["registry"]["properties"]["max_active_projects"]["const"])
         self.assertEqual(100, schema["$defs"]["gauge"]["properties"]["option_capacity"]["const"])
@@ -452,12 +459,13 @@ class DeploymentPlannerTests(unittest.TestCase):
                 lambda value: value["registry"].update(max_metadata_uri_bytes=2049),
             ),
             (
-                "agent_operations.members",
-                lambda value: value["agent_operations"].update(
-                    members=[
-                        {"address": address(index + 20), "weight": 1}
+                "agent_operations.membership.tokens",
+                lambda value: value["agent_operations"]["membership"].update(
+                    tokens=[
+                        {"token_id": f"agent:{index}", "owner": address(index + 20), "role": "builder", "weight": 1}
                         for index in range(deploy.MAX_AGENT_MEMBERS + 1)
-                    ]
+                    ],
+                    total_power=deploy.MAX_AGENT_MEMBERS + 1,
                 ),
             ),
             (
@@ -716,7 +724,7 @@ class DeploymentPlannerTests(unittest.TestCase):
             agent["core_address"]: agent["core_code_id"],
             agent["voting_module_address"]: agent["voting_code_id"],
             agent["proposal_module_address"]: agent["proposal_code_id"],
-            agent["cw4_group_address"]: agent["cw4_group_code_id"],
+            agent["membership"]["nft_address"]: agent["membership"]["nft_code_id"],
         }
         checksums = {
             state["code_ids"][name]: item["sha256"]
@@ -727,7 +735,7 @@ class DeploymentPlannerTests(unittest.TestCase):
                 agent["core_code_id"]: agent["core_checksum"],
                 agent["voting_code_id"]: agent["voting_checksum"],
                 agent["proposal_code_id"]: agent["proposal_checksum"],
-                agent["cw4_group_code_id"]: agent["cw4_group_checksum"],
+                agent["membership"]["nft_code_id"]: agent["membership"]["nft_checksum"],
             }
         )
 
@@ -774,23 +782,32 @@ class DeploymentPlannerTests(unittest.TestCase):
                         ],
                     }
                 if contract_address == agent["voting_module_address"]:
-                    return agent["cw4_group_address"]
-                if contract_address == agent["cw4_group_address"]:
-                    if query["list_members"]["start_after"] is not None:
-                        return {"members": []}
-                    return {
-                        "members": [
-                            {"addr": item["address"], "weight": item["weight"]}
-                            for item in agent["members"]
-                        ]
-                    }
+                    if "total_power_at_height" in query:
+                        return {"power": str(agent["membership"]["total_power"]), "height": 123}
+                    return {"nft_address": agent["membership"]["nft_address"]}
+                if contract_address == agent["membership"]["nft_address"]:
+                    if "all_tokens" in query:
+                        if query["all_tokens"]["start_after"] is not None:
+                            return {"tokens": []}
+                        return {
+                            "tokens": sorted(item["token_id"] for item in agent["membership"]["tokens"])
+                        }
+                    if "minter" in query:
+                        return {"minter": agent["membership"]["minter"]}
+                    if "num_tokens" in query:
+                        return {"count": len(agent["membership"]["tokens"])}
+                    if "all_nft_info" in query:
+                        token_id = query["all_nft_info"]["token_id"]
+                        item = next(item for item in agent["membership"]["tokens"] if item["token_id"] == token_id)
+                        return {
+                            "access": {"owner": item["owner"], "approvals": []},
+                            "info": {"token_uri": None, "extension": {"role": item["role"], "weight": item["weight"]}},
+                        }
                 if contract_address == agent["proposal_module_address"]:
                     return {
                         "dao": agent["core_address"],
-                        "threshold": {
-                            "absolute_count": {"threshold": str(agent["threshold_weight"])}
-                        },
-                        "max_voting_period": {"time": agent["voting_duration_seconds"]},
+                        "threshold": deploy._agent_proposal_threshold(agent),
+                        "max_voting_period": {"time": agent["proposal"]["voting_duration_seconds"]},
                     }
                 raise AssertionError((contract_address, query))
 

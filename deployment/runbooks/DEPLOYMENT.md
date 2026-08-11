@@ -14,7 +14,8 @@ broadcast, require all of the following:
 - the current `uni-7` chain ID, RPC, gRPC, `ujuno` denomination, `juno` prefix,
   and Juno `x/gov` module account were independently checked;
 - the bound Agent Operations DAO review records its core, voting, proposal, and
-  CW4 group code IDs/checksums, current members, threshold, and voting duration;
+  tagged CW4-group or CW721-roles membership code IDs/checksums, exhaustive
+  current membership and power, threshold, and voting duration;
 - snapshot retention covers the full epoch plus the configured operational
   margin; and
 - the deployer key is funded only for upload/instantiation fees and contains no

@@ -191,32 +191,37 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     {"address": agent["proposal_module_address"], "status": "enabled"}
                 ],
             },
-            "agent_voting_group": agent["cw4_group_address"],
-            "agent_members": {
-                "members": [
-                    {"addr": item["address"], "weight": item["weight"]}
-                    for item in agent["members"]
-                ]
+            "agent_membership_contract": agent["membership"]["nft_address"],
+            "agent_membership_page": {
+                "tokens": sorted(item["token_id"] for item in agent["membership"]["tokens"])
             },
-            "agent_members_tail": {"members": []},
+            "agent_membership_tail": {"tokens": []},
+            "agent_total_power": {"power": str(agent["membership"]["total_power"])},
+            "agent_nft_minter": {"minter": agent["membership"]["minter"]},
+            "agent_nft_num_tokens": {"count": len(agent["membership"]["tokens"])},
+            "agent_nft_token_info": {
+                item["token_id"]: {
+                    "access": {"owner": item["owner"], "approvals": []},
+                    "info": {"token_uri": None, "extension": {"role": item["role"], "weight": item["weight"]}},
+                }
+                for item in agent["membership"]["tokens"]
+            },
             "agent_proposal_config": {
                 "dao": agent["core_address"],
-                "threshold": {
-                    "absolute_count": {"threshold": str(agent["threshold_weight"])}
-                },
-                "max_voting_period": {"time": agent["voting_duration_seconds"]},
+                "threshold": deploy._agent_proposal_threshold(agent),
+                "max_voting_period": {"time": agent["proposal"]["voting_duration_seconds"]},
             },
             "agent_code_checksums": {
                 "core": agent["core_checksum"],
                 "voting": agent["voting_checksum"],
                 "proposal": agent["proposal_checksum"],
-                "cw4_group": agent["cw4_group_checksum"],
+                "nft": agent["membership"]["nft_checksum"],
             },
             "agent_contract_info": {
                 "core": {"code_id": agent["core_code_id"]},
                 "voting": {"code_id": agent["voting_code_id"]},
                 "proposal": {"code_id": agent["proposal_code_id"]},
-                "cw4_group": {"code_id": agent["cw4_group_code_id"]},
+                "nft": {"code_id": agent["membership"]["nft_code_id"]},
             },
         }
         verification_document = {
