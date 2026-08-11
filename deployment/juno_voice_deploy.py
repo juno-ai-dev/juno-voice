@@ -730,14 +730,12 @@ def validate_source_checkout(config: dict[str, Any], root: Path) -> None:
     parent_commit = source["parent_commit"]
     submodule_commit = source["dao_contracts_commit"]
     _git(root, "cat-file", "-e", f"{parent_commit}^{{commit}}")
-    ancestor = subprocess.run(
-        ["git", "-C", str(root), "merge-base", "--is-ancestor", parent_commit, "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if ancestor.returncode != 0:
-        _fail("source.parent_commit", "must be an ancestor of the deployment checkout")
+    head_commit = _git(root, "rev-parse", "HEAD")
+    if head_commit != parent_commit:
+        _fail(
+            "source.parent_commit",
+            "must exactly equal the deployment checkout HEAD (descendants are unreviewed)",
+        )
     source_gitlink = _git(root, "ls-tree", parent_commit, "deps/dao-contracts").split()
     current_gitlink = _git(root, "ls-tree", "HEAD", "deps/dao-contracts").split()
     if len(source_gitlink) != 4 or source_gitlink[2] != submodule_commit:

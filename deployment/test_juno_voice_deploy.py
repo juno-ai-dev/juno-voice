@@ -2,6 +2,7 @@ import base64
 import copy
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -167,6 +168,39 @@ class DeploymentPlannerTests(unittest.TestCase):
             deploy.decode_address(value, "juno", name)
         self.assertEqual(addresses, deploy.derive_addresses(self.config))
         self.assertNotEqual(addresses["program_vault"], addresses["bounty"])
+
+    def test_source_checkout_must_equal_reviewed_parent_not_a_descendant(self):
+        repository = self.root / "source"
+        repository.mkdir()
+        subprocess.run(["git", "init", "-q", str(repository)], check=True)
+        subprocess.run(["git", "-C", str(repository), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(repository), "config", "user.name", "Test"], check=True)
+        submodule = repository / "deps" / "dao-contracts"
+        submodule.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(submodule)], check=True)
+        subprocess.run(["git", "-C", str(submodule), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(submodule), "config", "user.name", "Test"], check=True)
+        (submodule / "README").write_text("pin\n")
+        subprocess.run(["git", "-C", str(submodule), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(submodule), "commit", "-qm", "pin"], check=True)
+        pin = subprocess.check_output(["git", "-C", str(submodule), "rev-parse", "HEAD"], text=True).strip()
+        subprocess.run(
+            ["git", "-c", "protocol.file.allow=always", "-C", str(repository), "submodule", "add", "-q", str(submodule), "deps/dao-contracts"],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(repository), "commit", "-qam", "reviewed"], check=True)
+        reviewed = subprocess.check_output(["git", "-C", str(repository), "rev-parse", "HEAD"], text=True).strip()
+        config = copy.deepcopy(self.config)
+        config["source"] = {"parent_commit": reviewed, "dao_contracts_commit": pin}
+        (repository / "later").write_text("unreviewed descendant\n")
+        subprocess.run(["git", "-C", str(repository), "add", "later"], check=True)
+        subprocess.run(["git", "-C", str(repository), "commit", "-qm", "later"], check=True)
+        with self.assertRaisesRegex(deploy.ValidationError, "must exactly equal"):
+            deploy.validate_source_checkout(config, repository)
+
+    def test_gitmodules_changes_trigger_backend_ci(self):
+        workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "backend.yml").read_text()
+        self.assertEqual(2, workflow.count('- ".gitmodules"'))
 
     def test_json_schema_has_closed_shape_parity_with_authoritative_config(self):
         schema = json.loads(Path(__file__).with_name("config.schema.json").read_text())

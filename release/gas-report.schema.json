@@ -8,7 +8,7 @@
     "schema_version", "status", "chain_id", "config_sha256", "source",
     "safety_margin_bps", "measurements_sha256", "measurement_cases",
     "measured_by", "reviewed_by", "measured_at", "reviewed_at",
-    "methodology", "signed_payload_sha256", "signatures"
+    "methodology", "signed_payload_sha256", "declarations"
   ],
   "properties": {
     "schema_version": {"const": "juno-voice/gas-report/v1"},
@@ -39,11 +39,11 @@
     "reviewed_at": {"$ref": "#/$defs/nonempty"},
     "methodology": {"$ref": "#/$defs/nonempty"},
     "signed_payload_sha256": {"$ref": "#/$defs/sha256"},
-    "signatures": {
+    "declarations": {
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "items": {"$ref": "#/$defs/signature"}
+      "items": {"$ref": "#/$defs/declaration"}
     }
   },
   "$defs": {
@@ -59,7 +59,7 @@
         "dao_contracts_commit": {"$ref": "#/$defs/commit"}
       }
     },
-    "signature": {
+    "declaration": {
       "type": "object",
       "additionalProperties": false,
       "required": ["identity", "payload_sha256", "method", "value"],

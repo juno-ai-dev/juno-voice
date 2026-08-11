@@ -281,7 +281,13 @@ class ReleaseCaptureTests(unittest.TestCase):
                 "transaction_evidence"
             ]
 
-            capture.release.validate_evidence(evidence, packet.root, config)
+            capture.release.validate_evidence(
+                evidence,
+                packet.root,
+                config,
+                allowed_signers=packet.root / "release-trusted-signers",
+                authorization_principal="release-authority",
+            )
         finally:
             packet.tearDown()
 

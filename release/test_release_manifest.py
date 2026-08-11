@@ -1,5 +1,6 @@
 import copy
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -18,6 +19,15 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.fixture.setUp()
         self.root = self.fixture.root
         self.config = self.fixture.config
+        self.release_key = self.root / "release-authority"
+        subprocess.run(
+            ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(self.release_key)],
+            check=True,
+        )
+        public_key = self.release_key.with_suffix(".pub").read_text().strip()
+        (self.root / "release-trusted-signers").write_text(
+            f"release-authority {public_key}\n"
+        )
 
         def reference(path: str, content: str = "evidence\n"):
             target = self.root / path
@@ -331,15 +341,16 @@ class ReleaseEvidenceTests(unittest.TestCase):
             },
             "decided_at": "2026-08-05T00:00:00Z",
             "signed_payload_sha256": "00" * 32,
-            "signatures": [
+            "reviewer_declarations": [
                 {
                     "identity": identity,
                     "payload_sha256": "00" * 32,
-                    "method": "fixture",
-                    "value": f"fixture-signature-{index}",
+                    "method": "unauthenticated-declaration",
+                    "value": f"fixture-declaration-{index}",
                 }
                 for index, identity in enumerate(release_signers, start=1)
             ],
+            "authorization_record": {},
         }
         decision = reference(
             "evidence/release-decision.json",
@@ -1308,12 +1319,12 @@ class ReleaseEvidenceTests(unittest.TestCase):
         gas_report_document = {
             **gas_report_payload,
             "signed_payload_sha256": gas_payload_sha256,
-            "signatures": [
+            "declarations": [
                 {
                     "identity": identity,
                     "payload_sha256": gas_payload_sha256,
-                    "method": "fixture",
-                    "value": f"fixture-{identity}-signature",
+                    "method": "unauthenticated-declaration",
+                    "value": f"fixture-{identity}-declaration",
                 }
                 for identity in (
                     gas_report_payload["measured_by"],
@@ -1333,13 +1344,42 @@ class ReleaseEvidenceTests(unittest.TestCase):
             decision_document
         )
         decision_document["signed_payload_sha256"] = decision_payload_sha256
-        for signature in decision_document["signatures"]:
-            signature["payload_sha256"] = decision_payload_sha256
+        for declaration in decision_document["reviewer_declarations"]:
+            declaration["payload_sha256"] = decision_payload_sha256
+        decision_document["authorization_record"] = self.release_authorization(
+            decision_payload_sha256
+        )
         decision_path = self.root / decision["path"]
         decision_path.write_text(
             json.dumps(decision_document, indent=2, sort_keys=True) + "\n"
         )
         decision["sha256"] = deploy.sha256_file(decision_path)
+
+    def release_authorization(self, payload_sha256):
+        message = self.root / "release-authorization-payload"
+        signature_path = message.with_suffix(message.suffix + ".sig")
+        signature_path.unlink(missing_ok=True)
+        message.write_text(payload_sha256 + "\n")
+        subprocess.run(
+            ["ssh-keygen", "-Y", "sign", "-q", "-f", str(self.release_key), "-n", "juno-voice-release-v1", str(message)],
+            check=True,
+        )
+        return {
+            "identity": "release-authority",
+            "payload_sha256": payload_sha256,
+            "method": "sshsig",
+            "namespace": "juno-voice-release-v1",
+            "signature": signature_path.read_text(),
+        }
+
+    def validate_evidence(self, evidence):
+        release.validate_evidence(
+            evidence,
+            self.root,
+            self.config,
+            allowed_signers=self.root / "release-trusted-signers",
+            authorization_principal="release-authority",
+        )
 
     def tearDown(self):
         self.fixture.tearDown()
@@ -1353,8 +1393,9 @@ class ReleaseEvidenceTests(unittest.TestCase):
         )
         payload_sha256 = release.release_decision_payload_sha256(document)
         document["signed_payload_sha256"] = payload_sha256
-        for signature in document["signatures"]:
-            signature["payload_sha256"] = payload_sha256
+        for declaration in document["reviewer_declarations"]:
+            declaration["payload_sha256"] = payload_sha256
+        document["authorization_record"] = self.release_authorization(payload_sha256)
         decision_path.write_text(
             json.dumps(document, indent=2, sort_keys=True) + "\n"
         )
@@ -1480,24 +1521,36 @@ class ReleaseEvidenceTests(unittest.TestCase):
         )
 
     def test_complete_evidence_packet_is_accepted(self):
-        release.validate_evidence(self.evidence, self.root, self.config)
+        self.validate_evidence(self.evidence)
+
+    def test_final_validation_requires_explicit_trust_parameters(self):
+        with self.assertRaises(TypeError):
+            release.validate_evidence(self.evidence, self.root, self.config)
+        with self.assertRaisesRegex(release.EvidenceError, "expected authorization principal"):
+            release.validate_evidence(
+                self.evidence,
+                self.root,
+                self.config,
+                allowed_signers=self.root / "release-trusted-signers",
+                authorization_principal="unrelated-signer",
+            )
 
     def test_open_high_or_missing_scenario_is_rejected(self):
         wrong = copy.deepcopy(self.evidence)
         wrong["security_review"]["open_high"] = 1
         with self.assertRaisesRegex(release.EvidenceError, "must be zero"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         wrong["public_testnet"]["scenarios"].pop()
         with self.assertRaisesRegex(release.EvidenceError, "scenario set mismatch"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_content_hash_substitution_is_rejected(self):
         wrong = copy.deepcopy(self.evidence)
         wrong["security_review"]["report"]["sha256"] = "00" * 32
         with self.assertRaisesRegex(release.EvidenceError, "expected"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_security_attestation_binds_scope_report_findings_and_signature(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1507,7 +1560,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text("{}\n")
         attestation_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "missing keys"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
         path.write_text(original)
 
         wrong = copy.deepcopy(self.evidence)
@@ -1518,7 +1571,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         attestation_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "does not match the reviewed evidence"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_upstream_attestation_binds_repository_commit_review_and_acceptor(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1529,7 +1582,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         attestation_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "accepted upstream review"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_deployment_observation_substitution_is_rejected(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1542,28 +1595,28 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         reference["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "bounty.creator mismatch"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_build_manifest_binds_artifact_schema_and_evidence_bytes(self):
         artifact = self.root / self.config["artifacts"]["juno_voice_bounties"]["path"]
         original_artifact = artifact.read_bytes()
         artifact.write_bytes(original_artifact + b"substitution")
         with self.assertRaisesRegex(release.EvidenceError, "size_bytes"):
-            release.validate_evidence(self.evidence, self.root, self.config)
+            self.validate_evidence(self.evidence)
         artifact.write_bytes(original_artifact)
 
         schema = self.root / release.BUILD_SCHEMAS["juno_voice_bounties"][0]
         original_schema = schema.read_bytes()
         schema.write_bytes(original_schema + b"substitution")
         with self.assertRaisesRegex(release.EvidenceError, "does not match schema bytes"):
-            release.validate_evidence(self.evidence, self.root, self.config)
+            self.validate_evidence(self.evidence)
         schema.write_bytes(original_schema)
 
         checksums = self.root / "artifacts" / "checksums.txt"
         original_checksums = checksums.read_bytes()
         checksums.write_bytes(original_checksums + b"substitution")
         with self.assertRaisesRegex(release.EvidenceError, "does not match checksums.txt"):
-            release.validate_evidence(self.evidence, self.root, self.config)
+            self.validate_evidence(self.evidence)
         checksums.write_bytes(original_checksums)
 
     def test_build_manifest_rejects_wrong_validator_executable_identity(self):
@@ -1580,7 +1633,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.evidence["build_manifest"]["sha256"] = deploy.sha256_file(manifest_path)
 
         with self.assertRaisesRegex(release.EvidenceError, "wrong tool identities"):
-            release.validate_evidence(self.evidence, self.root, self.config)
+            self.validate_evidence(self.evidence)
 
     def test_unlinked_assertion_and_reused_transactions_are_rejected(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1592,7 +1645,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         first["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "referenced chain evidence"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         transcript["assertions"][0]["actual"] = original_actual
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
@@ -1607,7 +1660,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         first["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "outside captured queries"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         transcript["assertions"][0]["source"]["query_index"] = 0
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
@@ -1626,7 +1679,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         second_path.write_text(json.dumps(second_transcript, indent=2, sort_keys=True) + "\n")
         second["evidence"]["sha256"] = deploy.sha256_file(second_path)
         with self.assertRaisesRegex(release.EvidenceError, "reused by another scenario"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_named_event_proof_rejects_an_unrelated_wasm_event(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1660,7 +1713,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         scenario["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "ratification_finalized"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_named_query_proof_rejects_arbitrary_query_and_response(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1675,7 +1728,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         scenario["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "bounty.*query variant"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         scenario = next(
@@ -1700,7 +1753,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         scenario["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "must equal 'paid'"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_contract_message_destination_must_be_verified(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1722,7 +1775,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         scenario["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "not a verified"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_negative_transfer_scan_is_bound_to_unchanged_balance_address(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1742,12 +1795,12 @@ class ReleaseEvidenceTests(unittest.TestCase):
         transcript_path.write_text(json.dumps(transcript, indent=2, sort_keys=True) + "\n")
         scenario["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
         with self.assertRaisesRegex(release.EvidenceError, "unchanged-balance proof"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_zero_retention_means_pruning_disabled(self):
         self.evidence["public_testnet"]["snapshot"]["observed_retention_blocks"] = 0
         self.resign_release_decision(self.evidence)
-        release.validate_evidence(self.evidence, self.root, self.config)
+        self.validate_evidence(self.evidence)
 
     def test_transaction_reuse_across_evidence_categories_is_rejected(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1755,7 +1808,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             "snapshot"
         ]["stake_change_transactions"][0]["hash"]
         with self.assertRaisesRegex(release.EvidenceError, "other release evidence"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_gas_measurements_bind_verified_contract_requests_and_maximum_responses(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1766,7 +1819,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         )
         measurement["contract"] = wrong["public_testnet"]["snapshot"]["voter_address"]
         with self.assertRaisesRegex(release.EvidenceError, "verified registry contract"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         measurement = next(
@@ -1779,7 +1832,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         measurement["response_bytes"] = len(encoded)
         measurement["response_sha256"] = deploy.sha256_bytes(encoded)
         with self.assertRaisesRegex(release.EvidenceError, "configured maximum observed items"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         measurement = next(
@@ -1792,21 +1845,21 @@ class ReleaseEvidenceTests(unittest.TestCase):
         measurement["response_bytes"] = len(encoded)
         measurement["response_sha256"] = deploy.sha256_bytes(encoded)
         with self.assertRaisesRegex(release.EvidenceError, "maximum-batch cleanup event"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_canary_requires_distinct_positive_distributions(self):
         wrong = copy.deepcopy(self.evidence)
         wrong["canary"]["epochs"][1]["outcome"] = "no_distribution_turnout"
         wrong["canary"]["epochs"][1]["distributed_value"] = 0
         with self.assertRaisesRegex(release.EvidenceError, "must equal 'distributed'"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         wrong["canary"]["maximum_total_value"] = int(
             self.config["tranche"]["maximum_amount"]
         )
         with self.assertRaisesRegex(release.EvidenceError, "below the full tranche"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_canary_binds_transaction_epoch_state_and_native_transfer_value(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1820,7 +1873,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(capture["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "distribution transfers"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         epoch = wrong["canary"]["epochs"][0]
@@ -1829,7 +1882,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(epoch["epoch_query"]["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "canary snapshot"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         epoch = wrong["canary"]["epochs"][0]
@@ -1843,7 +1896,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(epoch["transaction_evidence"]["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "verified Juno Voice"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_canary_governance_decision_binds_completed_epochs_and_scope(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1855,7 +1908,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         decision_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "completed canary evidence"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
         path.write_text(original)
 
         wrong = copy.deepcopy(self.evidence)
@@ -1863,9 +1916,9 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text("{}\n")
         decision_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "missing keys"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
-    def test_release_decision_binds_evidence_roles_scope_and_signatures(self):
+    def test_release_decision_binds_evidence_roles_scope_and_declarations(self):
         wrong = copy.deepcopy(self.evidence)
         decision_ref = wrong["release_signoff"]["decision"]
         path = self.root / decision_ref["path"]
@@ -1875,25 +1928,25 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         decision_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "every reviewed release evidence"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
         path.write_text(original)
 
         wrong = copy.deepcopy(self.evidence)
         decision_ref = wrong["release_signoff"]["decision"]
         document = json.loads(path.read_text())
-        document["signatures"].pop()
+        document["reviewer_declarations"].pop()
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         decision_ref["sha256"] = deploy.sha256_file(path)
-        with self.assertRaisesRegex(release.EvidenceError, "one signature per signer"):
-            release.validate_evidence(wrong, self.root, self.config)
+        with self.assertRaisesRegex(release.EvidenceError, "one declaration per reviewer"):
+            self.validate_evidence(wrong)
 
-    def test_release_decision_commits_full_evidence_and_signature_payloads(self):
+    def test_release_decision_commits_full_evidence_and_declaration_payloads(self):
         wrong = copy.deepcopy(self.evidence)
         wrong["public_testnet"]["scenarios"].reverse()
         with self.assertRaisesRegex(
             release.EvidenceError, "every reviewed release evidence"
         ):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         decision_ref = wrong["release_signoff"]["decision"]
@@ -1904,17 +1957,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         decision_ref["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "decision payload"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
         path.write_text(original)
 
         wrong = copy.deepcopy(self.evidence)
         decision_ref = wrong["release_signoff"]["decision"]
         document = json.loads(path.read_text())
-        document["signatures"][0]["payload_sha256"] = "00" * 32
+        document["reviewer_declarations"][0]["payload_sha256"] = "00" * 32
         path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
         decision_ref["sha256"] = deploy.sha256_file(path)
-        with self.assertRaisesRegex(release.EvidenceError, "signed release decision"):
-            release.validate_evidence(wrong, self.root, self.config)
+        with self.assertRaisesRegex(release.EvidenceError, "reviewed release decision"):
+            self.validate_evidence(wrong)
 
     def test_snapshot_queries_bind_fixed_and_changed_historical_power(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1930,7 +1983,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(query["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "first epoch must remain fixed"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         query = next(
@@ -1942,7 +1995,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         )
         query["contract"] = wrong["public_testnet"]["snapshot"]["voter_address"]
         with self.assertRaisesRegex(release.EvidenceError, "verified voting module"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         snapshot = wrong["public_testnet"]["snapshot"]
@@ -1955,7 +2008,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             if "after_change" in item["name"]:
                 item["observed_at_height"] = too_early
         with self.assertRaisesRegex(release.EvidenceError, "required retention window"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_snapshot_staking_changes_are_captured_and_reconcile_to_voter_power(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1971,7 +2024,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(capture["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "historical-power voter"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         stake = wrong["public_testnet"]["snapshot"]["stake_change_transactions"][0]
@@ -1984,7 +2037,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(capture["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "do not reconcile"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_runbooks_require_operational_sections_and_distinct_paths(self):
         wrong = copy.deepcopy(self.evidence)
@@ -1998,31 +2051,31 @@ class ReleaseEvidenceTests(unittest.TestCase):
         path.write_text("# Monitoring runbook\n")
         monitoring["sha256"] = deploy.sha256_file(path)
         with self.assertRaisesRegex(release.EvidenceError, "required operational section"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
         path.write_text(original)
 
         wrong = copy.deepcopy(self.evidence)
         wrong["runbooks"].append(copy.deepcopy(wrong["runbooks"][0]))
         with self.assertRaisesRegex(release.EvidenceError, "is duplicated"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_operational_rehearsal_requires_every_case_and_independent_review(self):
         wrong = copy.deepcopy(self.evidence)
         wrong["operations_rehearsal"]["cases"].pop()
         with self.assertRaisesRegex(release.EvidenceError, "six required operational rehearsals"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         wrong["operations_rehearsal"]["reviewed_by"] = wrong[
             "operations_rehearsal"
         ]["performed_by"]
         with self.assertRaisesRegex(release.EvidenceError, "operator and reviewer"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         wrong["release_signoff"]["operations_reviewer"] = "different-reviewer"
         with self.assertRaisesRegex(release.EvidenceError, "operations rehearsal reviewer"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
     def test_operational_rehearsal_binds_raw_transactions_and_code_profiles(self):
         wrong = copy.deepcopy(self.evidence)
@@ -2038,12 +2091,12 @@ class ReleaseEvidenceTests(unittest.TestCase):
             deploy.canonical_json(capture["response"])
         )
         with self.assertRaisesRegex(release.EvidenceError, "successful/rejected action profile"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
         wrong = copy.deepcopy(self.evidence)
         wrong["operations_rehearsal"]["cases"][0]["transaction_evidence"].pop()
         with self.assertRaisesRegex(release.EvidenceError, "cover every rehearsal transaction"):
-            release.validate_evidence(wrong, self.root, self.config)
+            self.validate_evidence(wrong)
 
 
 if __name__ == "__main__":
