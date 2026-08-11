@@ -2002,7 +2002,18 @@ def validate_verification_observations(
         if not isinstance(page, dict) or not isinstance(page.get("members"), list):
             _fail("verification.observations.agent_membership_page", "must contain a members array")
         actual_items = sorted(
-            ({"address": item.get("addr"), "weight": item.get("weight")} for item in page["members"] if isinstance(item, dict)),
+            (
+                {
+                    "address": item.get("addr"),
+                    "weight": _uint(
+                        item.get("weight"),
+                        "verification.observations.agent_membership_page.members.weight",
+                        positive=True,
+                    ),
+                }
+                for item in page["members"]
+                if isinstance(item, dict)
+            ),
             key=lambda item: item["address"],
         )
         expected_items = [
@@ -2053,7 +2064,11 @@ def validate_verification_observations(
             expect(f"agent_nft_token_info.{token_id}.role", _nested(observed, ("info", "extension", "role")), expected_token["role"])
             expect(
                 f"agent_nft_token_info.{token_id}.weight",
-                _nested(observed, ("info", "extension", "weight")),
+                _uint(
+                    _nested(observed, ("info", "extension", "weight")),
+                    f"verification.observations.agent_nft_token_info.{token_id}.weight",
+                    positive=True,
+                ),
                 _uint(
                     expected_token["weight"],
                     f"agent_operations.membership.tokens.{token_id}.weight",
@@ -2065,9 +2080,20 @@ def validate_verification_observations(
         _fail("verification.observations.agent_proposal_config", "must be an object")
     expect("agent_proposal_config.dao", proposal.get("dao"), agent["core_address"])
     expect("agent_proposal_config.threshold", proposal.get("threshold"), _agent_proposal_threshold(agent))
+    observed_period = _object(
+        proposal.get("max_voting_period"),
+        "verification.observations.agent_proposal_config.max_voting_period",
+        ("time",),
+    )
     expect(
         "agent_proposal_config.max_voting_period",
-        proposal.get("max_voting_period"),
+        {
+            "time": _uint(
+                observed_period.get("time"),
+                "verification.observations.agent_proposal_config.max_voting_period.time",
+                positive=True,
+            )
+        },
         {
             "time": _uint(
                 agent["proposal"]["voting_duration_seconds"],
@@ -2256,7 +2282,18 @@ def verify_deployment(
         )
         raw_items = membership_page.get("members", []) if isinstance(membership_page, dict) else []
         actual_items = sorted(
-            ({"address": item.get("addr"), "weight": item.get("weight")} for item in raw_items if isinstance(item, dict)),
+            (
+                {
+                    "address": item.get("addr"),
+                    "weight": _uint(
+                        item.get("weight"),
+                        "agent.membership_page.members.weight",
+                        positive=True,
+                    ),
+                }
+                for item in raw_items
+                if isinstance(item, dict)
+            ),
             key=lambda item: str(item["address"]),
         )
         expected_items = sorted(
@@ -2310,10 +2347,21 @@ def verify_deployment(
     proposal_config = junod.smart(agent["proposal_module_address"], {"config": {}})
     _expect_equal(checks, "agent:proposal_dao", proposal_config.get("dao"), agent["core_address"])
     _expect_equal(checks, "agent:threshold", proposal_config.get("threshold"), _agent_proposal_threshold(agent))
+    observed_period = _object(
+        proposal_config.get("max_voting_period"),
+        "agent.proposal.max_voting_period",
+        ("time",),
+    )
     _expect_equal(
         checks,
         "agent:voting_duration",
-        proposal_config.get("max_voting_period"),
+        {
+            "time": _uint(
+                observed_period.get("time"),
+                "agent.proposal.max_voting_period.time",
+                positive=True,
+            )
+        },
         {
             "time": _uint(
                 agent["proposal"]["voting_duration_seconds"],
@@ -2338,7 +2386,11 @@ def verify_deployment(
             actual = {
                 "owner": _nested(observed, ("access", "owner")),
                 "role": _nested(observed, ("info", "extension", "role")),
-                "weight": _nested(observed, ("info", "extension", "weight")),
+                "weight": _uint(
+                    _nested(observed, ("info", "extension", "weight")),
+                    f"agent.nft_token.{token_id}.weight",
+                    positive=True,
+                ),
             }
             _expect_equal(
                 checks,

@@ -2122,6 +2122,85 @@ class ReleaseEvidenceTests(unittest.TestCase):
             verification["observations"],
         )
 
+    def test_verification_rejects_boolean_agent_numeric_observations(self):
+        verification = json.loads(
+            (self.root / "deployment" / "verification.json").read_text()
+        )
+
+        for name, mutate in (
+            (
+                "cw721 weight",
+                lambda observations: observations["agent_nft_token_info"][
+                    "agent:builder"
+                ]["info"]["extension"].__setitem__("weight", True),
+            ),
+        ):
+            with self.subTest(name=name):
+                observations = copy.deepcopy(verification["observations"])
+                mutate(observations)
+                with self.assertRaises((deploy.ValidationError, RuntimeError)):
+                    deploy.validate_verification_observations(
+                        self.config,
+                        verification["code_ids"],
+                        verification["addresses"],
+                        observations,
+                    )
+
+        duration_config = copy.deepcopy(self.config)
+        duration_config["agent_operations"]["proposal"]["voting_duration_seconds"] = 1
+        duration_observations = copy.deepcopy(verification["observations"])
+        duration_observations["agent_proposal_config"]["max_voting_period"][
+            "time"
+        ] = True
+        deploy.validate_config(duration_config, self.root)
+        with self.assertRaises((deploy.ValidationError, RuntimeError)):
+            deploy.validate_verification_observations(
+                duration_config,
+                verification["code_ids"],
+                verification["addresses"],
+                duration_observations,
+            )
+
+        cw4_config = copy.deepcopy(self.config)
+        nft = cw4_config["agent_operations"]["membership"]
+        cw4_config["agent_operations"]["membership"] = {
+            "kind": "cw4",
+            "group_address": nft["nft_address"],
+            "group_code_id": nft["nft_code_id"],
+            "group_checksum": nft["nft_checksum"],
+            "members": [
+                {"address": token["owner"], "weight": token["weight"]}
+                for token in nft["tokens"]
+            ],
+            "total_power": nft["total_power"],
+        }
+        cw4_observations = copy.deepcopy(verification["observations"])
+        cw4_observations["agent_membership_page"] = {
+            "members": [
+                {"addr": item["address"], "weight": item["weight"]}
+                for item in cw4_config["agent_operations"]["membership"]["members"]
+            ]
+        }
+        cw4_observations["agent_membership_page"]["members"][0]["weight"] = True
+        cw4_observations["agent_membership_tail"] = {"members": []}
+        cw4_observations["agent_nft_minter"] = None
+        cw4_observations["agent_nft_num_tokens"] = None
+        cw4_observations["agent_nft_token_info"] = {}
+        cw4_observations["agent_code_checksums"]["cw4_group"] = cw4_observations[
+            "agent_code_checksums"
+        ].pop("nft")
+        cw4_observations["agent_contract_info"]["cw4_group"] = cw4_observations[
+            "agent_contract_info"
+        ].pop("nft")
+        deploy.validate_config(cw4_config, self.root)
+        with self.assertRaises((deploy.ValidationError, RuntimeError)):
+            deploy.validate_verification_observations(
+                cw4_config,
+                verification["code_ids"],
+                verification["addresses"],
+                cw4_observations,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
