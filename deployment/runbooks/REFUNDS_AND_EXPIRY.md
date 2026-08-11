@@ -6,7 +6,9 @@ redirect bounty principal.
 ## Entering refunds
 
 An open bounty may enter refunds through expiry, sole-contributor cancellation,
-round exhaustion, or typed Agent Operations moderation. Before acting, query the
+round exhaustion, or typed Agent Operations moderation. A sole-confirmation
+round also enters refunds when anyone finalizes it at its bounded deadline or
+bounty expiry. Before acting, query the
 bounty, contributions, active round, pause state, and `Health`. Record the exact
 reason and actor.
 

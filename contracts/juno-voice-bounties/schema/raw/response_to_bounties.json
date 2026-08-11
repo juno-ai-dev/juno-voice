@@ -186,6 +186,7 @@
           "type": "string",
           "enum": [
             "expired",
+            "sole_confirmation_timeout",
             "round_limit"
           ]
         },
@@ -244,6 +245,9 @@
         "config_version",
         "max_bounty_total",
         "max_contributors",
+        "max_evidence_uri_bytes",
+        "max_rationale_bytes",
+        "max_reason_bytes",
         "max_rounds",
         "ratification_seconds",
         "summary",
@@ -274,6 +278,21 @@
           "$ref": "#/definitions/Uint128"
         },
         "max_contributors": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_evidence_uri_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_rationale_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "max_reason_bytes": {
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0

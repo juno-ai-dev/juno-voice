@@ -1,6 +1,6 @@
 # GOAL: build the Juno Voice v1 backend
 
-**Status:** In progress — local implementation complete; release gates pending
+**Status:** In progress — implemented locally but not release-approved or deployed
 
 **Scope owner:** Juno Voice backend
 
@@ -51,8 +51,11 @@ The result is backend-complete when the contracts, upstream gauge changes, schem
 contracts/juno-voice-bounties/       Juno Voice-owned bounty escrow
 contracts/hack-juno-registry-adapter/ Juno Voice-owned project registry and gauge adapter
 packages/                             shared Juno Voice types, if a real reuse boundary emerges
-schema/                               checked-in canonical Juno Voice schemas
+schema/                               canonical pre-release prototype schemas
+contracts/*/schema/                   canonical v1 owned-contract schemas
 deployment/                           validated configs, manifests, and orchestration
+integration/                          exact-artifact scenario capture and validation
+release/                              readiness, evidence, and release-decision gates
 artifacts/                            deterministic Juno Voice Wasm and checksums
 deps/dao-contracts/                   independently built upstream submodule
 ```
@@ -93,7 +96,8 @@ The implementation must enforce:
 - positive bounded contributions aggregated per address;
 - no live contribution withdrawal or transfer;
 - a snapshotted contributor set and weights when a nomination opens;
-- separate explicit confirmation for one contributor;
+- separate explicit confirmation for one contributor within a bounded deadline;
+- permissionless refund finalization for an unconfirmed sole round at its deadline or bounty expiry;
 - `closes_at = opens_at + 259_200 seconds` for multiple contributors;
 - no early finalization;
 - vote revision through checked removal/addition of the same fixed weight;
@@ -112,7 +116,7 @@ At minimum, automate:
 - creation amount, denomination, metadata, lifetime, and attached-funds bounds;
 - repeated and multi-address contributions and exact contributor counting;
 - immutable terms and frozen nomination round data;
-- sole confirmation, decline, expiry, and failed-transfer rollback;
+- sole confirmation, bounded-deadline decline, permissionless timeout/expiry refund, and failed-transfer rollback;
 - two or more contributors with unequal weights;
 - vote creation and every revision pair (`YES→NO`, `NO→YES`, and same-vote replacement policy);
 - rejection of non-contributor, zero-weight, late, and wrong-round votes;
@@ -363,6 +367,6 @@ The backend goal is complete only when all of the following are true:
 - [ ] Exact-artifact `uni-7` flows and maximum-bound gas evidence are published.
 - [ ] Independent security review has no unresolved critical/high findings.
 - [ ] Deployment, monitoring, pause, recovery, and submodule-update runbooks are usable.
-- [ ] No frontend, mainnet deployment, funding transfer, or prototype migration was smuggled into the goal.
+- [ ] The existing prototype frontend redesign remains outside v1 backend release approval; no v1 frontend release, mainnet deployment, funding transfer, or prototype state/fund migration is smuggled into the goal.
 
 Completion produces a backend release candidate and evidence packet. Uploading it to mainnet, assigning live admins, transferring community-pool funds, or enabling a production tranche requires a separate explicit authorization.

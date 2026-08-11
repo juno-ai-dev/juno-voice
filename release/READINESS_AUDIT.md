@@ -25,7 +25,7 @@ chain operations.
 | Exact-artifact `uni-7` flows and maximum gas evidence | Blocked by normative mismatch and authorization | Public `uni-7` uses `ujunox`, while both v1 contracts and deployment validation require exact `ujuno`. No authorized deployment/gas packet exists. |
 | Independent review with no unresolved critical/high findings | Blocked externally | Audit report, attestation, and finding dispositions are release-gate inputs and do not exist. |
 | Deployment, monitoring, pause, recovery, and submodule runbooks | Locally demonstrated; rehearsal pending | Six content-bound runbooks exist and the release gate requires each operational section. Mutable deployment state is explicitly kept outside the clean source checkout. Six public-testnet operational rehearsals and independent operations review remain external evidence gates. |
-| No out-of-scope frontend/mainnet/funding/migration work | Satisfied | No frontend, mainnet deployment, funding transfer, or prototype migration was performed. |
+| Scope boundaries for prototype frontend/mainnet/funding/migration | Satisfied | A prototype frontend redesign exists and remains explicitly pre-release and outside v1 backend approval. No v1 frontend release, mainnet deployment, funding transfer, or prototype state/fund migration was performed. |
 
 ## Local verification snapshot
 

@@ -1,7 +1,7 @@
 # Juno Voice backend architecture
 
-**Status:** Accepted architecture for Juno Voice v1; locally implemented,
-release gates pending
+**Status:** Accepted architecture for Juno Voice v1; implemented locally but
+not release-approved or deployed
 
 **Scope:** On-chain backend, deployment composition, and trust boundaries
 
@@ -95,7 +95,7 @@ Global configuration includes:
 - text, evidence, pagination, and batch-work limits; and
 - pause state that blocks only new economic activity.
 
-Configuration affecting a live bounty is copied into that bounty or round. Later governance changes cannot rewrite its electorate, deadline, or settlement rule.
+Configuration affecting a live bounty is copied into that bounty or round, including every metadata limit used by nomination, voting, decline, cancellation, and moderation. Later governance changes cannot rewrite its electorate, deadline, metadata bounds, or settlement rule.
 
 ### 5.2 Creation and contributions
 
@@ -123,7 +123,7 @@ Nomination freezes contributions and records a round snapshot: round number, nom
 
 ### 5.4 Sole-contributor settlement
 
-With exactly one contributor, nomination enters `SINGLE_CONFIRMATION`. The contributor must make a separate transaction to confirm or decline the exact recipient and evidence. Confirmation marks the bounty paid before emitting one bank send. Decline clears the nomination and reopens the bounty unless it has expired.
+With exactly one contributor, nomination enters `SINGLE_CONFIRMATION`. Its deadline is the earlier of bounty expiry and `opens_at + 259,200 seconds`. The contributor must make a separate transaction before that deadline to confirm the exact recipient and evidence; confirmation marks the bounty paid before emitting one bank send. The contributor may decline, clearing the nomination and reopening the bounty unless it has expired. At or after the deadline, any account may finalize the unconfirmed nomination into refunds while preserving the pending-liability accounting transition. The refund reason is `EXPIRED` when bounty expiry has also been reached and `SOLE_CONFIRMATION_TIMEOUT` otherwise.
 
 ### 5.5 Multi-contributor ratification
 
@@ -165,9 +165,10 @@ A reset preserves contributions and reopens top-ups. If expiry has passed, it en
 ### 5.7 Bounty state machine
 
 ```text
-CREATE ──► OPEN ──► SINGLE_CONFIRMATION ──confirm──► PAID
+CREATE ──► OPEN ──► SINGLE_CONFIRMATION ──confirm before deadline──► PAID
               ▲              │
-              └────decline───┘
+              └────decline───┤
+                             └──deadline/expiry finalize──► REFUNDING
               │
               └──► RATIFYING ──YES wins after 72h──► PAID
                         │
