@@ -2122,6 +2122,22 @@ class ReleaseEvidenceTests(unittest.TestCase):
             verification["observations"],
         )
 
+    def test_verification_accepts_canonicalized_decimal_observations(self):
+        verification = json.loads(
+            (self.root / "deployment" / "verification.json").read_text()
+        )
+        verification["observations"]["registry_config"]["max_project_share"] = "0.2"
+        verification["observations"]["gauge_state"][
+            "max_available_percentage"
+        ] = "0.2"
+
+        deploy.validate_verification_observations(
+            self.config,
+            verification["code_ids"],
+            verification["addresses"],
+            verification["observations"],
+        )
+
     def test_verification_rejects_boolean_agent_numeric_observations(self):
         verification = json.loads(
             (self.root / "deployment" / "verification.json").read_text()

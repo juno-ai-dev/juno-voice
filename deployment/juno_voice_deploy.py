@@ -141,6 +141,11 @@ def _decimal(value: Any, path: str, *, allow_zero: bool = True) -> Decimal:
     return result
 
 
+def _canonical_fraction(value: Any, path: str) -> str:
+    """Normalize equivalent on-chain decimal encodings before comparison."""
+    return format(_decimal(value, path).normalize(), "f")
+
+
 # Minimal BIP-0173 implementation. Juno accepts 20-byte account/module
 # addresses and 32-byte instantiate2 contract addresses.
 _BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
@@ -1934,7 +1939,15 @@ def validate_verification_observations(
     if not isinstance(registry, dict):
         _fail("verification.observations.registry_config", "must be an object")
     for field, expected in messages["registry"].items():
-        expect(f"registry_config.{field}", registry.get(field), expected)
+        path = f"registry_config.{field}"
+        if field in ("min_project_share", "max_project_share"):
+            expect(
+                path,
+                _canonical_fraction(registry.get(field), path),
+                _canonical_fraction(expected, path),
+            )
+        else:
+            expect(path, registry.get(field), expected)
     expect(
         "registry_config.max_active_projects",
         registry.get("max_active_projects"),
@@ -1965,7 +1978,15 @@ def validate_verification_observations(
         "max_available_percentage",
         "snapshot_policy",
     ):
-        expect(f"gauge_state.{field}", gauge_state.get(field), expected_gauge[field])
+        path = f"gauge_state.{field}"
+        if field in ("min_percent_selected", "max_available_percentage"):
+            expect(
+                path,
+                _canonical_fraction(gauge_state.get(field), path),
+                _canonical_fraction(expected_gauge[field], path),
+            )
+        else:
+            expect(path, gauge_state.get(field), expected_gauge[field])
 
     agent = config["agent_operations"]
     agent_core = observations["agent_core_state"]
@@ -2207,7 +2228,16 @@ def verify_deployment(
     registry_config = junod.smart(addresses["registry"], {"config": {}})
     expected_registry = instantiate_messages(config, code_ids)["registry"]
     for field, expected in expected_registry.items():
-        _expect_equal(checks, f"registry:{field}", registry_config.get(field), expected)
+        path = f"registry:{field}"
+        if field in ("min_project_share", "max_project_share"):
+            _expect_equal(
+                checks,
+                path,
+                _canonical_fraction(registry_config.get(field), path),
+                _canonical_fraction(expected, path),
+            )
+        else:
+            _expect_equal(checks, path, registry_config.get(field), expected)
     _expect_equal(
         checks,
         "registry:max_active_projects",
@@ -2238,7 +2268,16 @@ def verify_deployment(
         "snapshot_policy": expected_gauge["snapshot_policy"],
     }
     for field, expected in gauge_fields.items():
-        _expect_equal(checks, f"gauge:{field}", gauge_state.get(field), expected)
+        path = f"gauge:{field}"
+        if field in ("min_percent_selected", "max_available_percentage"):
+            _expect_equal(
+                checks,
+                path,
+                _canonical_fraction(gauge_state.get(field), path),
+                _canonical_fraction(expected, path),
+            )
+        else:
+            _expect_equal(checks, path, gauge_state.get(field), expected)
 
     agent = config["agent_operations"]
     agent_core = junod.smart(agent["core_address"], {"dump_state": {}})
