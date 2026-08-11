@@ -24,7 +24,9 @@ This keeps routine work fast while preserving contributor custody and Juno-wide 
 
 ## Release status
 
-The v1 backend is an accepted design and is **not yet implemented or deployed**. [GOAL.md](GOAL.md) defines the backend-only implementation scope and completion criteria. The detailed protocol is specified in:
+The v1 backend is **implemented locally but not yet release-approved or
+deployed**. [GOAL.md](GOAL.md) defines the backend-only scope and remaining
+completion gates. The detailed protocol is specified in:
 
 - [Backend architecture](docs/architecture/ARCHITECTURE.md)
 - [Incentives and governance report](docs/design/INCENTIVES_AND_GOVERNANCE.md)

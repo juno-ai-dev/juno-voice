@@ -52,7 +52,7 @@ release decision remains the fail-closed validator in `release_manifest.py`.
 | Guardian stop-only and governor resume/update | Separate authenticated stop and owner-only resume; open epoch locks selection config | `snapshot_mode_rejects_hooks_and_guardian_can_stop_but_not_resume`, `snapshot_policy_updates_are_future_only_and_selection_config_locks_while_open` | Local |
 | Option, selected-set, hook, message, and arithmetic bounds | Gauge/options/messages/hook inputs use hard caps and lookahead rejection | `snapshot_open_and_execution_enforce_option_and_message_bounds_atomically`, `attachment_accepts_one_hundred_options_and_rejects_lookahead_101_atomically`, `execution_rejects_overlong_adapter_message_list_without_advancing_epoch`, `power_hooks_reject_oversized_batches_before_mutating_state`, `power_change_votes_enforces_complete_iteration_boundary` | Local |
 | Adapter failure, status change between vote/execution, and atomic rollback | Adapter is queried at execution; state commits follow fallible external reads | `adapter_failure_leaves_epoch_open_and_cleanup_makes_bounded_progress`, `suspended_project_between_ballot_and_execution_receives_nothing` | Local |
-| Upstream acceptance, full upstream checks, clean gitlink, and manifest commit binding | Gauge changes are committed locally as `06cc36c2a200ec62abd8d27052918c4067d9c2ba`, and the parent gitlink pins that exact commit. CI defines the full pinned workspace check. Release validation requires a signed upstream attestation binding repository, immutable commit, review URL, acceptor, and acceptance time, and the final signed decision binds its hash | Requires push, upstream maintainer review/acceptance, and the signed attestation | Gate |
+| Upstream acceptance, full upstream checks, clean gitlink, and manifest commit binding | Gauge changes were accepted in [juno-ai-dev/dao-contracts#5](https://github.com/juno-ai-dev/dao-contracts/pull/5), and the parent gitlink pins merge commit `6b5e4a7aa4252a0bc59b32c2c58032ed5b0a913f`. CI defines the full pinned workspace check. Release validation requires a signed upstream attestation binding repository, immutable commit, review URL, acceptor, and acceptance time, and the final signed decision binds its hash | Upstream acceptance complete; full pinned CI and signed attestation remain Gate inputs | Gate |
 
 ## Bounded-work inventory
 
@@ -85,8 +85,8 @@ release decision remains the fail-closed validator in `release_manifest.py`.
 
 1. Resolve the normative denomination mismatch: reachable Juno v30 `uni-7`
    uses `ujunox`, while the current v1 artifacts require `ujuno`.
-2. Push the pinned gauge commit, obtain upstream acceptance, run the full
-   pinned upstream checks, and record the signed acceptance attestation.
+2. Run the full pinned upstream checks for the accepted merge commit and record
+   the signed acceptance attestation for `juno-ai-dev/dao-contracts#5`.
 3. Run the two-clean-clone deterministic build and publish its exact artifacts
    and build manifest.
 4. Complete an independent security review and resolve/disposition its findings.
