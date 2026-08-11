@@ -1,16 +1,20 @@
-import { render, screen } from '@testing-library/react';
-import axe from 'axe-core';
-import { describe, expect, it, vi } from 'vitest';
-import { Ledger } from './Ledger';
-import { config, detail, ledger } from './test/fixtures';
-
-const source = { loadLedger: vi.fn().mockResolvedValue(ledger), loadDetail: vi.fn().mockResolvedValue(detail) };
-
-describe('accessibility smoke', () => {
-  it('has no detectable serious or critical ledger violations', async () => {
-    const { container } = render(<Ledger source={source} config={config} onOpen={vi.fn()} />);
-    await screen.findByRole('heading', { name: 'Signal ledger' });
-    const results = await axe.run(container, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] }, rules: { 'color-contrast': { enabled: false } } });
-    expect(results.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))).toEqual([]);
+import { render, screen } from "@testing-library/react";
+import axe from "axe-core";
+import { describe, expect, it } from "vitest";
+import { Ledger } from "./Ledger";
+import { config, ledger } from "./test/bountyFixtures";
+describe("accessibility", () => {
+  it("has no WCAG A/AA violations including contrast", async () => {
+    const { container } = render(
+      <Ledger
+        config={config}
+        source={{ loadLedger: () => Promise.resolve(ledger) }}
+      />,
+    );
+    await screen.findByRole("heading", { name: "Bounties" });
+    const result = await axe.run(container, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+    });
+    expect(result.violations).toEqual([]);
   });
 });

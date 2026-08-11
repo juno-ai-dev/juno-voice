@@ -1,26 +1,43 @@
-import { useEffect, useMemo, useState } from 'react';
-import { createDataSource, type VoiceDataSource } from './client';
-import type { AppConfig } from './config';
-import { Detail } from './Detail';
-import { Ledger } from './Ledger';
-import { PublicTransactions, WalletConnection, type TransactionReceipt } from './wallet';
-import { TransactionReceiptView, WalletButton } from './WalletActions';
-
-function route(): number | null { const match = window.location.pathname.match(/^\/requests\/(\d+)\/?$/); return match ? Number(match[1]) : null; }
-export function App({ source: suppliedSource, config }: { source?: VoiceDataSource; config: AppConfig }) {
-  const source = useMemo(() => suppliedSource ?? createDataSource(config), [suppliedSource, config]);
-  const wallet = useMemo(() => new WalletConnection(config), [config]);
-  const transactions = useMemo(() => new PublicTransactions(config, { config: () => source.loadContractConfig ? source.loadContractConfig() : Promise.reject(new Error('Write queries unavailable.')), request: (id) => source.loadRequest ? source.loadRequest(id) : Promise.reject(new Error('Write queries unavailable.')) }, wallet), [config, source, wallet]);
-  const [account, setAccount] = useState<string|null>(null);
-  const [refresh, setRefresh] = useState(0);
-  const [receipt, setReceipt] = useState<TransactionReceipt|null>(null);
-  useEffect(() => {
-    const unsubscribe=wallet.onChange(() => setAccount(null));
-    return () => {unsubscribe();wallet.disconnect()};
-  }, [wallet]);
-  const [requestId, setRequestId] = useState(route);
-  useEffect(() => { const update = () => setRequestId(route()); window.addEventListener('popstate', update); return () => window.removeEventListener('popstate', update); }, []);
-  const navigate = (id: number | null) => { window.history.pushState({}, '', id === null ? '/' : `/requests/${id}`); setRequestId(id); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  const accepted=(value:TransactionReceipt)=>{setReceipt(value);setRefresh(current=>current+1)};
-  return <div className="shell grid"><header className="topbar"><div className="topbar-inner"><a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate(null); }}><img src="/assets/logo-salmon.svg" alt="" /><img src="/assets/wordmark-salmon.svg" alt="Juno" /><span>VOICE</span></a><div className="top-actions"><span className="testnet">UNI-7 TESTNET</span><WalletButton wallet={wallet} account={account} onAccount={setAccount}/></div></div></header>{receipt&&<div className="durable-receipt"><TransactionReceiptView receipt={receipt}/></div>}{requestId === null ? <Ledger refreshToken={refresh} source={source} config={config} account={account} transactions={transactions} onSuccess={accepted} onOpen={(id) => navigate(id)} /> : <Detail refreshToken={refresh} source={source} config={config} id={requestId} account={account} transactions={transactions} onSuccess={accepted} onBack={() => navigate(null)} />}<footer><p>Non-binding prioritization · Reads directly from uni-7 · Wallet required only to submit or claim a refund</p><p>Juno Design System <a href="https://github.com/juno-ai-dev/juno-design-system/commit/0dc0ae9">0dc0ae9</a> · MIT</p></footer></div>;
+import { useMemo } from "react";
+import { createDataSource, type VoiceDataSource } from "./client";
+import type { AppConfig } from "./config";
+import { Ledger } from "./Ledger";
+export function App({
+  source: supplied,
+  config,
+}: {
+  source?: VoiceDataSource;
+  config: AppConfig;
+}) {
+  const source = useMemo(
+    () => supplied ?? createDataSource(config),
+    [supplied, config],
+  );
+  return (
+    <div className="shell juno-grid">
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a className="brand" href="/">
+            <img src="/assets/logo-salmon.svg" alt="" />
+            <img src="/assets/wordmark-salmon.svg" alt="Juno" />
+            <span>VOICE</span>
+          </a>
+          <span className="mainnet">JUNO-1 · READ ONLY</span>
+        </div>
+      </header>
+      <Ledger source={source} config={config} />
+      <footer>
+        <p>
+          Read-only mainnet observation · No wallet or transaction capabilities
+        </p>
+        <p>
+          Juno Design System{" "}
+          <a href="https://github.com/juno-ai-dev/juno-design-system/commit/0dc0ae9ae80e0378b61fc9f67cbf417f291d6f16">
+            0dc0ae9
+          </a>{" "}
+          · MIT
+        </p>
+      </footer>
+    </div>
+  );
 }

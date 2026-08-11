@@ -1,0 +1,13 @@
+/* ============================================================
+   JUNO NETWORK — FONTS
+   Gotham Medium is the licensed wordmark face. It is NOT bundled
+   here (proprietary). Montserrat is the nearest free geometric
+   grotesque surrogate for display/UI; Space Mono carries the
+   technical/annotation voice. Swap in licensed Gotham for
+   production wordmark use.
+
+   Fonts are loaded from Google Fonts so consumer cards render
+   without local binaries. Self-host for production.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');

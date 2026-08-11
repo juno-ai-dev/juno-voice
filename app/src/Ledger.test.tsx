@@ -1,56 +1,113 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import { Ledger } from './Ledger';
-import { config, ledger } from './test/fixtures';
-
-describe('live ledger states', () => {
-  it('renders loading then real response data, chain facts, and freshness', async () => {
-    let resolve!: (value: typeof ledger) => void;
-    const loadLedger = vi.fn(() => new Promise<typeof ledger>((done) => { resolve = done; }));
-    render(<Ledger config={config} source={{ loadLedger, loadDetail: vi.fn() }} onOpen={vi.fn()} />);
-    expect(screen.getByText(/Receiving uni-7 signal/)).toBeInTheDocument();
-    resolve({ ...ledger, refreshedAt: new Date() });
-    expect(await screen.findByText('Real RPC feature')).toBeInTheDocument();
-    expect(screen.getByText('Fresh direct-RPC data')).toBeInTheDocument();
-    expect(screen.getAllByText('uni-7').length).toBeGreaterThan(0);
-    expect(screen.getByText('85')).toBeInTheDocument();
-    expect(screen.getByText('JUNOX')).toBeInTheDocument();
-    expect(screen.getAllByText('1 JUNOX')).toHaveLength(2);
-    expect(screen.getByText('+0.004 JUNOX')).toBeInTheDocument();
-    expect(screen.getByText('0.0042 JUNOX support')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /net signal \+0\.004 JUNOX/ })).toBeInTheDocument();
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { Ledger } from "./Ledger";
+import { config, ledger } from "./test/bountyFixtures";
+const source = (value = ledger) => ({
+  loadLedger: vi.fn().mockResolvedValue(value),
+});
+describe("read-only bounty ledger states", () => {
+  it("renders loading, mainnet provenance, health, economics, and a bounty", async () => {
+    let done!: (v: typeof ledger) => void;
+    render(
+      <Ledger
+        config={config}
+        source={{
+          loadLedger: () =>
+            new Promise((r) => {
+              done = r;
+            }),
+        }}
+      />,
+    );
+    expect(
+      screen.getByText("Loading mainnet bounty ledger…"),
+    ).toBeInTheDocument();
+    done(ledger);
+    expect(
+      await screen.findByText("Fund public goods tooling"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("juno-1")).toBeInTheDocument();
+    expect(screen.getByText("5150")).toBeInTheDocument();
+    expect(screen.getByText("Fully backed")).toBeInTheDocument();
+    expect(screen.getAllByText("1 JUNO").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
-  it('renders stale and search-filtered states', async () => {
-    const source = { loadLedger: vi.fn().mockResolvedValue({ ...ledger, refreshedAt: new Date(0) }), loadDetail: vi.fn() };
-    render(<Ledger config={config} source={source} onOpen={vi.fn()} />);
-    expect(await screen.findByText('Real RPC feature')).toBeInTheDocument();
-    await userEvent.type(screen.getByRole('searchbox'), 'does-not-exist');
-    expect(screen.getByText('No matching signal')).toBeInTheDocument();
+  it("shows authoritative empty state without samples", async () => {
+    render(
+      <Ledger config={config} source={source({ ...ledger, bounties: [] })} />,
+    );
+    expect(
+      await screen.findByText("No on-chain bounties yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No sample or demo records are shown/),
+    ).toBeInTheDocument();
+  });
+  it("renders paused, degraded, filtered, and stale states", async () => {
+    render(
+      <Ledger
+        config={config}
+        source={source({
+          ...ledger,
+          pause: {
+            paused: true,
+            reason: "maintenance",
+            actor: "juno1agent",
+            changed_at: "1",
+          },
+          health: { ...ledger.health, fully_backed: false },
+          refreshedAt: new Date(0),
+        })}
+      />,
+    );
+    expect(
+      await screen.findByText(/New activity is paused/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Accounting degraded/)).toBeInTheDocument();
     expect(screen.getByText(/Stale/)).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox"), "missing");
+    expect(screen.getByText("No matching bounties")).toBeInTheDocument();
   });
-  it('keeps every lifecycle status in one compact filter', async () => {
-    const source = { loadLedger: vi.fn().mockResolvedValue(ledger), loadDetail: vi.fn() };
-    render(<Ledger config={config} source={source} onOpen={vi.fn()} />);
-    const status = await screen.findByRole('combobox', { name: 'Status' });
-    expect(screen.getAllByRole('option')).toHaveLength(11);
-    await userEvent.selectOptions(status, 'open');
-    expect(screen.getByText('No matching signal')).toBeInTheDocument();
-    await userEvent.selectOptions(status, 'qualified');
-    expect(screen.getByText('Real RPC feature')).toBeInTheDocument();
+  it("renders canonical project and refund context", async () => {
+    render(
+      <Ledger
+        config={config}
+        source={source({
+          ...ledger,
+          bounties: [
+            {
+              ...ledger.bounties[0],
+              status: "refunding",
+              project_candidate: {
+                project_id: "voice-ui",
+                metadata_uri: "https://example.invalid/voice-ui.json",
+                metadata_digest: "ab".repeat(32),
+              },
+              refund_reason: { cancelled: { reason: "scope changed" } },
+            },
+          ],
+        })}
+      />,
+    );
+    expect(
+      await screen.findByText("Project candidate · voice-ui"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Refund: Cancelled · scope changed"),
+    ).toBeInTheDocument();
   });
-  it('renders an authoritative empty contract state', async () => {
-    const ranked = Object.fromEntries(Object.keys(ledger.ranked).map((key) => [key, []])) as unknown as typeof ledger.ranked;
-    const source = { loadLedger: vi.fn().mockResolvedValue({ ...ledger, requests: [], ranked }), loadDetail: vi.fn() };
-    render(<Ledger config={config} source={source} onOpen={vi.fn()} />);
-    expect(await screen.findByText('No on-chain requests yet')).toBeInTheDocument();
-  });
-  it('shows RPC error and retries', async () => {
-    const loadLedger = vi.fn().mockRejectedValueOnce(new Error('connection refused')).mockResolvedValue({ ...ledger, refreshedAt: new Date() });
-    render(<Ledger config={config} source={{ loadLedger, loadDetail: vi.fn() }} onOpen={vi.fn()} />);
-    expect(await screen.findByText('connection refused')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Retry query' }));
-    expect(await screen.findByText('Real RPC feature')).toBeInTheDocument();
+  it("shows errors and retries", async () => {
+    const loadLedger = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("RPC offline"))
+      .mockResolvedValue(ledger);
+    render(<Ledger config={config} source={{ loadLedger }} />);
+    expect(await screen.findByText("RPC offline")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry query" }));
+    expect(
+      await screen.findByText("Fund public goods tooling"),
+    ).toBeInTheDocument();
     expect(loadLedger).toHaveBeenCalledTimes(2);
   });
 });
