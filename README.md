@@ -29,6 +29,7 @@ deployed**. [GOAL.md](GOAL.md) defines the backend-only scope and remaining
 completion gates. The detailed protocol is specified in:
 
 - [Backend architecture](docs/architecture/ARCHITECTURE.md)
+- [UX contract interface freeze](docs/UX_CONTRACT_INTERFACE_FREEZE.md)
 - [Incentives and governance report](docs/design/INCENTIVES_AND_GOVERNANCE.md)
 - [Product behavior](docs/design/PRODUCT_DESIGN.md)
 - [Architecture decisions](docs/architecture/decisions/)
