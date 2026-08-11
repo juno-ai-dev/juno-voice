@@ -1,3 +1,7 @@
 [workspace]
-members = ["contracts/juno-voice"]
+members = [
+  "contracts/juno-voice",
+  "contracts/juno-voice-bounties",
+  "contracts/hack-juno-registry-adapter",
+]
 resolver = "2"

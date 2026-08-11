@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ErrorCatalogResponse",
+  "type": "object",
+  "required": [
+    "codes"
+  ],
+  "properties": {
+    "codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ErrorCode"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "unauthorized",
+        "unexpected_funds",
+        "invalid_funds",
+        "invalid_configuration",
+        "invalid_metadata",
+        "not_found",
+        "invalid_state",
+        "paused",
+        "expired",
+        "not_expired",
+        "contribution_limit",
+        "round_limit",
+        "wrong_round",
+        "not_contributor",
+        "voting_closed",
+        "ratification_open",
+        "already_claimed",
+        "not_refundable",
+        "not_project_candidate",
+        "already_graduated",
+        "arithmetic"
+      ]
+    }
+  }
+}
