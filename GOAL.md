@@ -28,7 +28,7 @@ The result is backend-complete when the contracts, upstream gauge changes, schem
 - A new `juno-voice-bounties` CosmWasm contract.
 - A new `hack-juno-registry-adapter` CosmWasm contract.
 - Upstream `dao-contracts` changes adding epoch-snapshot gauge power, turnout accounting, and stop-only guardian behavior.
-- Independent integration with pinned `dao-dao-core`, `dao-voting-juno-staked`, proposal/CW4 components for Agent Operations, and the gauge stack.
+- Independent integration with pinned `dao-dao-core`, `dao-voting-juno-staked`, reviewed proposal/membership components for Agent Operations, and the gauge stack.
 - Versioned JSON schemas, stable events, bounded queries, and deployment configuration.
 - Deterministic Wasm builds and a release manifest binding source to deployed identities.
 - Unit, model, property, integration, gas, and exact-artifact `uni-7` testing.
@@ -274,7 +274,7 @@ The orchestration must support dry-run/message generation separately from broadc
 
 ### D3. Agent Operations DAO
 
-Use one reusable DAO with public on-chain proposals and a reviewed CW4 membership/threshold, either newly instantiated from the pinned source or bound through an explicit deployment record. Its executable permissions are limited by the bounty, registry, and gauge message APIs; membership alone grants no contract authority.
+Use one reusable DAO with public on-chain proposals and a reviewed CW4 or CW721-roles membership/threshold, either newly instantiated from the pinned source or bound through an explicit deployment record. Its executable permissions are limited by the bounty, registry, and gauge message APIs; membership alone grants no contract authority.
 
 The deployment record must disclose members, threshold, voting duration, core/proposal/voting code identities, and every assigned role.
 

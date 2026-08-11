@@ -436,55 +436,121 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
             "proposal_module_address",
             "proposal_code_id",
             "proposal_checksum",
-            "cw4_group_address",
-            "cw4_group_code_id",
-            "cw4_group_checksum",
-            "members",
-            "threshold_weight",
-            "voting_duration_seconds",
+            "membership",
+            "proposal",
             "review_reference",
         ),
     )
     if agent["mode"] != "bind_reviewed":
         _fail("agent_operations.mode", "v1 supports only an explicitly reviewed bound DAO")
-    for field in (
-        "core_address",
-        "voting_module_address",
-        "proposal_module_address",
-        "cw4_group_address",
-    ):
+    for field in ("core_address", "voting_module_address", "proposal_module_address"):
         decode_address(agent[field], prefix, f"agent_operations.{field}")
-    for field in ("core_code_id", "voting_code_id", "proposal_code_id", "cw4_group_code_id"):
+    for field in ("core_code_id", "voting_code_id", "proposal_code_id"):
         _uint(agent[field], f"agent_operations.{field}", positive=True)
-    for field in ("core_checksum", "voting_checksum", "proposal_checksum", "cw4_group_checksum"):
+    for field in ("core_checksum", "voting_checksum", "proposal_checksum"):
         if not HEX_64.fullmatch(_string(agent[field], f"agent_operations.{field}")):
             _fail(f"agent_operations.{field}", "must be 64 lowercase hex characters")
-    if not isinstance(agent["members"], list) or not agent["members"]:
-        _fail("agent_operations.members", "must disclose at least one member")
-    if len(agent["members"]) > MAX_AGENT_MEMBERS:
+
+    membership = agent["membership"]
+    if not isinstance(membership, dict):
+        _fail("agent_operations.membership", "must be an object")
+    kind = membership.get("kind")
+    if kind == "cw4":
+        membership = _object(
+            membership,
+            "agent_operations.membership",
+            ("kind", "group_address", "group_code_id", "group_checksum", "members", "total_power"),
+        )
+        address_field, code_field, checksum_field, items_field = (
+            "group_address", "group_code_id", "group_checksum", "members"
+        )
+    elif kind == "cw721_roles":
+        membership = _object(
+            membership,
+            "agent_operations.membership",
+            ("kind", "nft_address", "nft_code_id", "nft_checksum", "minter", "tokens", "total_power"),
+        )
+        address_field, code_field, checksum_field, items_field = (
+            "nft_address", "nft_code_id", "nft_checksum", "tokens"
+        )
+        decode_address(membership["minter"], prefix, "agent_operations.membership.minter")
+        if membership["minter"] != agent["core_address"]:
+            _fail("agent_operations.membership.minter", "must equal the reviewed DAO core")
+    else:
+        _fail("agent_operations.membership.kind", "must be 'cw4' or 'cw721_roles'")
+    decode_address(membership[address_field], prefix, f"agent_operations.membership.{address_field}")
+    _uint(membership[code_field], f"agent_operations.membership.{code_field}", positive=True)
+    if not HEX_64.fullmatch(_string(membership[checksum_field], f"agent_operations.membership.{checksum_field}")):
+        _fail(f"agent_operations.membership.{checksum_field}", "must be 64 lowercase hex characters")
+    items = membership[items_field]
+    if not isinstance(items, list) or not items:
+        _fail(f"agent_operations.membership.{items_field}", "must disclose at least one item")
+    if len(items) > MAX_AGENT_MEMBERS:
         _fail(
-            "agent_operations.members",
+            f"agent_operations.membership.{items_field}",
             f"must not exceed the verifier's bounded maximum of {MAX_AGENT_MEMBERS}",
         )
     total_weight = 0
-    seen_members: set[bytes] = set()
-    for index, member in enumerate(agent["members"]):
-        member = _object(member, f"agent_operations.members[{index}]", ("address", "weight"))
-        raw = decode_address(member["address"], prefix, f"agent_operations.members[{index}].address")
-        if raw in seen_members:
-            _fail(f"agent_operations.members[{index}].address", "is duplicated")
-        seen_members.add(raw)
-        total_weight += _uint(member["weight"], f"agent_operations.members[{index}].weight", positive=True)
-    threshold = _uint(agent["threshold_weight"], "agent_operations.threshold_weight", positive=True)
-    if threshold > total_weight:
-        _fail("agent_operations.threshold_weight", "must not exceed disclosed member weight")
+    seen_ids: set[Any] = set()
+    for index, item in enumerate(items):
+        item_path = f"agent_operations.membership.{items_field}[{index}]"
+        required = ("address", "weight") if kind == "cw4" else ("token_id", "owner", "role", "weight")
+        item = _object(item, item_path, required)
+        identity = decode_address(item["address"], prefix, f"{item_path}.address") if kind == "cw4" else _string(item["token_id"], f"{item_path}.token_id")
+        if kind == "cw721_roles" and len(identity) > 256:
+            _fail(f"{item_path}.token_id", "must not exceed 256 characters")
+        if identity in seen_ids:
+            _fail(item_path, "has a duplicated address or token ID")
+        seen_ids.add(identity)
+        if kind == "cw721_roles":
+            decode_address(item["owner"], prefix, f"{item_path}.owner")
+            role = _string(item["role"], f"{item_path}.role")
+            if len(role) > 128:
+                _fail(f"{item_path}.role", "must not exceed 128 characters")
+        total_weight += _uint(item["weight"], f"{item_path}.weight", positive=True)
+    disclosed_total = _uint(membership["total_power"], "agent_operations.membership.total_power", positive=True)
+    if disclosed_total != total_weight:
+        _fail("agent_operations.membership.total_power", "must equal the exhaustive disclosed item weights")
+
+    proposal = _object(
+        agent["proposal"],
+        "agent_operations.proposal",
+        ("threshold", "voting_duration_seconds"),
+    )
+    threshold = proposal["threshold"]
+    if not isinstance(threshold, dict):
+        _fail("agent_operations.proposal.threshold", "must be an object")
+    threshold_kind = threshold.get("kind")
+    if threshold_kind == "absolute_count":
+        threshold = _object(threshold, "agent_operations.proposal.threshold", ("kind", "weight"))
+        threshold_weight = _uint(threshold["weight"], "agent_operations.proposal.threshold.weight", positive=True)
+        if threshold_weight > total_weight:
+            _fail("agent_operations.proposal.threshold.weight", "must not exceed disclosed total power")
+    elif threshold_kind == "threshold_quorum":
+        threshold = _object(
+            threshold,
+            "agent_operations.proposal.threshold",
+            ("kind", "threshold", "quorum"),
+        )
+        if threshold["threshold"] != "majority":
+            _fail("agent_operations.proposal.threshold.threshold", "must equal 'majority'")
+        _decimal(threshold["quorum"], "agent_operations.proposal.threshold.quorum", allow_zero=False)
+    else:
+        _fail("agent_operations.proposal.threshold.kind", "must be 'absolute_count' or 'threshold_quorum'")
+    if not isinstance(proposal["voting_duration_seconds"], int) or isinstance(
+        proposal["voting_duration_seconds"], bool
+    ):
+        _fail(
+            "agent_operations.proposal.voting_duration_seconds",
+            "must be an integer",
+        )
     duration = _uint(
-        agent["voting_duration_seconds"],
-        "agent_operations.voting_duration_seconds",
+        proposal["voting_duration_seconds"],
+        "agent_operations.proposal.voting_duration_seconds",
         positive=True,
     )
     if duration > 30 * 24 * 60 * 60:
-        _fail("agent_operations.voting_duration_seconds", "must not exceed 30 days")
+        _fail("agent_operations.proposal.voting_duration_seconds", "must not exceed 30 days")
     _validate_repository_file_ref(
         agent["review_reference"],
         "agent_operations.review_reference",
@@ -1626,6 +1692,43 @@ def _contract_code_id(info: dict[str, Any]) -> int:
     return _uint(value, "contract_info.code_id", positive=True)
 
 
+def _agent_membership_spec(agent: dict[str, Any]) -> tuple[str, str, int, str]:
+    membership = agent["membership"]
+    if membership["kind"] == "cw4":
+        return (
+            "cw4_group",
+            membership["group_address"],
+            _uint(
+                membership["group_code_id"],
+                "agent_operations.membership.group_code_id",
+                positive=True,
+            ),
+            membership["group_checksum"],
+        )
+    return (
+        "nft",
+        membership["nft_address"],
+        _uint(
+            membership["nft_code_id"],
+            "agent_operations.membership.nft_code_id",
+            positive=True,
+        ),
+        membership["nft_checksum"],
+    )
+
+
+def _agent_proposal_threshold(agent: dict[str, Any]) -> dict[str, Any]:
+    threshold = agent["proposal"]["threshold"]
+    if threshold["kind"] == "absolute_count":
+        return {"absolute_count": {"threshold": str(threshold["weight"])}}
+    return {
+        "threshold_quorum": {
+            "threshold": {"majority": {}},
+            "quorum": {"percent": threshold["quorum"]},
+        }
+    }
+
+
 def expected_verification_checks(
     config: dict[str, Any], code_ids: dict[str, int]
 ) -> list[str]:
@@ -1686,19 +1789,29 @@ def expected_verification_checks(
             "snapshot_policy",
         )
     )
+    agent = config["agent_operations"]
+    membership_kind = agent["membership"]["kind"]
     checks.extend(
         (
             "agent:voting_module",
             "agent:sole_proposal_module",
-            "agent:cw4_group",
-            "agent:members",
-            "agent:members_exhausted",
+            "agent:membership_contract",
+            "agent:membership_items",
+            "agent:membership_exhausted",
+            "agent:total_power",
             "agent:proposal_dao",
             "agent:threshold",
             "agent:voting_duration",
         )
     )
-    for label in ("core", "voting", "proposal", "cw4_group"):
+    if membership_kind == "cw721_roles":
+        checks.extend(("agent:nft_minter", "agent:nft_token_count"))
+        checks.extend(
+            f"agent:nft_token:{item['token_id']}"
+            for item in agent["membership"]["tokens"]
+        )
+    membership_label = _agent_membership_spec(agent)[0]
+    for label in ("core", "voting", "proposal", membership_label):
         checks.extend((f"agent:{label}:code_id", f"agent:{label}:checksum"))
     return checks
 
@@ -1722,9 +1835,13 @@ def validate_verification_observations(
             "gauge_config",
             "gauge_state",
             "agent_core_state",
-            "agent_voting_group",
-            "agent_members",
-            "agent_members_tail",
+            "agent_membership_contract",
+            "agent_membership_page",
+            "agent_membership_tail",
+            "agent_total_power",
+            "agent_nft_minter",
+            "agent_nft_num_tokens",
+            "agent_nft_token_info",
             "agent_proposal_config",
             "agent_code_checksums",
             "agent_contract_info",
@@ -1871,74 +1988,149 @@ def validate_verification_observations(
         ],
         [agent["proposal_module_address"]],
     )
+    membership = agent["membership"]
+    membership_label, membership_address, membership_code_id, membership_checksum = _agent_membership_spec(agent)
+    expect("agent_membership_contract", observations["agent_membership_contract"], membership_address)
     expect(
-        "agent_voting_group",
-        observations["agent_voting_group"],
-        agent["cw4_group_address"],
+        "agent_total_power",
+        observations["agent_total_power"],
+        {"power": str(membership["total_power"])},
     )
-    members = observations["agent_members"]
-    if not isinstance(members, dict) or not isinstance(members.get("members"), list):
-        _fail("verification.observations.agent_members", "must contain a members array")
-    actual_members = sorted(
-        (
-            {"address": item.get("addr"), "weight": item.get("weight")}
-            for item in members["members"]
-            if isinstance(item, dict)
-        ),
-        key=lambda item: item["address"],
-    )
-    expect(
-        "agent_members",
-        actual_members,
-        sorted(agent["members"], key=lambda item: item["address"]),
-    )
-    tail = observations["agent_members_tail"]
-    if not isinstance(tail, dict) or not isinstance(tail.get("members"), list):
-        _fail("verification.observations.agent_members_tail", "must contain a members array")
-    expect("agent_members_tail", tail["members"], [])
+    page = observations["agent_membership_page"]
+    tail = observations["agent_membership_tail"]
+    if membership["kind"] == "cw4":
+        if not isinstance(page, dict) or not isinstance(page.get("members"), list):
+            _fail("verification.observations.agent_membership_page", "must contain a members array")
+        actual_items = sorted(
+            (
+                {
+                    "address": item.get("addr"),
+                    "weight": _uint(
+                        item.get("weight"),
+                        "verification.observations.agent_membership_page.members.weight",
+                        positive=True,
+                    ),
+                }
+                for item in page["members"]
+                if isinstance(item, dict)
+            ),
+            key=lambda item: item["address"],
+        )
+        expected_items = [
+            {
+                "address": item["address"],
+                "weight": _uint(
+                    item["weight"],
+                    "agent_operations.membership.members.weight",
+                    positive=True,
+                ),
+            }
+            for item in membership["members"]
+        ]
+        expect(
+            "agent_membership_page",
+            actual_items,
+            sorted(expected_items, key=lambda item: item["address"]),
+        )
+        if not isinstance(tail, dict):
+            _fail("verification.observations.agent_membership_tail", "must be an object")
+        expect("agent_membership_tail", tail.get("members"), [])
+        expect("agent_nft_minter", observations["agent_nft_minter"], None)
+        expect("agent_nft_num_tokens", observations["agent_nft_num_tokens"], None)
+        expect("agent_nft_token_info", observations["agent_nft_token_info"], {})
+    else:
+        if not isinstance(page, dict) or not isinstance(page.get("tokens"), list):
+            _fail("verification.observations.agent_membership_page", "must contain a tokens array")
+        expected_ids = sorted(item["token_id"] for item in membership["tokens"])
+        actual_ids = page["tokens"]
+        if len(actual_ids) != len(set(actual_ids)):
+            raise RuntimeError("verification observation agent NFT token page contains duplicates")
+        expect("agent_membership_page", actual_ids, expected_ids)
+        if not isinstance(tail, dict):
+            _fail("verification.observations.agent_membership_tail", "must be an object")
+        expect("agent_membership_tail", tail.get("tokens"), [])
+        expect("agent_nft_minter", observations["agent_nft_minter"], {"minter": membership["minter"]})
+        expect("agent_nft_num_tokens", observations["agent_nft_num_tokens"], {"count": len(expected_ids)})
+        token_info = observations["agent_nft_token_info"]
+        if not isinstance(token_info, dict) or set(token_info) != set(expected_ids):
+            raise RuntimeError("verification observation agent NFT token details are incomplete or substituted")
+        expected_tokens = {item["token_id"]: item for item in membership["tokens"]}
+        for token_id in expected_ids:
+            observed = token_info[token_id]
+            if not isinstance(observed, dict):
+                _fail(f"verification.observations.agent_nft_token_info.{token_id}", "must be an object")
+            expected_token = expected_tokens[token_id]
+            expect(f"agent_nft_token_info.{token_id}.owner", _nested(observed, ("access", "owner")), expected_token["owner"])
+            expect(f"agent_nft_token_info.{token_id}.role", _nested(observed, ("info", "extension", "role")), expected_token["role"])
+            expect(
+                f"agent_nft_token_info.{token_id}.weight",
+                _uint(
+                    _nested(observed, ("info", "extension", "weight")),
+                    f"verification.observations.agent_nft_token_info.{token_id}.weight",
+                    positive=True,
+                ),
+                _uint(
+                    expected_token["weight"],
+                    f"agent_operations.membership.tokens.{token_id}.weight",
+                    positive=True,
+                ),
+            )
     proposal = observations["agent_proposal_config"]
     if not isinstance(proposal, dict):
         _fail("verification.observations.agent_proposal_config", "must be an object")
     expect("agent_proposal_config.dao", proposal.get("dao"), agent["core_address"])
-    expect(
-        "agent_proposal_config.threshold",
-        proposal.get("threshold"),
-        {"absolute_count": {"threshold": str(agent["threshold_weight"])}},
+    expect("agent_proposal_config.threshold", proposal.get("threshold"), _agent_proposal_threshold(agent))
+    observed_period = _object(
+        proposal.get("max_voting_period"),
+        "verification.observations.agent_proposal_config.max_voting_period",
+        ("time",),
     )
     expect(
         "agent_proposal_config.max_voting_period",
-        proposal.get("max_voting_period"),
-        {"time": agent["voting_duration_seconds"]},
-    )
-    expect(
-        "agent_code_checksums",
-        observations["agent_code_checksums"],
         {
-            "core": agent["core_checksum"],
-            "voting": agent["voting_checksum"],
-            "proposal": agent["proposal_checksum"],
-            "cw4_group": agent["cw4_group_checksum"],
+            "time": _uint(
+                observed_period.get("time"),
+                "verification.observations.agent_proposal_config.max_voting_period.time",
+                positive=True,
+            )
+        },
+        {
+            "time": _uint(
+                agent["proposal"]["voting_duration_seconds"],
+                "agent_operations.proposal.voting_duration_seconds",
+                positive=True,
+            )
         },
     )
+    expected_agent_checksums = {
+        "core": agent["core_checksum"],
+        "voting": agent["voting_checksum"],
+        "proposal": agent["proposal_checksum"],
+        membership_label: membership_checksum,
+    }
+    expect("agent_code_checksums", observations["agent_code_checksums"], expected_agent_checksums)
+    expected_agent_code_ids = {
+        "core": _uint(
+            agent["core_code_id"], "agent_operations.core_code_id", positive=True
+        ),
+        "voting": _uint(
+            agent["voting_code_id"], "agent_operations.voting_code_id", positive=True
+        ),
+        "proposal": _uint(
+            agent["proposal_code_id"], "agent_operations.proposal_code_id", positive=True
+        ),
+        membership_label: membership_code_id,
+    }
     agent_infos = _object(
         observations["agent_contract_info"],
         "verification.observations.agent_contract_info",
-        ("core", "voting", "proposal", "cw4_group"),
+        expected_agent_code_ids,
     )
-    for label, expected_code_id in (
-        ("core", agent["core_code_id"]),
-        ("voting", agent["voting_code_id"]),
-        ("proposal", agent["proposal_code_id"]),
-        ("cw4_group", agent["cw4_group_code_id"]),
-    ):
+    for label, expected_code_id in expected_agent_code_ids.items():
         info = agent_infos[label]
         if not isinstance(info, dict):
             _fail(f"verification.observations.agent_contract_info.{label}", "must be an object")
-        expect(
-            f"agent_contract_info.{label}.code_id",
-            _contract_code_id(info),
-            expected_code_id,
-        )
+        expect(f"agent_contract_info.{label}.code_id", _contract_code_id(info), expected_code_id)
 
 
 def verify_deployment(
@@ -2070,80 +2262,181 @@ def verify_deployment(
         enabled_agent_modules,
         [agent["proposal_module_address"]],
     )
-    group = junod.smart(agent["voting_module_address"], {"group_contract": {}})
-    _expect_equal(checks, "agent:cw4_group", group, agent["cw4_group_address"])
-    members_response = junod.smart(
-        agent["cw4_group_address"], {"list_members": {"start_after": None, "limit": 100}}
-    )
-    actual_members = sorted(
-        (
-            {"address": item.get("addr"), "weight": item.get("weight")}
-            for item in members_response.get("members", [])
-        ),
-        key=lambda item: item["address"],
-    )
-    expected_members = sorted(agent["members"], key=lambda item: item["address"])
-    _expect_equal(checks, "agent:members", actual_members, expected_members)
-    raw_members = members_response.get("members", [])
-    if not raw_members:
-        raise RuntimeError("agent member query unexpectedly returned no members")
-    last_member = raw_members[-1]
-    if not isinstance(last_member, dict) or not isinstance(last_member.get("addr"), str):
-        raise RuntimeError("agent member query has a malformed final member")
-    members_tail = junod.smart(
-        agent["cw4_group_address"],
-        {"list_members": {"start_after": last_member["addr"], "limit": 1}},
-    )
-    if not isinstance(members_tail, dict):
-        raise RuntimeError("agent member tail query is malformed")
-    _expect_equal(checks, "agent:members_exhausted", members_tail.get("members"), [])
+    membership = agent["membership"]
+    membership_label, membership_address, membership_code_id, membership_checksum = _agent_membership_spec(agent)
+    if membership["kind"] == "cw4":
+        membership_contract = junod.smart(agent["voting_module_address"], {"group_contract": {}})
+    else:
+        voting_config = junod.smart(agent["voting_module_address"], {"config": {}})
+        if not isinstance(voting_config, dict):
+            raise RuntimeError("agent voting config query is malformed")
+        membership_contract = voting_config.get("nft_address")
+    _expect_equal(checks, "agent:membership_contract", membership_contract, membership_address)
+
+    nft_minter: Any = None
+    nft_num_tokens: Any = None
+    nft_token_info: dict[str, Any] = {}
+    if membership["kind"] == "cw4":
+        membership_page = junod.smart(
+            membership_address, {"list_members": {"start_after": None, "limit": MAX_AGENT_MEMBERS}}
+        )
+        raw_items = membership_page.get("members", []) if isinstance(membership_page, dict) else []
+        actual_items = sorted(
+            (
+                {
+                    "address": item.get("addr"),
+                    "weight": _uint(
+                        item.get("weight"),
+                        "agent.membership_page.members.weight",
+                        positive=True,
+                    ),
+                }
+                for item in raw_items
+                if isinstance(item, dict)
+            ),
+            key=lambda item: str(item["address"]),
+        )
+        expected_items = sorted(
+            (
+                {
+                    "address": item["address"],
+                    "weight": _uint(
+                        item["weight"],
+                        "agent_operations.membership.members.weight",
+                        positive=True,
+                    ),
+                }
+                for item in membership["members"]
+            ),
+            key=lambda item: item["address"],
+        )
+        _expect_equal(checks, "agent:membership_items", actual_items, expected_items)
+        if not raw_items or not isinstance(raw_items[-1], dict) or not isinstance(raw_items[-1].get("addr"), str):
+            raise RuntimeError("agent member page is empty or malformed")
+        membership_tail = junod.smart(
+            membership_address,
+            {"list_members": {"start_after": raw_items[-1]["addr"], "limit": 1}},
+        )
+        if not isinstance(membership_tail, dict):
+            raise RuntimeError("agent member tail query is malformed")
+        _expect_equal(checks, "agent:membership_exhausted", membership_tail.get("members"), [])
+    else:
+        membership_page = junod.smart(
+            membership_address, {"all_tokens": {"start_after": None, "limit": MAX_AGENT_MEMBERS}}
+        )
+        raw_ids = membership_page.get("tokens", []) if isinstance(membership_page, dict) else []
+        if len(raw_ids) != len(set(raw_ids)):
+            raise RuntimeError("agent NFT token page contains duplicate token IDs")
+        expected_ids = sorted(item["token_id"] for item in membership["tokens"])
+        _expect_equal(checks, "agent:membership_items", raw_ids, expected_ids)
+        if not raw_ids or not isinstance(raw_ids[-1], str):
+            raise RuntimeError("agent NFT token page is empty or malformed")
+        membership_tail = junod.smart(
+            membership_address,
+            {"all_tokens": {"start_after": raw_ids[-1], "limit": 1}},
+        )
+        if not isinstance(membership_tail, dict):
+            raise RuntimeError("agent NFT token tail query is malformed")
+        _expect_equal(checks, "agent:membership_exhausted", membership_tail.get("tokens"), [])
+
+    total_power_response = junod.smart(agent["voting_module_address"], {"total_power_at_height": {}})
+    if not isinstance(total_power_response, dict):
+        raise RuntimeError("agent total power query is malformed")
+    total_power_observation = {"power": total_power_response.get("power")}
+    _expect_equal(checks, "agent:total_power", total_power_observation["power"], str(membership["total_power"]))
     proposal_config = junod.smart(agent["proposal_module_address"], {"config": {}})
     _expect_equal(checks, "agent:proposal_dao", proposal_config.get("dao"), agent["core_address"])
-    _expect_equal(
-        checks,
-        "agent:threshold",
-        proposal_config.get("threshold"),
-        {"absolute_count": {"threshold": str(agent["threshold_weight"])}},
+    _expect_equal(checks, "agent:threshold", proposal_config.get("threshold"), _agent_proposal_threshold(agent))
+    observed_period = _object(
+        proposal_config.get("max_voting_period"),
+        "agent.proposal.max_voting_period",
+        ("time",),
     )
     _expect_equal(
         checks,
         "agent:voting_duration",
-        proposal_config.get("max_voting_period"),
-        {"time": agent["voting_duration_seconds"]},
+        {
+            "time": _uint(
+                observed_period.get("time"),
+                "agent.proposal.max_voting_period.time",
+                positive=True,
+            )
+        },
+        {
+            "time": _uint(
+                agent["proposal"]["voting_duration_seconds"],
+                "agent_operations.proposal.voting_duration_seconds",
+                positive=True,
+            )
+        },
     )
+    if membership["kind"] == "cw721_roles":
+        nft_minter = junod.smart(membership_address, {"minter": {}})
+        _expect_equal(checks, "agent:nft_minter", nft_minter, {"minter": membership["minter"]})
+        nft_num_tokens = junod.smart(membership_address, {"num_tokens": {}})
+        _expect_equal(checks, "agent:nft_token_count", nft_num_tokens, {"count": len(membership["tokens"])})
+        expected_tokens = {item["token_id"]: item for item in membership["tokens"]}
+        for token_id in sorted(expected_tokens):
+            observed = junod.smart(
+                membership_address,
+                {"all_nft_info": {"token_id": token_id, "include_expired": False}},
+            )
+            nft_token_info[token_id] = copy.deepcopy(observed)
+            expected_token = expected_tokens[token_id]
+            actual = {
+                "owner": _nested(observed, ("access", "owner")),
+                "role": _nested(observed, ("info", "extension", "role")),
+                "weight": _uint(
+                    _nested(observed, ("info", "extension", "weight")),
+                    f"agent.nft_token.{token_id}.weight",
+                    positive=True,
+                ),
+            }
+            _expect_equal(
+                checks,
+                f"agent:nft_token:{token_id}",
+                actual,
+                {
+                    "owner": expected_token["owner"],
+                    "role": expected_token["role"],
+                    "weight": _uint(
+                        expected_token["weight"],
+                        f"agent_operations.membership.tokens.{token_id}.weight",
+                        positive=True,
+                    ),
+                },
+            )
 
     agent_code_specs = (
-        ("core", agent["core_address"], agent["core_code_id"], agent["core_checksum"]),
+        (
+            "core",
+            agent["core_address"],
+            _uint(agent["core_code_id"], "agent_operations.core_code_id", positive=True),
+            agent["core_checksum"],
+        ),
         (
             "voting",
             agent["voting_module_address"],
-            agent["voting_code_id"],
+            _uint(agent["voting_code_id"], "agent_operations.voting_code_id", positive=True),
             agent["voting_checksum"],
         ),
         (
             "proposal",
             agent["proposal_module_address"],
-            agent["proposal_code_id"],
+            _uint(agent["proposal_code_id"], "agent_operations.proposal_code_id", positive=True),
             agent["proposal_checksum"],
         ),
-        (
-            "cw4_group",
-            agent["cw4_group_address"],
-            agent["cw4_group_code_id"],
-            agent["cw4_group_checksum"],
-        ),
+        (membership_label, membership_address, membership_code_id, membership_checksum),
     )
     agent_contract_infos: dict[str, Any] = {}
+    agent_code_checksums: dict[str, str] = {}
     for label, address, code_id, checksum in agent_code_specs:
         info = junod.contract_info(address)
         agent_contract_infos[label] = copy.deepcopy(info)
         _expect_equal(checks, f"agent:{label}:code_id", _contract_code_id(info), code_id)
-        _expect_equal(
-            checks,
-            f"agent:{label}:checksum",
-            _chain_checksum(junod.code_info(code_id)),
-            checksum,
-        )
+        actual_checksum = _chain_checksum(junod.code_info(code_id))
+        _expect_equal(checks, f"agent:{label}:checksum", actual_checksum, checksum)
+        agent_code_checksums[label] = actual_checksum
 
     expected_checks = expected_verification_checks(config, code_ids)
     if checks != expected_checks:
@@ -2162,16 +2455,15 @@ def verify_deployment(
         "gauge_config": copy.deepcopy(gauge_config),
         "gauge_state": copy.deepcopy(gauge_state),
         "agent_core_state": copy.deepcopy(agent_core),
-        "agent_voting_group": group,
-        "agent_members": copy.deepcopy(members_response),
-        "agent_members_tail": copy.deepcopy(members_tail),
+        "agent_membership_contract": membership_contract,
+        "agent_membership_page": copy.deepcopy(membership_page),
+        "agent_membership_tail": copy.deepcopy(membership_tail),
+        "agent_total_power": total_power_observation,
+        "agent_nft_minter": copy.deepcopy(nft_minter),
+        "agent_nft_num_tokens": copy.deepcopy(nft_num_tokens),
+        "agent_nft_token_info": nft_token_info,
         "agent_proposal_config": copy.deepcopy(proposal_config),
-        "agent_code_checksums": {
-            "core": agent["core_checksum"],
-            "voting": agent["voting_checksum"],
-            "proposal": agent["proposal_checksum"],
-            "cw4_group": agent["cw4_group_checksum"],
-        },
+        "agent_code_checksums": agent_code_checksums,
         "agent_contract_info": agent_contract_infos,
     }
     validate_verification_observations(config, code_ids, addresses, observations)

@@ -58,7 +58,11 @@ def logical_addresses(config: dict[str, Any]) -> dict[str, str]:
         {
             "agent_voting_module": agent["voting_module_address"],
             "agent_proposal_module": agent["proposal_module_address"],
-            "agent_cw4_group": agent["cw4_group_address"],
+            "agent_membership_contract": (
+                agent["membership"]["group_address"]
+                if agent["membership"]["kind"] == "cw4"
+                else agent["membership"]["nft_address"]
+            ),
         }
     )
     return values

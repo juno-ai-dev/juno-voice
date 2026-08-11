@@ -587,15 +587,24 @@ def validate_transaction_event(event: Any, path: str) -> None:
 def allowed_scenario_contracts(
     config: dict[str, Any], addresses: dict[str, str]
 ) -> set[str]:
-    return set(addresses.values()) | {
-        config["agent_operations"][field]
+    agent = config["agent_operations"]
+    membership = agent["membership"]
+    membership_address = (
+        membership["group_address"]
+        if membership["kind"] == "cw4"
+        else membership["nft_address"]
+    )
+    allowed = set(addresses.values())
+    allowed.add(membership_address)
+    allowed.update(
+        agent[field]
         for field in (
             "core_address",
             "voting_module_address",
             "proposal_module_address",
-            "cw4_group_address",
         )
-    }
+    )
+    return allowed
 
 
 def validate_transaction_message(

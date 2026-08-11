@@ -191,32 +191,37 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     {"address": agent["proposal_module_address"], "status": "enabled"}
                 ],
             },
-            "agent_voting_group": agent["cw4_group_address"],
-            "agent_members": {
-                "members": [
-                    {"addr": item["address"], "weight": item["weight"]}
-                    for item in agent["members"]
-                ]
+            "agent_membership_contract": agent["membership"]["nft_address"],
+            "agent_membership_page": {
+                "tokens": sorted(item["token_id"] for item in agent["membership"]["tokens"])
             },
-            "agent_members_tail": {"members": []},
+            "agent_membership_tail": {"tokens": []},
+            "agent_total_power": {"power": str(agent["membership"]["total_power"])},
+            "agent_nft_minter": {"minter": agent["membership"]["minter"]},
+            "agent_nft_num_tokens": {"count": len(agent["membership"]["tokens"])},
+            "agent_nft_token_info": {
+                item["token_id"]: {
+                    "access": {"owner": item["owner"], "approvals": []},
+                    "info": {"token_uri": None, "extension": {"role": item["role"], "weight": item["weight"]}},
+                }
+                for item in agent["membership"]["tokens"]
+            },
             "agent_proposal_config": {
                 "dao": agent["core_address"],
-                "threshold": {
-                    "absolute_count": {"threshold": str(agent["threshold_weight"])}
-                },
-                "max_voting_period": {"time": agent["voting_duration_seconds"]},
+                "threshold": deploy._agent_proposal_threshold(agent),
+                "max_voting_period": {"time": agent["proposal"]["voting_duration_seconds"]},
             },
             "agent_code_checksums": {
                 "core": agent["core_checksum"],
                 "voting": agent["voting_checksum"],
                 "proposal": agent["proposal_checksum"],
-                "cw4_group": agent["cw4_group_checksum"],
+                "nft": agent["membership"]["nft_checksum"],
             },
             "agent_contract_info": {
                 "core": {"code_id": agent["core_code_id"]},
                 "voting": {"code_id": agent["voting_code_id"]},
                 "proposal": {"code_id": agent["proposal_code_id"]},
-                "cw4_group": {"code_id": agent["cw4_group_code_id"]},
+                "nft": {"code_id": agent["membership"]["nft_code_id"]},
             },
         }
         verification_document = {
@@ -2097,6 +2102,104 @@ class ReleaseEvidenceTests(unittest.TestCase):
         wrong["operations_rehearsal"]["cases"][0]["transaction_evidence"].pop()
         with self.assertRaisesRegex(release.EvidenceError, "cover every rehearsal transaction"):
             self.validate_evidence(wrong)
+
+    def test_verification_normalizes_schema_valid_agent_numeric_strings(self):
+        config = copy.deepcopy(self.config)
+        agent = config["agent_operations"]
+        for field in ("core_code_id", "voting_code_id", "proposal_code_id"):
+            agent[field] = str(agent[field])
+        agent["membership"]["nft_code_id"] = str(agent["membership"]["nft_code_id"])
+        for token in agent["membership"]["tokens"]:
+            token["weight"] = str(token["weight"])
+        verification = json.loads(
+            (self.root / "deployment" / "verification.json").read_text()
+        )
+        deploy.validate_config(config, self.root)
+        deploy.validate_verification_observations(
+            config,
+            verification["code_ids"],
+            verification["addresses"],
+            verification["observations"],
+        )
+
+    def test_verification_rejects_boolean_agent_numeric_observations(self):
+        verification = json.loads(
+            (self.root / "deployment" / "verification.json").read_text()
+        )
+
+        for name, mutate in (
+            (
+                "cw721 weight",
+                lambda observations: observations["agent_nft_token_info"][
+                    "agent:builder"
+                ]["info"]["extension"].__setitem__("weight", True),
+            ),
+        ):
+            with self.subTest(name=name):
+                observations = copy.deepcopy(verification["observations"])
+                mutate(observations)
+                with self.assertRaises((deploy.ValidationError, RuntimeError)):
+                    deploy.validate_verification_observations(
+                        self.config,
+                        verification["code_ids"],
+                        verification["addresses"],
+                        observations,
+                    )
+
+        duration_config = copy.deepcopy(self.config)
+        duration_config["agent_operations"]["proposal"]["voting_duration_seconds"] = 1
+        duration_observations = copy.deepcopy(verification["observations"])
+        duration_observations["agent_proposal_config"]["max_voting_period"][
+            "time"
+        ] = True
+        deploy.validate_config(duration_config, self.root)
+        with self.assertRaises((deploy.ValidationError, RuntimeError)):
+            deploy.validate_verification_observations(
+                duration_config,
+                verification["code_ids"],
+                verification["addresses"],
+                duration_observations,
+            )
+
+        cw4_config = copy.deepcopy(self.config)
+        nft = cw4_config["agent_operations"]["membership"]
+        cw4_config["agent_operations"]["membership"] = {
+            "kind": "cw4",
+            "group_address": nft["nft_address"],
+            "group_code_id": nft["nft_code_id"],
+            "group_checksum": nft["nft_checksum"],
+            "members": [
+                {"address": token["owner"], "weight": token["weight"]}
+                for token in nft["tokens"]
+            ],
+            "total_power": nft["total_power"],
+        }
+        cw4_observations = copy.deepcopy(verification["observations"])
+        cw4_observations["agent_membership_page"] = {
+            "members": [
+                {"addr": item["address"], "weight": item["weight"]}
+                for item in cw4_config["agent_operations"]["membership"]["members"]
+            ]
+        }
+        cw4_observations["agent_membership_page"]["members"][0]["weight"] = True
+        cw4_observations["agent_membership_tail"] = {"members": []}
+        cw4_observations["agent_nft_minter"] = None
+        cw4_observations["agent_nft_num_tokens"] = None
+        cw4_observations["agent_nft_token_info"] = {}
+        cw4_observations["agent_code_checksums"]["cw4_group"] = cw4_observations[
+            "agent_code_checksums"
+        ].pop("nft")
+        cw4_observations["agent_contract_info"]["cw4_group"] = cw4_observations[
+            "agent_contract_info"
+        ].pop("nft")
+        deploy.validate_config(cw4_config, self.root)
+        with self.assertRaises((deploy.ValidationError, RuntimeError)):
+            deploy.validate_verification_observations(
+                cw4_config,
+                verification["code_ids"],
+                verification["addresses"],
+                cw4_observations,
+            )
 
 
 if __name__ == "__main__":

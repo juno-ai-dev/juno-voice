@@ -48,6 +48,10 @@
       "type": "string",
       "pattern": "^(?:0(?:\\.[0-9]{1,18})?|1(?:\\.0{1,18})?)$"
     },
+    "positive_decimal_fraction": {
+      "type": "string",
+      "pattern": "^(?!0(?:\\.0{1,18})?$)(?:0(?:\\.[0-9]{1,18})?|1(?:\\.0{1,18})?)$"
+    },
     "juno_address": {
       "type": "string",
       "pattern": "^juno1[023456789acdefghjklmnpqrstuvwxyz]{38,58}$",
@@ -181,12 +185,53 @@
       }
     },
     "agent_member": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["address", "weight"],
+      "type": "object", "additionalProperties": false, "required": ["address", "weight"],
+      "properties": {"address": {"$ref": "#/$defs/juno_address"}, "weight": {"$ref": "#/$defs/positive_uint"}}
+    },
+    "agent_token": {
+      "type": "object", "additionalProperties": false, "required": ["token_id", "owner", "role", "weight"],
       "properties": {
-        "address": {"$ref": "#/$defs/juno_address"},
+        "token_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "owner": {"$ref": "#/$defs/juno_address"},
+        "role": {"type": "string", "minLength": 1, "maxLength": 128},
         "weight": {"$ref": "#/$defs/positive_uint"}
+      }
+    },
+    "agent_membership": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "group_address", "group_code_id", "group_checksum", "members", "total_power"],
+          "properties": {
+            "kind": {"const": "cw4"}, "group_address": {"$ref": "#/$defs/juno_address"},
+            "group_code_id": {"$ref": "#/$defs/positive_uint"}, "group_checksum": {"$ref": "#/$defs/hex64"},
+            "members": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/agent_member"}},
+            "total_power": {"$ref": "#/$defs/positive_uint"}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "nft_address", "nft_code_id", "nft_checksum", "minter", "tokens", "total_power"],
+          "properties": {
+            "kind": {"const": "cw721_roles"}, "nft_address": {"$ref": "#/$defs/juno_address"},
+            "nft_code_id": {"$ref": "#/$defs/positive_uint"}, "nft_checksum": {"$ref": "#/$defs/hex64"},
+            "minter": {"$ref": "#/$defs/juno_address"},
+            "tokens": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/agent_token"}},
+            "total_power": {"$ref": "#/$defs/positive_uint"}
+          }
+        }
+      ]
+    },
+    "agent_proposal": {
+      "type": "object", "additionalProperties": false, "required": ["threshold", "voting_duration_seconds"],
+      "properties": {
+        "threshold": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": false, "required": ["kind", "weight"], "properties": {"kind": {"const": "absolute_count"}, "weight": {"$ref": "#/$defs/positive_uint"}}},
+            {"type": "object", "additionalProperties": false, "required": ["kind", "threshold", "quorum"], "properties": {"kind": {"const": "threshold_quorum"}, "threshold": {"const": "majority"}, "quorum": {"$ref": "#/$defs/positive_decimal_fraction"}}}
+          ]
+        },
+        "voting_duration_seconds": {"type": "integer", "minimum": 1, "maximum": 2592000}
       }
     },
     "agent_operations": {
@@ -196,8 +241,7 @@
         "mode", "core_address", "core_code_id", "core_checksum",
         "voting_module_address", "voting_code_id", "voting_checksum",
         "proposal_module_address", "proposal_code_id", "proposal_checksum",
-        "cw4_group_address", "cw4_group_code_id", "cw4_group_checksum",
-        "members", "threshold_weight", "voting_duration_seconds", "review_reference"
+        "membership", "proposal", "review_reference"
       ],
       "properties": {
         "mode": {"const": "bind_reviewed"},
@@ -210,17 +254,8 @@
         "proposal_module_address": {"$ref": "#/$defs/juno_address"},
         "proposal_code_id": {"$ref": "#/$defs/positive_uint"},
         "proposal_checksum": {"$ref": "#/$defs/hex64"},
-        "cw4_group_address": {"$ref": "#/$defs/juno_address"},
-        "cw4_group_code_id": {"$ref": "#/$defs/positive_uint"},
-        "cw4_group_checksum": {"$ref": "#/$defs/hex64"},
-        "members": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/agent_member"}},
-        "threshold_weight": {"$ref": "#/$defs/positive_uint"},
-        "voting_duration_seconds": {
-          "oneOf": [
-            {"type": "integer", "minimum": 1, "maximum": 2592000},
-            {"type": "string", "pattern": "^[1-9][0-9]{0,6}$"}
-          ]
-        },
+        "membership": {"$ref": "#/$defs/agent_membership"},
+        "proposal": {"$ref": "#/$defs/agent_proposal"},
         "review_reference": {"$ref": "#/$defs/repository_file"}
       }
     },
