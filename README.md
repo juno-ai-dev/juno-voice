@@ -24,10 +24,10 @@ This keeps routine work fast while preserving contributor custody and Juno-wide 
 
 ## Release status
 
-Juno Voice v1 is being deployed to Juno mainnet (`juno-1`) in separately
-approved stages. The Wasm uploads, registry, and bounty contract are live and
-verified. The Program Vault, voting module, and gauge are **not yet deployed**;
-the system is therefore not operational or funded.
+Juno Voice v1 is deployed and verified on Juno mainnet (`juno-1`). The bounty,
+registry, Program Vault, Juno-staked voting module, and epoch-snapshot gauge are
+live. The deployment carries no initial funds; Hack Juno allocations remain
+inactive until the Program Vault receives an approved epoch budget.
 
 ### Juno mainnet deployment
 
@@ -37,14 +37,15 @@ Status as of 2026-08-11:
 |---|---:|---|---|
 | Juno Voice bounty | `5150` | `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw` | Deployed and verified |
 | Hack Juno registry adapter | `5151` | `juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n` | Deployed and verified |
-| Program Vault | `5152` | `juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg` | Planned deterministic address; not deployed |
-| Juno-staked voting module | `5153` | `juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2` | Planned deterministic address; not deployed |
-| Epoch-snapshot gauge | `5154` | `juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn` | Planned deterministic address; not deployed |
+| Program Vault | `5152` | `juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg` | Deployed and verified |
+| Juno-staked voting module | `5153` | `juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2` | Deployed and verified |
+| Epoch-snapshot gauge | `5154` | `juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn` | Deployed and verified |
 
 Verified deployment transactions:
 
 - Registry: `9DE1E6FFEC4ED4FE8772B7EA765182C8F35DE43E84659F3B988A33171E736A1C`
 - Bounty: `2D101495566FCBEE728B73029CE0013BE4638DC3394EFF60A0E169FA8E9EC127`
+- Program Vault, voting module, and gauge: `4FE5DAFBF5CE653DAC2F32B4D119C2602249B3AEF7C47947CAE2DA6F240D6A6A`
 
 The deployed contracts use the Juno governance module account
 `juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730` as administrator and bind
