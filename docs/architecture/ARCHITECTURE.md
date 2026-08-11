@@ -1,366 +1,335 @@
-# Juno Voice architecture
+# Juno Voice backend architecture
 
-**Status:** Accepted (Architecture V2)
-**Scope:** MVP architecture; no deployment authorization  
-**Chain dependency:** Juno v30 `x/voting-snapshot`
+**Status:** Accepted architecture for Juno Voice v1; locally implemented,
+release gates pending
 
-## 1. Product boundary
+**Scope:** On-chain backend, deployment composition, and trust boundaries
 
-Juno Voice is a neutral, chain-auditable roadmap prioritization and delivery-attestation system:
+**Implementation contract:** [GOAL.md](../../GOAL.md)
 
-- any wallet can submit a bounded request with immutable inline acceptance criteria and an anti-spam bond;
-- JUNO stakers cast one immutable `SUPPORT` or `OPPOSE` vote using historical power fixed per request;
-- deterministic thresholds and signed net support produce an inspectable signal;
-- a steward selects qualified work and assigns a builder;
-- the assigned builder supplies delivery evidence and a distinct verifier attests shipment; and
-- humans and agents can reproduce canonical state through direct chain queries.
+**Policy rationale:** [INCENTIVES_AND_GOVERNANCE.md](../design/INCENTIVES_AND_GOVERNANCE.md)
 
-Juno Voice is **non-binding prioritization**. It cannot spend treasury funds, bind Juno governance, upgrade itself, or execute arbitrary messages. Selection and shipment attestations are accountable judgments, not community mandates or cryptographic proof that software is correct.
+## 1. System purpose
 
-The MVP excludes bounties, builder bonds, automatic payouts or execution, mutable/delegated/quadratic/conviction voting, identity claims, automatic duplicate merging, comments or files on-chain, private requests, and cross-chain power.
+Juno Voice turns public demand into two bounded funding loops:
 
-## 2. Trust and authority boundaries
+1. contributors escrow native Juno behind a requested outcome and decide whether a proposed delivery receives the pooled bounty; and
+2. Juno stakers direct a separately funded Hack Juno epoch among eligible projects using historical staking power.
 
-- **Contract truth:** briefs, snapshot inputs, receipts and tallies, lifecycle, bonds, assignments, evidence, attestations, and typed action logs.
-- **Chain truth:** historical voting power returned by Juno's voting-snapshot binding.
-- **External evidence:** an evidence digest is the submitter's assertion; the contract validates syntax and authority but does not fetch or verify content.
-- **Derived presentation:** optional search, analytics, notifications, and caches can be rebuilt and never become authoritative.
-- **Chain contract admin:** can replace code through CosmWasm migration and is consequently an effective custodian of all locked/refundable bonds.
-- **Governor:** controls durable configuration and replaces operational roles.
-- **Steward:** moderates, selects work, assigns/reassigns builders, and performs stale-work recovery.
-- **Verifier:** adds verification evidence, rejects/blocks review, and attests shipment.
-- **Builder:** a request- and work-round-specific assignee who adds delivery evidence and requests review.
+These loops share project graduation, but not voters, funds, or settlement authority. Contributor weight comes only from bounty contributions. Gauge power comes only from one Juno staking snapshot per epoch. Juno `x/gov` remains the root authority for public funding and code administration.
 
-These are separate authorities in the contract permission model. For every shipment, current builder and verifier must be distinct addresses. Governor transfer uses propose/accept semantics; steward and verifier cannot replace the governor or themselves. No role may edit briefs, votes, snapshots, evidence, attestations, prior logs, duplicate targets, bond ownership, or refund recipients.
-
-A production chain admin and governor must be a disclosed DAO or threshold multisig; a unilateral admin must not accept production bonds. Addresses, powers, review process, and any enforceable delay are launch disclosures.
-
-## 3. Fixed snapshot and retention trust
-
-If submission executes in block `H`, the request stores `snapshot_height = H - 1`, rejecting genesis/underflow. Submission queries and stores nonzero total power `T` at that height. Juno returns the most recent snapshot **at or before** the requested height; power is a base-10 unsigned value checked into `Uint128`. Snapshots settle during EndBlock, which is why current height is not used.
-
-Each wallet can cast one immutable receipt containing `SUPPORT` or `OPPOSE`, historical voter power, and cast height. Every vote re-queries total power and requires it to be nonzero and equal to stored `T`; mismatch returns `SnapshotIntegrityMismatch` without state changes.
-
-The current binding does not return the height actually resolved or expose retention configuration. Equal totals are only a consistency check and **do not prove exact-height availability**, because an older snapshot can have the same total and different account powers. Retention is an accepted external deployment trust assumption.
-
-Deployment policy must:
-
-- set a positive voting duration no longer than two months;
-- derive `voting_period_blocks` for the target chain rather than claim a universal hardcoded block count;
-- verify retained history exceeds that duration with a documented safety margin; and
-- monitor retention, upgrades, activation/exported-genesis boundaries, and restarts.
-
-This trust assumption does not gate MVP implementation. If history becomes suspect, operators use the submission-only pause and typed recovery in Section 10.
-
-## 4. Canonical schema
-
-```rust
-Config {
-  governor: Addr,
-  pending_governor: Option<Addr>,
-  steward: Addr,
-  verifier: Addr,
-  native_denom: String,          // immutable; deployment choice
-  submission_bond: Uint128,
-  voting_period_blocks: u64,     // > 0; deployment policy <= two months
-  quorum_bps: u16,
-  support_bps: u16,
-  work_inactivity_blocks: u64,
-  request_limits: RequestLimits,
-  max_reason_bytes: u16,         // immutable contract-wide
-  default_query_limit: u8,       // immutable contract-wide
-  max_query_limit: u8,           // immutable contract-wide
-  evidence_policy_version: u16, // MVP = 1
-  submissions_paused: bool,
-}
-
-RequestLimits {
-  max_title_bytes: u16,
-  max_summary_bytes: u16,
-  max_acceptance_criteria_bytes: u16,
-  max_category_bytes: u8,
-  max_uri_bytes: u16,
-  max_digest_bytes: u8,
-  max_evidence_note_bytes: u16,
-  max_evidence_items: u16,
-  max_review_evidence_refs: u8,
-  max_attestation_evidence_refs: u8,
-}
-
-Request {
-  id: u64,
-  author: Addr,
-  title: String,
-  summary: String,
-  acceptance_criteria: String,
-  category: String,
-  detail_uri: Option<String>,
-  detail_digest: Option<String>,
-  canonical_request_id: Option<u64>,
-  snapshot_height: u64,
-  total_power: Uint128,
-  opened_height: u64,
-  closes_height: u64,           // end-exclusive
-  quorum_bps: u16,
-  support_bps: u16,
-  work_inactivity_blocks: u64,
-  limits: RequestLimits,
-  evidence_policy_version: u16,
-  status: Status,
-  support_power: Uint128,
-  oppose_power: Uint128,
-  voter_count: u64,
-  bond: Bond,
-  builder: Option<Addr>,
-  work_round: u32,
-  work_activity_height: Option<u64>,
-  created_at: Timestamp,
-  updated_at: Timestamp,
-}
-
-VoteReceipt {
-  request_id: u64,
-  voter: Addr,
-  choice: Support | Oppose,
-  power: Uint128,
-  cast_height: u64,
-}
-
-Bond { amount: Uint128, state: Locked | Refundable | Claimed | Forfeited }
-BondTotals { locked: Uint128, refundable: Uint128, forfeited: Uint128 }
-```
-
-The brief is required, bounded, inline, immutable, and canonical. `category` is a lowercase `[a-z0-9-]` slug, not a closed enum. Supplementary detail fields accept exactly `(None, None)` or `(Some(uri), Some(digest))`; either unpaired form is rejected. The URI must use `https://` or `ipfs://` followed by a non-empty locator, and the digest must be `sha256:<64 lowercase hex>`. Material corrections create a new request.
-
-Configuration values copied into a request cannot rewrite active behavior. `native_denom`, contract identity, MVP evidence policy version 1, reason bound, and query page bounds are immutable. Governor updates to bond, voting period, thresholds, inactivity timeout, and request limits affect future requests only. Pause and role changes are immediate. A later code version may introduce a new, fully specified evidence policy version without changing version 1 semantics.
-
-Instantiate and future-config validation require: non-empty valid native denom; nonzero bond; nonzero voting and inactivity periods; `1 <= quorum_bps <= 10,000`; `1 <= support_bps <= 10,000`; valid distinct role addresses where a rule requires address distinction; valid byte/count limits; `default_query_limit <= max_query_limit`; and checked `opened_height + voting_period_blocks`. The contract applies the same validation to every updated field set before changing configuration.
-
-For evidence policy version 1, instantiate fixes `evidence_policy_version` to exactly `1` and enforces semantic limit minima rather than accepting merely nonzero values: `max_uri_bytes >= 9`, `max_digest_bytes >= 71`, `max_evidence_items >= 2`, `max_review_evidence_refs >= 1`, and `max_attestation_evidence_refs >= 2`. The URI minimum admits a non-empty locator under either accepted scheme. Review and attestation reference maxima must not exceed `max_evidence_items`; all other byte/count limits are nonzero. These invariants apply to every future-request `request_limits` update, so no request can copy limits that make required delivery evidence, review, or shipment structurally unreachable.
-
-### Accepted schema defaults
-
-These defaults are instantiate values and may be deployment-configured within schema validation; addresses and economic/numeric policy remain deployment choices.
-
-| Field | Default bound |
-|---|---:|
-| Title | 120 bytes |
-| Summary | 2,000 bytes |
-| Acceptance criteria | 4,000 bytes |
-| Category slug | 32 bytes |
-| URI | 512 bytes |
-| Digest | 71 bytes (`sha256:` plus hex) |
-| Evidence note | 1,024 bytes |
-| Lifecycle/attestation reason | 1,024 bytes |
-| Evidence items per request | 64 |
-| Review evidence references | 16 |
-| Attestation evidence references | 16 |
-| Query page size | immutable contract-wide default 30, maximum 100 |
-
-All strings are UTF-8 byte-bounded. Reasons required by transitions are non-empty. Counts are enforced before writes.
-
-## 5. Voting, closing, and lifecycle
-
-Voting is allowed exactly while `opened_height <= height < closes_height`. At or after close, anyone can finalize an `OPEN` request. For `S = support`, `O = oppose`, and `P = S + O`, qualification requires:
+## 2. Topology
 
 ```text
-P > 0
-P * 10,000 >= T * quorum_bps
-S * 10,000 >= P * support_bps
+Juno x/gov module account
+  │ external admin, funding proposals, upgrades, recovery
+  ▼
+Program Vault (dao-dao-core; no independent policy electorate)
+  ├── application governor for bounty and registry contracts
+  ├── holds bounded Hack Juno tranche and unused epoch funds
+  └── executes only adapter-produced gauge payments
+          ▲
+          │ fixed epoch budget
+          │
+Epoch-snapshot gauge ◄──── dao-voting-juno-staked ◄──── x/voting-snapshot
+          │
+          │ validates options and requests bounded bank sends
+          ▼
+Hack Juno registry adapter ◄──── Agent Operations DAO
+          ▲                         │ curation, graduation,
+          │ authenticated           │ suspension, stop-only safety
+          │ graduation              ▼
+Juno Voice bounties ◄──────── contributors and delivery submitters
 ```
 
-Checked wide-integer cross multiplication is mandatory. Passing yields `QUALIFIED`; failure yields `NOT_PRIORITIZED`.
+The backend consists of:
 
-| Transition | Controller | Guard/effect |
+- a new Juno Voice bounty contract owned in this repository;
+- a new Hack Juno project-registry gauge adapter owned in this repository;
+- DAO DAO core, proposal, voting, and gauge components pinned under [`deps/dao-contracts`](../../deps/dao-contracts);
+- Juno's `x/gov` and `x/voting-snapshot` chain modules; and
+- deployment configuration that binds exact code identities, roles, and economic limits.
+
+No trusted application server is required for correctness. Indexers and keepers may improve discovery and liveness but never become canonical state.
+
+## 3. Authority model
+
+| Authority | May | Must not |
 |---|---|---|
-| submission → `OPEN` | any wallet | valid immutable brief and exact bond |
-| `OPEN → QUALIFIED` / `NOT_PRIORITIZED` | anyone | deterministic close formula |
-| `OPEN → SPAM` | steward | reason; locked bond forfeited |
-| `OPEN/QUALIFIED → DUPLICATE` | steward | valid canonical target and reason |
-| `QUALIFIED → BUILDING` | steward | assign builder; initialize work round 1 and activity height |
-| `QUALIFIED → ARCHIVED` | steward | reason |
-| `BUILDING → REVIEW` | assigned builder | exact bounded current-round delivery references |
-| `BUILDING → BLOCKED` | assigned builder | reason |
-| `BUILDING → BLOCKED` | steward | copied inactivity timeout elapsed from work activity; reason |
-| `REVIEW → SHIPPED` | verifier | exact attestation predicate |
-| `REVIEW → BUILDING` | verifier | rejection reason; increment round and reset activity height |
-| `REVIEW → BLOCKED` | verifier | reason |
-| `BLOCKED → BUILDING` | steward | assign/reassign; increment round and reset activity height |
-| `BLOCKED → ARCHIVED` | steward | reason |
+| Juno `x/gov` | fund tranches; administer and migrate code; replace roles; resume stopped components; recover unused funds | decide an individual pooled bounty outside its contributor rules |
+| Program Vault | hold the authorized tranche; act as stable application governor; execute bounded gauge messages | create an independent policy electorate or exceed its funded balance |
+| Agent Operations DAO | moderate open bounties into refunds; nominate delivery; graduate, approve, suspend, or retire projects; pause/stop in one direction | pay pooled bounties; redirect principal; allocate rewards; increase budgets; unpause/resume; migrate code |
+| Bounty creator | set immutable terms; contribute; nominate delivery; cancel while sole-funded | alter terms after funding; override other contributors |
+| Contributors | add funds; ratify delivery at contribution weight; claim their refunds | vote with stake or transfer contribution shares |
+| Juno stakers | allocate one epoch's funded budget at historical stake weight | administer contracts or promise later funding |
+| Any account | finalize matured votes/epochs; expire bounties; run bounded cleanup | mutate authority or bypass state preconditions |
 
-`NOT_PRIORITIZED`, `DUPLICATE`, `SPAM`, `ARCHIVED`, and `SHIPPED` are terminal. `DRAFT` is off-chain only. There is no `ACCEPTED`: operational commitment starts only with builder assignment into `BUILDING`. Every re-entry into `BUILDING`, including same-builder resume, increments the work round so old-round evidence cannot satisfy shipment.
+Authority is granted by explicit contract addresses, not by descriptive DAO/subDAO registration. The migration admin and application governor are distinct and must be queryable.
 
-The frozen status codes used by ranking keys/cursors are `OPEN=1`, `QUALIFIED=2`, `NOT_PRIORITIZED=3`, `DUPLICATE=4`, `SPAM=5`, `BUILDING=6`, `REVIEW=7`, `BLOCKED=8`, `ARCHIVED=9`, and `SHIPPED=10`. They are schema values, not an implied lifecycle order.
+## 4. Program Vault
 
-Clients display `OPEN && height >= closes_height` as `AWAITING_FINALIZATION`; this is derived UI state, not a stored status. A non-trusted keeper can call the same public close method.
+The Program Vault is a minimal `dao-dao-core` deployment with its external administrator set to the Juno `x/gov` module account. It exists to give the program a stable treasury and execution address while keeping constitutional decisions in Juno governance.
 
-A duplicate stores immutable `canonical_request_id` and reason. Its target must exist, have an earlier ID, and not be `DUPLICATE` or `SPAM`. A reverse-reference index prevents a referenced target later becoming duplicate or spam. Votes never merge or transfer.
+The vault has no general-purpose public proposal path. It:
 
-## 6. Independent bond lifecycle
+- receives only a governance-authorized, loss-bounded program tranche;
+- holds funds not allocated or not distributed by an epoch;
+- acts as `governor` for the bounty and registry contracts;
+- owns the gauge execution module and its economic configuration; and
+- executes external-admin messages authorized by Juno governance.
 
-Bond state is independent of request status:
+The funded governance proposal must specify denomination, maximum tranche, epoch ceilings, term, and unused-funds policy. A new tranche or renewal is a new governance decision.
+
+## 5. Bounty contract
+
+### 5.1 Stored identity and configuration
+
+Global configuration includes:
+
+- immutable native denomination (`ujuno` for the first release);
+- Program Vault governor address;
+- replaceable Agent Operations DAO curator/guardian address;
+- registry contract address;
+- exact ratification duration of `259_200` seconds;
+- minimum contribution and bounded bounty-lifetime parameters;
+- text, evidence, pagination, and batch-work limits; and
+- pause state that blocks only new economic activity.
+
+Configuration affecting a live bounty is copied into that bounty or round. Later governance changes cannot rewrite its electorate, deadline, or settlement rule.
+
+### 5.2 Creation and contributions
+
+`CreateBounty` requires a positive native contribution and stores immutable bounded terms:
+
+- title, summary, and inline acceptance criteria;
+- optional content URI plus SHA-256 digest;
+- expiry within configured bounds; and
+- optional project-candidate metadata.
+
+While `OPEN` and before expiry, `Contribute` adds positive `ujuno`. Repeated deposits from one address aggregate. Contributions are committed until payout or a refunding terminal path; they are not transferable and cannot be withdrawn from a live multi-contributor bounty.
+
+The contract tracks total contributions, per-address contributions, contributor count, paid value, and outstanding refunds with checked arithmetic. Direct unsolicited bank transfers create no contribution or claim.
+
+### 5.3 Nomination and round snapshot
+
+The creator or Agent Operations DAO may create one active delivery nomination containing:
+
+- recipient;
+- evidence URI and digest;
+- bounded rationale against the acceptance criteria; and
+- optional project metadata.
+
+Nomination freezes contributions and records a round snapshot: round number, nomination, total contribution, contributor count, each contributor's already-canonical weight, opening time, and rule version. No transition computes by iterating over all contributors.
+
+### 5.4 Sole-contributor settlement
+
+With exactly one contributor, nomination enters `SINGLE_CONFIRMATION`. The contributor must make a separate transaction to confirm or decline the exact recipient and evidence. Confirmation marks the bounty paid before emitting one bank send. Decline clears the nomination and reopens the bounty unless it has expired.
+
+### 5.5 Multi-contributor ratification
+
+With more than one contributor, nomination enters `RATIFYING`:
 
 ```text
-LOCKED → REFUNDABLE → CLAIMED
-LOCKED → FORFEITED
+opens_at  = nomination block time
+closes_at = opens_at + 259,200 seconds
+vote valid while opens_at <= block time < closes_at
+finalize valid when block time >= closes_at
 ```
 
-- Submission requires exactly the configured native-denom bond; every other execute rejects attached funds.
-- `NOT_PRIORITIZED`, `QUALIFIED`, `DUPLICATE`, non-spam `ARCHIVED`, and emergency archival make a locked bond irrevocably refundable.
-- Only `OPEN → SPAM` can forfeit a locked bond; refundable/claimed bonds cannot be forfeited.
-- Only the author may withdraw, and funds always return to that author.
-- Refunds are pull payments with state updated before the bank message.
-- Forfeited funds are accounted for but have no withdrawal path in MVP.
-- Request bond and aggregate totals update atomically. Native-denom balance must cover `locked + refundable + forfeited`; unsolicited bank sends are surplus and create no claim.
+Each contributor may vote `YES` or `NO` and revise that vote before close. Weight equals that contributor's snapshotted contribution. Checked-difference updates maintain `yes_weight` and `no_weight` without scanning receipts.
 
-## 7. Assignment, evidence, and shipment
+After the complete window, anyone may finalize:
+
+```text
+participating_weight = yes_weight + no_weight
+
+if participating_weight > 0 and yes_weight > no_weight:
+    mark paid and send the full escrow to the nominated recipient
+else:
+    clear nomination and advance to the next round
+```
+
+This is deliberately a majority of **voting contribution weight**, not a quorum of all contributed funds. A tie, no votes, or a no majority never pays. Finalization cannot happen early even if every contributor votes.
+
+A reset preserves contributions and reopens top-ups. If expiry has passed, it enters `REFUNDING` instead. Receipts remain queryable by round but can never affect a later round.
+
+### 5.6 Refund and moderation paths
+
+- Anyone may expire an open bounty after its deadline.
+- The creator may cancel only while they are the sole contributor and no nomination is active.
+- The Agent Operations DAO may moderate only an open bounty into typed `SPAM`, `DUPLICATE`, or `POLICY_VIOLATION` outcomes.
+- Every such path opens pull refunds; bounty principal is never slashed.
+- Each contributor claims independently, with state updated before the bank message.
+- Pause does not block voting, finalization, expiry, payout claims, or refunds.
+
+### 5.7 Bounty state machine
+
+```text
+CREATE ──► OPEN ──► SINGLE_CONFIRMATION ──confirm──► PAID
+              ▲              │
+              └────decline───┘
+              │
+              └──► RATIFYING ──YES wins after 72h──► PAID
+                        │
+                        └──NO/tie/no vote──► OPEN or REFUNDING
+
+OPEN ──expiry/cancel/moderation──► REFUNDING ──pull claims──► REFUNDED
+```
+
+## 6. Project registry adapter
+
+The adapter combines a governed project registry with a deliberately narrow gauge message boundary.
+
+### 6.1 Stable project records
+
+Each record uses an immutable stable project ID and contains:
+
+- metadata URI and digest;
+- current and pending payout addresses;
+- admission path and optional source bounty ID;
+- native registration bond, if any;
+- `PENDING`, `ACTIVE`, `SUSPENDED`, `REJECTED`, or `RETIRED` status; and
+- typed status/address history.
+
+An address is a payout destination, not project identity. Payout changes use propose/accept plus a configured delay.
+
+### 6.2 Admission paths
+
+**Graduation:** after a successful payout, the Agent Operations DAO may instruct the authenticated bounty contract to register a qualifying project without a bond. Graduation is explicit, not automatic, and creates only future eligibility.
+
+**Existing project:** an applicant deposits the configured native bond and enters `PENDING`. The Agent Operations DAO may approve, soft-reject with refund, hard-reject clear spam with the bond sent to the configured public destination, request corrected metadata, or later suspend/retire an active project. Good-standing retirement returns the bond.
+
+Only `ACTIVE` projects are valid gauge options. The Program Vault governor may override status and replace the curator.
+
+### 6.3 Capacity and abstention
+
+The first release supports at most 99 active project options plus one immutable `do-not-distribute` option, matching the gauge's 100-option limit. Admission fails rather than truncating if capacity is full. A retired project frees a slot.
+
+The reserved option produces no bank message. Its allocation, unallocated ballot power, threshold exclusions, cap overflow, and integer dust remain in the Program Vault and are never renormalized among winners.
+
+### 6.4 Message boundary
+
+The adapter may return only native bank sends that satisfy all of these conditions:
+
+- denomination is immutable and matches the funded epoch;
+- total is no greater than the epoch ceiling and available budget;
+- every recipient resolves from a currently active stable project ID;
+- at most one send exists per selected project;
+- selected-project and message counts remain bounded;
+- `do-not-distribute` produces no send; and
+- no stored or user-supplied arbitrary `CosmosMsg` is executed.
+
+Suspension before execution invalidates a previously tallied project. The associated amount remains in the vault; it is not reassigned.
+
+## 7. Epoch-snapshot gauge
+
+The existing gauge orchestrator cannot be paired unchanged with `dao-voting-juno-staked`: the voting module intentionally emits no staking-delta hooks, while the current gauge expects authenticated power-change hooks after a vote.
+
+The orchestrator therefore gains an explicit `EpochSnapshot` mode upstream in `dao-contracts`:
+
+1. Opening an epoch records one historical snapshot height, total voting power, fixed option set, budget, denomination, window, and policy.
+2. Every ballot queries `VotingPowerAtHeight` at that same height.
+3. A voter may revise allocations, but their epoch power never changes.
+4. Votes, receipts, tallies, and cleanup are scoped by epoch.
+5. No power-change hook is registered or accepted in this mode.
+6. Execution advances only through a terminal epoch state; a new epoch uses a new snapshot.
+
+The gauge tracks two distinct values:
+
+- `participating_power`: full snapshot power of each address with a nonempty current ballot, counted once, for turnout; and
+- `total_cast`: power actually allocated across options, for proportional distribution.
+
+Execution requires:
+
+```text
+participating_power * 10_000 >= snapshot_total_power * min_turnout_bps
+```
+
+Failure produces a terminal no-distribution epoch and leaves the full budget in the vault. It does not automatically enlarge the next epoch.
+
+The Agent Operations DAO receives guardian permission to stop an epoch or future execution, but only the Program Vault under Juno governance may resume it. Every snapshot, policy value, option set, ballot total, outcome, and actual transfer remains queryable.
+
+## 8. Public execute and query boundaries
+
+The exact schemas are produced during implementation, but the minimum execute surface is:
 
 ```rust
-Evidence {
-  id: u64,                       // request-local, increasing
-  request_id: u64,
-  submitter: Addr,
-  kind: EvidenceKind,
-  uri: String,
-  digest: String,
-  note: String,
-  work_round: u32,
-  submitted_at: Timestamp,
-  submitted_height: u64,
-}
+// Bounties
+CreateBounty { ... }
+Contribute { bounty_id }
+NominatePayout { bounty_id, ... }
+ConfirmSolePayout { bounty_id }
+DeclineSolePayout { bounty_id, reason }
+VotePayout { bounty_id, vote, rationale }
+FinalizePayout { bounty_id }
+CancelSoleFunded { bounty_id, reason }
+Expire { bounty_id }
+ClaimRefund { bounty_id }
+Moderate { bounty_id, outcome, reason }
+GraduateProject { bounty_id }
+PauseNewActivity { reason }
+UnpauseNewActivity { reason }
+UpdateConfig { ... }
 
-EvidenceKind = PullRequest | Commit | Release | Deployment | Document
-             | TestReport | AuditReport | ReviewRecord
-
-ShipmentAttestation {
-  verifier: Addr,
-  rationale: String,
-  evidence_ids: Vec<u64>,
-  work_round: u32,
-  submitted_at: Timestamp,
-  submitted_height: u64,
-}
+// Registry adapter
+RegisterProject { ... }
+ReviewRegistration { project_id, decision, reason }
+Graduate { source_bounty_id, ... }
+ProposePayoutAddress { project_id, address }
+AcceptPayoutAddress { project_id }
+SetProjectStatus { project_id, status, reason }
+Retire { project_id }
+ClaimRegistrationBond { project_id }
+UpdateEconomicConfig { ... }
 ```
 
-The first five kinds are delivery class (current builder in `BUILDING`); the last three are verification class (current verifier in `REVIEW`). No kind belongs to both. Every item requires `https://` or `ipfs://` followed by a non-empty locator and a valid SHA-256 digest.
+Queries must support bounded pagination for configuration, authority, pause state, bounties, contribution/receipt history, claims, projects, applications, epochs, ballots, allocations, health, and typed event-equivalent history. Querying one object must not require an unbounded scan.
 
-`RequestReview` accepts a non-empty list of at most the request-copied `max_review_evidence_refs`. IDs must be unique, exist on this request and current round, and each must be delivery-class evidence submitted by the current builder. Failure rejects without changing status. A successful request stores the references in status history and enters `REVIEW`.
+Every execute rejects unexpected funds. Only creation, contribution, and bonded registration accept the exact native denomination and amount conditions they define.
 
-`REVIEW → SHIPPED` requires all of:
+## 9. Protocol invariants
 
-1. sender is configured verifier and differs from current builder;
-2. bounded non-empty rationale explicitly attests the immutable acceptance criteria were met;
-3. the reference list is non-empty, unique, no longer than copied `max_attestation_evidence_refs`, and every ID exists on this request and current round;
-4. at least one reference is delivery-class evidence submitted by the current builder; and
-5. at least one *different* reference is verification-class evidence submitted by the current verifier.
-
-Product copy says **attested shipment** or **delivery attestation**, never proof of correctness.
-
-## 8. Ranking and pagination
-
-Canonical rank within a status is signed `S - O` descending, then `S` descending, then oldest request ID ascending. Never subtract `Uint128` directly. Maintain both indexes atomically:
-
-```text
-STATUS_RANK:          (status, rank_key) → request_id
-STATUS_CATEGORY_RANK: (status, category, rank_key) → request_id
-```
-
-Descending `rank_key` is fixed-width:
-
-```text
-version:u8 = 1
-sign_bucket:u8       // 1 for net >= 0; 0 for net < 0
-sortable_net:[u8;16] // magnitude if nonnegative; MAX - magnitude if negative
-support:[u8;16]      // big-endian
-reverse_id:[u8;8]    // u64::MAX - request_id, big-endian
-```
-
-Zero is nonnegative. Numeric status codes and cursor version are frozen public schema. The opaque cursor is base64url without padding over:
-
-```text
-cursor_version:u8 | schema_version:u16 | status:u8 | category_length:u8
-| category:utf8 | rank_key
-```
-
-Decode rejects unknown versions, malformed lengths/UTF-8/category, and filters differing from the current query. Exact encoding/ordering vectors are required in tests. Mutable `OPEN` pagination is weakly consistent: responses include query height and clients refresh from page one for a current view.
-
-The UI displays raw support, opposition, participation, total power, voter count, snapshot height, and whether a number is canonical rank or filtered position.
-
-## 9. Public execute/query surface and audit logs
-
-Execute variants are:
-
-- `SubmitRequest { title, summary, acceptance_criteria, category, detail_uri, detail_digest }`
-- `CastVote { request_id, choice }`; `CloseRequest { request_id }`
-- `MarkSpam { request_id, reason }`; `MarkDuplicate { request_id, canonical_request_id, reason }`; `ArchiveRequest { request_id, reason }` (steward, only `QUALIFIED` or `BLOCKED`)
-- `StartBuilding { request_id, builder, reason }`; `BlockBuilding { request_id, reason }`; `ResumeBuilding { request_id, builder, reason }`
-- `AddEvidence { request_id, kind, uri, digest, note }`; `RequestReview { request_id, reason, evidence_ids }`
-- `RejectReview { request_id, reason }`; `BlockReview { request_id, reason }`; `AttestShipment { request_id, rationale, evidence_ids }`
-- `WithdrawRefund { request_id }`
-- `PauseSubmissions { reason }`; `UnpauseSubmissions { reason }`; `EmergencyArchiveOpen { request_id, reason: SnapshotHistoryRisk }`
-- `UpdateConfig { submission_bond, voting_period_blocks, quorum_bps, support_bps, work_inactivity_blocks, request_limits, reason }` (optional update fields, future requests only); `ProposeGovernor { address, reason }`; `CancelGovernorTransfer { reason }`; `AcceptGovernor { reason }`; `ReplaceSteward { address, reason }`; and `ReplaceVerifier { address, reason }` (replacement messages are governor-only except acceptance).
-
-Queries are:
-
-- `Config {}`, `BondTotals {}`, `Request { id }`, and `ShipmentAttestation { request_id }`;
-- `Requests { status, category, author, start_after_id, limit }`;
-- `Vote { request_id, voter }` and `Votes { request_id, start_after_voter, limit }`;
-- `Evidence { request_id, start_after_id, limit }` and `StatusHistory { request_id, start_after_id, limit }`;
-- `RequestActions { request_id, start_after_id, limit }` and `ProtocolActions { start_after_id, limit }`; and
-- `RankedRequests { status, category, cursor, limit }`.
-
-Optional filters/cursors/limits are represented by `Option`; `status` is required for ranked queries. Every list response includes `items`, `next_cursor` (or `next_start_after` for ID/address order), and `query_height`, and enforces the accepted page bounds.
-
-Canonical typed logs are:
-
-```text
-REQUEST_ACTIONS:  (request_id, action_id) → RequestActionRecord
-PROTOCOL_ACTIONS: action_id → ProtocolActionRecord
-```
-
-Request actions cover submission, finalization, status transition, duplicate link, assignment/reassignment, evidence, review rejection, attestation, bond transition, and refund. Protocol actions cover pause/unpause, config, governor transfer, role replacement, and migration record. Every record stores actor, height, timestamp, bounded reason where applicable, and typed old/new values or referenced IDs. Status history additionally stores from/to status and evidence IDs. Events mirror logs but are not the only audit source.
+1. Accounted bounty liabilities are fully backed by the contract's accounted native balance.
+2. Principal is paid at most once and each contribution is refunded at most once.
+3. Agent moderation never confiscates bounty principal.
+4. A multi-contributor payout never executes before `closes_at`.
+5. A round's weights, total, contributor count, nomination, duration, and rule are immutable.
+6. Votes never cross round or bounty boundaries.
+7. Failed, tied, and empty ratifications never pay.
+8. Settlement and refunds never require iterating over all contributors.
+9. A gauge pays only a project active when execution messages are produced.
+10. Every epoch voter and the total use exactly one historical Juno snapshot.
+11. Failed turnout produces no distribution and no automatic rollover.
+12. Agent, contributor, staker, governor, and migration authorities are separately queryable and logged.
+13. Active-object semantics cannot be changed by a later config update.
+14. All amounts use checked arithmetic and all work has hard bounds.
 
 ## 10. Pause and recovery
 
-Pause blocks **only new submissions**. Voting, closing, evidence, review, recovery, and refunds continue. Governor or steward may pause with a reason; only governor may unpause or change durable configuration.
+Stop powers are intentionally asymmetric:
 
-`ProposeGovernor` validates an address different from both the current governor and current pending nominee, then sets or replaces `pending_governor`; replacement is explicit in the typed log. `CancelGovernorTransfer` clears a pending proposal and rejects when none exists. Only the exact pending address may call `AcceptGovernor` with a non-empty bounded reason; acceptance atomically sets governor and clears pending state. `Config {}` exposes pending state.
+- Agent Operations may block new bounties, contributions, nominations, admissions, or gauge execution and may suspend projects.
+- Existing contributor votes, finalization, expiry, claims, and refunds continue so funds are not trapped.
+- Agent Operations cannot unpause, resume, increase caps, or change recipients.
+- Program Vault governance can recover after Juno `x/gov` authorization and can replace the agent role.
+- The bounty, registry, Program Vault, Juno voting module, and snapshot gauge are instantiated fresh. Prototype and existing-gauge migrations are outside the backend goal; a separately reviewed Agent Operations DAO may be bound without migrating it. The disclosed Juno governance code admin remains a trust boundary, but any future upgrade or state migration requires a separate specification and test plan.
 
-A snapshot-total mismatch fails a vote without changes. Operators may pause submissions while checking history. While paused, governor may emergency-archive an `OPEN` request with a refund and typed `SnapshotHistoryRisk` reason. This is a disclosed recovery judgment, not exact-height proof. Ordinary steward `OPEN → ARCHIVED` is forbidden.
+Keepers are optional. All deadline-based progress calls are public and idempotent under their state preconditions.
 
-Entering or re-entering `BUILDING` sets `work_activity_height` to the current height. Successful current-builder delivery evidence in `BUILDING` resets it; unrelated actions do not. Steward-forced blocking is allowed exactly when checked addition proves `height >= work_activity_height + work_inactivity_blocks`; overflow is treated as not elapsed. A builder can block earlier voluntarily. The field remains exposed for derived stale warnings in every later status.
+## 11. Source and artifact boundaries
 
-## 11. Direct RPC and optional indexing
+`dao-contracts` is pinned as a Git submodule because deployment consumes its exact core, Juno voting, gauge, interfaces, and release tooling. It is not added to the Juno Voice root Cargo workspace: the two workspaces currently use different CosmWasm dependency generations and build independent Wasm artifacts.
 
-Direct RPC is primary for bounded status-ranked/category-ranked lists, request detail, and typed histories. Text search and cross-request feeds are deferrable. An optional indexer exposes chain ID, contract address, schema version, indexed/current RPC heights, and lag state plus a direct-chain verification path. It is never authoritative for votes, ranking, lifecycle, evidence, bonds, or attestations.
+Gauge changes land upstream first. Juno Voice then advances the gitlink to a reviewed commit. A release manifest binds:
 
-## 12. Security and release posture
+- parent repository commit and submodule commit;
+- Rust/toolchain and optimizer identity;
+- Wasm SHA-256 checksums and schema versions;
+- chain ID, code IDs, instantiated addresses, and CosmWasm code admins; and
+- every authority address and economic configuration value.
 
-Implementation must validate addresses, checked-convert heights and powers, reject zero totals and extra funds, bound all inputs/counts/pages, use indexed maps, update receipts/tallies/ranks/bonds atomically, centralize role/transition checks, and test custom-query JSON exactly. Smoke the final Wasm against Juno v30 before deployment.
+No deployment resolves a moving branch or an unpinned package.
 
-MVP implementation can start without designing or rehearsing migrations. Production upgrade/migration policy is a **launch concern**, not an implementation gate. If launch remains upgradeable, disclose the chain admin custody risk and require versioned/CW2-checked migration that preserves all canonical state. Publish checksum, code/contract IDs, schema/config, and role/admin addresses. None of the defaults below authorizes deployment or accepting funds.
+## 12. Delivery boundary
 
-### Launch defaults
-
-These choices freeze the intended MVP deployment profile while remaining explicit instantiate/deployment inputs:
-
-| Setting | Decision |
-|---|---|
-| Production chain | `juno-1` |
-| Exact-artifact smoke | `uni-7`, because it permits throwaway upload/instantiate testing |
-| Native denom | `ujuno` on `juno-1`; use the target chain's native denom for smoke |
-| Submission bond | `10,000,000 ujuno` (10 JUNO) on `juno-1` |
-| Voting period | `432,000` blocks; revalidate at deployment that observed target-chain cadence keeps the expected duration positive and no longer than two months |
-| Qualification quorum | `50` bps (0.5% participation) |
-| Qualification support | `5,001` bps (strictly more than 50% of participation) |
-| Work inactivity timeout | `432,000` blocks |
-| Chain admin and governor | Juno Agents DAO core `juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac` for the intended production profile |
-| Steward | Juno agent wallet `juno1xsx746x4375g39f9fj07hr7qm0wuf0ksl0an76` for the intended production profile |
-| Verifier | Juno Agents DAO core for the intended production profile; it must remain distinct from the assigned builder for every shipment |
-| Design system | Pinned source subtree from `juno-ai-dev/juno-design-system` commit `0dc0ae9ae80e0378b61fc9f67cbf417f291d6f16` until a versioned package exists |
-
-Before deployment, re-query every address and target-chain parameter, confirm admin/governor execution semantics, measure block cadence over a documented window, and publish the exact instantiated values. A material safety failure in that check is a launch blocker, not permission to silently change the accepted contract semantics.
-
-## 13. Authoritative chain references
-
-Verified against [`CosmosContracts/juno@c0b3a8d` (`v30.0.0`)](https://github.com/CosmosContracts/juno/tree/c0b3a8d258d52d16e5bc39a75168a99aab9d098e): voting-snapshot query/parameter protos, custom-query types/dispatch, keeper snapshot/EndBlock/backfill/genesis implementations. The source confirms at-or-before lookup, string power, EndBlock settlement, retention controls, and exported-genesis boundary.
+The backend delivery plan is [GOAL.md](../../GOAL.md). Frontend implementation, an indexer, live mainnet funding, and governance proposal submission are outside that goal. Public testnet integration, deterministic artifacts, target-chain gas evidence, independent security review, and a loss-bounded canary are release gates, not optional follow-up work.

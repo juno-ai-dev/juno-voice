@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juno-voice.invalid/schema/release-decision-v1.json",
+  "title": "Juno Voice testnet release decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "authorization", "production_authorized",
+    "chain_id", "config_sha256", "source", "bound_evidence", "signers",
+    "decided_at", "signed_payload_sha256", "signatures"
+  ],
+  "properties": {
+    "schema_version": {"const": "juno-voice/release-decision/v1"},
+    "status": {"const": "approved_testnet_candidate"},
+    "authorization": {"const": "testnet_release_candidate_only"},
+    "production_authorized": {"const": false},
+    "chain_id": {"const": "uni-7"},
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "source": {"$ref": "#/$defs/source"},
+    "bound_evidence": {"$ref": "#/$defs/boundEvidence"},
+    "signers": {"$ref": "#/$defs/signers"},
+    "decided_at": {"$ref": "#/$defs/nonempty"},
+    "signed_payload_sha256": {"$ref": "#/$defs/sha256"},
+    "signatures": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/signature"}
+    }
+  },
+  "$defs": {
+    "nonempty": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_commit", "dao_contracts_commit"],
+      "properties": {
+        "parent_commit": {"$ref": "#/$defs/commit"},
+        "dao_contracts_commit": {"$ref": "#/$defs/commit"}
+      }
+    },
+    "boundEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "build_manifest_sha256", "deployment_verification_sha256",
+        "upstream_attestation_sha256", "security_attestation_sha256",
+        "public_testnet_report_sha256", "gas_report_sha256",
+        "canary_report_sha256", "canary_governance_decision_sha256",
+        "operations_rehearsal_report_sha256", "reviewed_evidence_sha256"
+      ],
+      "properties": {
+        "build_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "deployment_verification_sha256": {"$ref": "#/$defs/sha256"},
+        "upstream_attestation_sha256": {"$ref": "#/$defs/sha256"},
+        "security_attestation_sha256": {"$ref": "#/$defs/sha256"},
+        "public_testnet_report_sha256": {"$ref": "#/$defs/sha256"},
+        "gas_report_sha256": {"$ref": "#/$defs/sha256"},
+        "canary_report_sha256": {"$ref": "#/$defs/sha256"},
+        "canary_governance_decision_sha256": {"$ref": "#/$defs/sha256"},
+        "operations_rehearsal_report_sha256": {"$ref": "#/$defs/sha256"},
+        "reviewed_evidence_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "signers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maintainers", "security_reviewer", "operations_reviewer"],
+      "properties": {
+        "maintainers": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonempty"}
+        },
+        "security_reviewer": {"$ref": "#/$defs/nonempty"},
+        "operations_reviewer": {"$ref": "#/$defs/nonempty"}
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "payload_sha256", "method", "value"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/nonempty"},
+        "payload_sha256": {"$ref": "#/$defs/sha256"},
+        "method": {"$ref": "#/$defs/nonempty"},
+        "value": {"$ref": "#/$defs/nonempty"}
+      }
+    }
+  }
+}

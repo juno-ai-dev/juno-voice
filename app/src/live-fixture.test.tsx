@@ -33,5 +33,7 @@ describe('captured uni-7 request #1 regression fixture', () => {
     expect(await screen.findByRole('heading', { name: live.request.request.title })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Shipment attestation' })).toBeInTheDocument();
     expect(screen.getAllByRole('time').length).toBeGreaterThan(10);
+    expect(screen.getByText('27 JUNOX')).toBeInTheDocument();
+    expect(screen.getByText('226,105.793108 JUNOX')).toBeInTheDocument();
   });
 });

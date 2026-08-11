@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juno-voice.invalid/schema/gas-report-v1.json",
+  "title": "Juno Voice configured-maximum gas report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "chain_id", "config_sha256", "source",
+    "safety_margin_bps", "measurements_sha256", "measurement_cases",
+    "measured_by", "reviewed_by", "measured_at", "reviewed_at",
+    "methodology", "signed_payload_sha256", "signatures"
+  ],
+  "properties": {
+    "schema_version": {"const": "juno-voice/gas-report/v1"},
+    "status": {"const": "passed"},
+    "chain_id": {"const": "uni-7"},
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "source": {"$ref": "#/$defs/source"},
+    "safety_margin_bps": {"type": "integer", "minimum": 1000, "maximum": 10000},
+    "measurements_sha256": {"$ref": "#/$defs/sha256"},
+    "measurement_cases": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        {"const": "adapter_max_messages"},
+        {"const": "bounty_max_contributors"},
+        {"const": "bounty_max_history"},
+        {"const": "gauge_max_cleanup_batch"},
+        {"const": "gauge_max_options"},
+        {"const": "query_max_pagination"},
+        {"const": "registry_max_projects"}
+      ],
+      "items": false
+    },
+    "measured_by": {"$ref": "#/$defs/nonempty"},
+    "reviewed_by": {"$ref": "#/$defs/nonempty"},
+    "measured_at": {"$ref": "#/$defs/nonempty"},
+    "reviewed_at": {"$ref": "#/$defs/nonempty"},
+    "methodology": {"$ref": "#/$defs/nonempty"},
+    "signed_payload_sha256": {"$ref": "#/$defs/sha256"},
+    "signatures": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/signature"}
+    }
+  },
+  "$defs": {
+    "nonempty": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_commit", "dao_contracts_commit"],
+      "properties": {
+        "parent_commit": {"$ref": "#/$defs/commit"},
+        "dao_contracts_commit": {"$ref": "#/$defs/commit"}
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "payload_sha256", "method", "value"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/nonempty"},
+        "payload_sha256": {"$ref": "#/$defs/sha256"},
+        "method": {"$ref": "#/$defs/nonempty"},
+        "value": {"$ref": "#/$defs/nonempty"}
+      }
+    }
+  }
+}

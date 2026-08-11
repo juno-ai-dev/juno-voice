@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juno-voice.invalid/schema/deployment-config-v1.json",
+  "title": "Juno Voice deployment configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "environment", "chain", "source", "builder",
+    "artifacts", "deployment", "agent_operations", "bounty", "registry",
+    "gauge", "tranche"
+  ],
+  "properties": {
+    "schema_version": {"const": "juno-voice/deployment-config/v1"},
+    "environment": {"type": "string", "minLength": 1},
+    "chain": {"$ref": "#/$defs/chain"},
+    "source": {"$ref": "#/$defs/source"},
+    "builder": {"$ref": "#/$defs/builder"},
+    "artifacts": {"$ref": "#/$defs/artifacts"},
+    "deployment": {"$ref": "#/$defs/deployment"},
+    "agent_operations": {"$ref": "#/$defs/agent_operations"},
+    "bounty": {"$ref": "#/$defs/bounty"},
+    "registry": {"$ref": "#/$defs/registry"},
+    "gauge": {"$ref": "#/$defs/gauge"},
+    "tranche": {"$ref": "#/$defs/tranche"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"environment": {"const": "uni-7"}}, "required": ["environment"]},
+      "then": {"properties": {"chain": {"properties": {"chain_id": {"const": "uni-7"}}}}}
+    }
+  ],
+  "$defs": {
+    "hex40": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "hex64": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "uint": {
+      "oneOf": [
+        {"type": "integer", "minimum": 0, "maximum": 340282366920938463463374607431768211455},
+        {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "maxLength": 39}
+      ]
+    },
+    "positive_uint": {
+      "oneOf": [
+        {"type": "integer", "minimum": 1, "maximum": 340282366920938463463374607431768211455},
+        {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 39}
+      ]
+    },
+    "decimal_fraction": {
+      "type": "string",
+      "pattern": "^(?:0(?:\\.[0-9]{1,18})?|1(?:\\.0{1,18})?)$"
+    },
+    "juno_address": {
+      "type": "string",
+      "pattern": "^juno1[023456789acdefghjklmnpqrstuvwxyz]{38,58}$",
+      "maxLength": 63
+    },
+    "safe_name": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+    "repository_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "pattern": "^[^/]"},
+        "sha256": {"$ref": "#/$defs/hex64"}
+      }
+    },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chain_id", "rpc", "grpc", "native_denom", "bech32_prefix", "xgov_module_account", "deployer_address", "deployer_key_name", "gas_prices", "gas_adjustment", "tx_timeout_seconds"],
+      "properties": {
+        "chain_id": {"type": "string", "minLength": 1},
+        "rpc": {"type": "string", "pattern": "^https://"},
+        "grpc": {"type": "string", "pattern": "^https://"},
+        "native_denom": {"const": "ujuno"},
+        "bech32_prefix": {"const": "juno"},
+        "xgov_module_account": {"$ref": "#/$defs/juno_address"},
+        "deployer_address": {"$ref": "#/$defs/juno_address"},
+        "deployer_key_name": {"$ref": "#/$defs/safe_name"},
+        "gas_prices": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?ujuno$"},
+        "gas_adjustment": {
+          "oneOf": [
+            {"type": "number", "minimum": 1, "maximum": 3},
+            {"type": "string", "pattern": "^(?:[12](?:\\.[0-9]+)?|3(?:\\.0+)?)$"}
+          ]
+        },
+        "tx_timeout_seconds": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1, "maximum": 900},
+            {"type": "string", "pattern": "^[1-9][0-9]{0,2}$"}
+          ]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_commit", "dao_contracts_commit"],
+      "properties": {"parent_commit": {"$ref": "#/$defs/hex40"}, "dao_contracts_commit": {"$ref": "#/$defs/hex40"}}
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["optimizer_image", "juno_voice_rust", "dao_contracts_rust", "juno_voice_cosmwasm_check", "dao_contracts_cosmwasm_check", "wasm_tools"],
+      "properties": {
+        "optimizer_image": {"type": "string", "pattern": "@sha256:[0-9a-f]{64}$"},
+        "juno_voice_rust": {"const": "1.85.1"},
+        "dao_contracts_rust": {"const": "1.81.0"},
+        "juno_voice_cosmwasm_check": {"const": "3.0.4"},
+        "dao_contracts_cosmwasm_check": {"const": "1.5.11"},
+        "wasm_tools": {"const": "1.254.0"}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "cw2_contract", "cw2_version"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[^/].*\\.wasm$"},
+        "sha256": {"$ref": "#/$defs/hex64"},
+        "cw2_contract": {"type": "string", "minLength": 1},
+        "cw2_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["juno_voice_bounties", "hack_juno_registry_adapter", "dao_dao_core", "dao_voting_juno_staked", "gauge_orchestrator"],
+      "properties": {
+        "juno_voice_bounties": {
+          "allOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"properties": {"cw2_contract": {"const": "crates.io:juno-voice-bounties"}, "cw2_version": {"const": "1.0.0"}}}
+          ]
+        },
+        "hack_juno_registry_adapter": {
+          "allOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"properties": {"cw2_contract": {"const": "crates.io:hack-juno-registry-adapter"}, "cw2_version": {"const": "1.0.0"}}}
+          ]
+        },
+        "dao_dao_core": {
+          "allOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"properties": {"cw2_contract": {"const": "crates.io:dao-dao-core"}, "cw2_version": {"const": "2.8.0-alpha.2"}}}
+          ]
+        },
+        "dao_voting_juno_staked": {
+          "allOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"properties": {"cw2_contract": {"const": "crates.io:dao-voting-juno-staked"}, "cw2_version": {"const": "2.8.0-alpha.2"}}}
+          ]
+        },
+        "gauge_orchestrator": {
+          "allOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"properties": {"cw2_contract": {"const": "crates.io:gauge"}, "cw2_version": {"const": "2.8.0-alpha.2"}}}
+          ]
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code_admin", "program_vault_salt", "program_vault_label",
+        "voting_module_salt", "voting_module_label", "gauge_salt", "gauge_label",
+        "bounty_salt", "bounty_label", "registry_salt", "registry_label"
+      ],
+      "properties": {
+        "code_admin": {"$ref": "#/$defs/juno_address"},
+        "program_vault_salt": {"type": "string", "minLength": 1, "maxLength": 64},
+        "program_vault_label": {"$ref": "#/$defs/safe_name"},
+        "voting_module_salt": {"type": "string", "minLength": 1, "maxLength": 64},
+        "voting_module_label": {"$ref": "#/$defs/safe_name"},
+        "gauge_salt": {"type": "string", "minLength": 1, "maxLength": 64},
+        "gauge_label": {"$ref": "#/$defs/safe_name"},
+        "bounty_salt": {"type": "string", "minLength": 1, "maxLength": 64},
+        "bounty_label": {"$ref": "#/$defs/safe_name"},
+        "registry_salt": {"type": "string", "minLength": 1, "maxLength": 64},
+        "registry_label": {"$ref": "#/$defs/safe_name"}
+      }
+    },
+    "agent_member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "weight"],
+      "properties": {
+        "address": {"$ref": "#/$defs/juno_address"},
+        "weight": {"$ref": "#/$defs/positive_uint"}
+      }
+    },
+    "agent_operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode", "core_address", "core_code_id", "core_checksum",
+        "voting_module_address", "voting_code_id", "voting_checksum",
+        "proposal_module_address", "proposal_code_id", "proposal_checksum",
+        "cw4_group_address", "cw4_group_code_id", "cw4_group_checksum",
+        "members", "threshold_weight", "voting_duration_seconds", "review_reference"
+      ],
+      "properties": {
+        "mode": {"const": "bind_reviewed"},
+        "core_address": {"$ref": "#/$defs/juno_address"},
+        "core_code_id": {"$ref": "#/$defs/positive_uint"},
+        "core_checksum": {"$ref": "#/$defs/hex64"},
+        "voting_module_address": {"$ref": "#/$defs/juno_address"},
+        "voting_code_id": {"$ref": "#/$defs/positive_uint"},
+        "voting_checksum": {"$ref": "#/$defs/hex64"},
+        "proposal_module_address": {"$ref": "#/$defs/juno_address"},
+        "proposal_code_id": {"$ref": "#/$defs/positive_uint"},
+        "proposal_checksum": {"$ref": "#/$defs/hex64"},
+        "cw4_group_address": {"$ref": "#/$defs/juno_address"},
+        "cw4_group_code_id": {"$ref": "#/$defs/positive_uint"},
+        "cw4_group_checksum": {"$ref": "#/$defs/hex64"},
+        "members": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/agent_member"}},
+        "threshold_weight": {"$ref": "#/$defs/positive_uint"},
+        "voting_duration_seconds": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1, "maximum": 2592000},
+            {"type": "string", "pattern": "^[1-9][0-9]{0,6}$"}
+          ]
+        },
+        "review_reference": {"$ref": "#/$defs/repository_file"}
+      }
+    },
+    "bounty_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_title_bytes", "max_summary_bytes", "max_acceptance_criteria_bytes",
+        "max_uri_bytes", "max_rationale_bytes", "max_reason_bytes", "max_page_limit"
+      ],
+      "properties": {
+        "max_title_bytes": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "max_summary_bytes": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "max_acceptance_criteria_bytes": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "max_uri_bytes": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "max_rationale_bytes": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "max_reason_bytes": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "max_page_limit": {"type": "integer", "minimum": 1, "maximum": 100}
+      }
+    },
+    "bounty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_contribution", "max_bounty_total", "min_lifetime_seconds",
+        "max_lifetime_seconds", "max_contributors", "max_rounds",
+        "ratification_seconds", "limits"
+      ],
+      "properties": {
+        "min_contribution": {"$ref": "#/$defs/positive_uint"},
+        "max_bounty_total": {"$ref": "#/$defs/positive_uint"},
+        "min_lifetime_seconds": {"type": "integer", "minimum": 259200, "maximum": 31622400},
+        "max_lifetime_seconds": {"type": "integer", "minimum": 259200, "maximum": 31622400},
+        "max_contributors": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "max_rounds": {"type": "integer", "minimum": 1, "maximum": 100},
+        "ratification_seconds": {"const": 259200},
+        "limits": {"$ref": "#/$defs/bounty_limits"}
+      }
+    },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spam_destination", "registration_bond", "payout_address_delay_seconds",
+        "epoch_ceiling", "min_project_share", "max_project_share",
+        "max_selected_projects", "max_active_projects", "reserved_option",
+        "max_page_limit", "max_metadata_uri_bytes", "max_reason_bytes"
+      ],
+      "properties": {
+        "spam_destination": {"$ref": "#/$defs/juno_address"},
+        "registration_bond": {"$ref": "#/$defs/positive_uint"},
+        "payout_address_delay_seconds": {"type": "integer", "minimum": 1, "maximum": 7776000},
+        "epoch_ceiling": {"$ref": "#/$defs/positive_uint"},
+        "min_project_share": {"$ref": "#/$defs/decimal_fraction"},
+        "max_project_share": {"$ref": "#/$defs/decimal_fraction"},
+        "max_selected_projects": {"type": "integer", "minimum": 1, "maximum": 99},
+        "max_active_projects": {"const": 99},
+        "reserved_option": {"const": "do-not-distribute"},
+        "max_page_limit": {"type": "integer", "minimum": 1, "maximum": 100},
+        "max_metadata_uri_bytes": {"type": "integer", "minimum": 1, "maximum": 2048},
+        "max_reason_bytes": {"type": "integer", "minimum": 1, "maximum": 2048}
+      }
+    },
+    "gauge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title", "power_source", "epoch_size_seconds", "min_turnout_bps",
+        "epoch_budget", "min_percent_selected", "max_available_percentage",
+        "max_options_selected", "option_capacity", "reset_epoch_seconds"
+      ],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 128},
+        "power_source": {"const": "epoch_snapshot"},
+        "epoch_size_seconds": {"type": "integer", "minimum": 3600},
+        "min_turnout_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "epoch_budget": {"$ref": "#/$defs/positive_uint"},
+        "min_percent_selected": {"$ref": "#/$defs/decimal_fraction"},
+        "max_available_percentage": {"$ref": "#/$defs/decimal_fraction"},
+        "max_options_selected": {"type": "integer", "minimum": 1, "maximum": 99},
+        "option_capacity": {"const": 100},
+        "reset_epoch_seconds": {"type": "null"}
+      }
+    },
+    "tranche": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximum_amount", "term_start_time", "term_end_time", "unused_funds_policy",
+        "snapshot_retention_blocks", "observed_min_block_seconds",
+        "operational_margin_seconds"
+      ],
+      "properties": {
+        "maximum_amount": {"$ref": "#/$defs/positive_uint"},
+        "term_start_time": {"$ref": "#/$defs/positive_uint"},
+        "term_end_time": {"$ref": "#/$defs/positive_uint"},
+        "unused_funds_policy": {"enum": ["return_to_community_pool", "retain_until_term_end"]},
+        "snapshot_retention_blocks": {"$ref": "#/$defs/positive_uint"},
+        "observed_min_block_seconds": {"$ref": "#/$defs/positive_uint"},
+        "operational_margin_seconds": {"$ref": "#/$defs/positive_uint"}
+      }
+    }
+  }
+}

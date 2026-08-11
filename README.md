@@ -1,75 +1,114 @@
 # Juno Voice
 
-**The on-chain roadmap for Juno.**
+**A public market for work the Juno community wants to fund.**
 
-Juno Voice is a public feature-prioritization system where people and agents submit requests, Juno stakers signal priorities using historical voting power, and builders attach verifiable delivery evidence.
+Juno Voice v1 combines social bounties with stake-weighted Hack Juno incentives:
 
-> `suggest → prioritize → build → verify → ship`
+> `request → fund → deliver → ratify → graduate → incentivize`
 
-## Maintained public application
+The target system lets anyone publish a bounded bounty and lets other accounts add to it. A sole contributor confirms a payout directly. When a bounty has multiple contributors, the proposed delivery enters a fixed 72-hour on-chain ratification period in which each contributor's vote is weighted by the amount they contributed. A strict majority decides: `YES > NO` pays, while `NO > YES`, a tie, or no votes resets the bounty without paying the submitter.
 
-[`app/`](app/) is the maintained React/TypeScript/Vite frontend. It is explicitly labeled **TESTNET / UNI-7** and reads authoritative data directly from the deployed CosmWasm contract without requiring a wallet. It has no sample fallback. Keplr and Leap can be used for the bounded public submit and eligible bond-refund flows; privileged controls are never rendered. Voting execution is explicitly disabled because direct typed historical voter power cannot currently be verified—current balance is never presented as snapshot power. [`prototype/`](prototype/) remains unchanged as a historical visual reference; its embedded sample rows are not application data.
+Graduated projects and registered existing projects can participate in recurring Hack Juno gauge epochs. Juno stakers direct the epoch allocation using historical voting power from `x/voting-snapshot` through `dao-voting-juno-staked`.
 
-Every enabled write re-queries canonical state before constructing the message, presents chain, sender, contract, decoded message, funds, and implications before signing, checks transaction code zero, and requires canonical post-transaction confirmation before reporting success. Transaction success links use Mintscan. Wallet/account or chain changes disconnect the signing session while leaving direct-RPC reading available.
+## Governance model
 
-Pinned live facts:
+The design deliberately separates constitutional authority, bounded operations, and individual economic rights:
+
+- **Juno Network governance (`x/gov`)** controls program funding, upgrades, and the outer authority boundary.
+- **Program Vault** is a minimal DAO DAO treasury and execution shell whose external administrator is the Juno governance module account. It does not create a second policy electorate.
+- **Agent Operations DAO** performs bounded curation, project admission, nomination, suspension, and stop-only safety actions. It cannot release a multi-contributor bounty, increase a budget, resume a stopped system, or upgrade contracts.
+- **Bounty contributors** exclusively decide whether their pooled bounty is paid.
+- **Juno stakers** direct only the funded Hack Juno allocation for a given epoch.
+
+This keeps routine work fast while preserving contributor custody and Juno-wide control of public funds.
+
+## Release status
+
+The v1 backend is **implemented locally but not yet release-approved or
+deployed**. [GOAL.md](GOAL.md) defines the backend-only scope and remaining
+completion gates. The detailed protocol is specified in:
+
+- [Backend architecture](docs/architecture/ARCHITECTURE.md)
+- [Incentives and governance report](docs/design/INCENTIVES_AND_GOVERNANCE.md)
+- [Product behavior](docs/design/PRODUCT_DESIGN.md)
+- [Architecture decisions](docs/architecture/decisions/)
+
+The checked-in web application and `contracts/juno-voice` are pre-release prototypes. They are not the v1 protocol specification and are not migration inputs.
+
+## Backend composition
+
+The v1 backend uses small contracts with narrow authority:
+
+```text
+Juno x/gov
+  └─ externally administers Program Vault
+       ├─ funds bounded Hack Juno epochs
+       └─ authorizes upgrades and emergency recovery
+
+Juno Voice bounty contract
+  └─ escrows contributions and enforces contributor ratification
+
+Agent Operations DAO
+  ├─ curates bounties and project applications
+  ├─ graduates delivered projects
+  └─ can stop or suspend, but cannot pay or resume
+
+Project registry adapter
+  └─ exposes a capacity-bounded gauge option set and payout messages
+
+dao-voting-juno-staked + epoch-snapshot gauge
+  └─ snapshots Juno stake and allocates a pre-funded epoch budget
+```
+
+The first release accepts only native `ujuno`. It avoids arbitrary execution messages, per-bounty DAOs, transferable bounty shares, and unbounded option sets.
+
+## `dao-contracts` dependency
+
+[`deps/dao-contracts`](deps/dao-contracts) is an independent Git submodule pinned to an exact upstream commit. It supplies the reviewed DAO DAO core, Juno-staked voting module, gauge contracts, interfaces, and release tooling used by the deployment.
+
+It is intentionally **not** a member of the root Cargo workspace. The repositories currently use different CosmWasm dependency generations and must produce independent artifacts. Gauge changes are developed upstream in `dao-contracts`; Juno Voice advances the gitlink only after accepting a specific commit. A release manifest must bind that commit to every Wasm checksum, code ID, and instantiated address.
+
+Clone with dependencies:
+
+```sh
+git clone --recurse-submodules https://github.com/juno-ai-dev/juno-voice.git
+
+# Existing clone
+git submodule update --init --recursive
+```
+
+## Repository shape
+
+```text
+app/                    pre-release interface prototype
+contracts/              Juno Voice-owned CosmWasm contracts
+deps/dao-contracts/     exact upstream DAO DAO source pin (submodule)
+schema/                 checked-in Juno Voice contract schemas
+docs/architecture/      target architecture and decision records
+docs/design/            governance report and product behavior
+artifacts/               reproducible Juno Voice Wasm artifacts
+prototype/              earlier interaction prototype
+```
+
+## Prototype application
+
+The current `app/` reads a pre-release `uni-7` prototype contract directly and has no sample-data fallback. It is retained as implementation reference while the v1 backend is built. Node.js 22 and the lockfile are authoritative.
+
+```sh
+cd app
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Pinned prototype deployment:
 
 - Chain ID: `uni-7`
 - Contract: `juno1t7ajx85pkw8e0yl8vgnlxvnlq4yf0h6a3eahuystnf6e9jfhwvvsv4jcel`
 - Code ID: `85`
 - Code checksum: `fd264e53ae9af64231b8e62aff0da099e0ff21ba38d887c7a96d9c4ef755a96e`
-- RPC: `https://juno-testnet-rpc.cogwheel.zone`
-
-### Local frontend
-
-Node.js 22 is used by CI. The lockfile is authoritative.
-
-```sh
-cd app
-npm ci                 # frozen install
-npm run dev            # local Vite server
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run preview        # preview the production build
-```
-
-Copy `app/.env.example` only if an override is needed. Supported Vite variables are `VITE_CHAIN_ID`, `VITE_CONTRACT_ADDRESS`, `VITE_RPC_URL`, and `VITE_EXPLORER_URL`. Validation fails closed: chain and contract must remain the verified `uni-7` deployment, RPC must be credential-free HTTPS, and startup independently verifies chain ID, contract address, Code ID, checksum, native denom, and evidence-policy version. Overrides never introduce mainnet or sample data.
-
-The app vendors official mark/wordmark assets and canonical tokens from [Juno Design System commit `0dc0ae9`](https://github.com/juno-ai-dev/juno-design-system/commit/0dc0ae9), with upstream MIT attribution in [`app/public/assets/ATTRIBUTION.md`](app/public/assets/ATTRIBUTION.md). Canonical `--text-muted` replaces low-contrast faint text in application semantics.
-
-The `ALL REQUESTS` ledger exhausts ID pagination without inventing a cross-status rank. Each status filter uses its contract status code and follows opaque, filter-bound ranking cursors until `null`, including empty intermediate pages. Detail evidence, history, and actions similarly exhaust ID pagination. Because these are multiple direct RPC queries rather than an atomic indexer snapshot, the UI exposes the minimum observed query height and weak-consistency disclosure.
-
-## Contract and documentation
-
-The CosmWasm MVP contract passed the locked 107-test debug/release suite, independent specification/security/release reviews, deterministic artifact checks, and an exact-artifact `uni-7` smoke gate.
-
-- [Architecture](docs/architecture/ARCHITECTURE.md)
-- [Product and interaction design](docs/design/PRODUCT_DESIGN.md)
-- [Decision records](docs/architecture/decisions/)
-- [Implementation plan](docs/plans/2026-07-23-mvp.md)
-- [Reproducible artifact and `uni-7` smoke evidence](docs/testing/TESTNET_SMOKE.md)
-- [Historical interactive prototype](https://juno-ai-dev.github.io/juno-voice/)
-
-## Product principles
-
-1. **Public demand, visible delivery.** Priorities and build evidence share one durable record.
-2. **Power is frozen per request.** Votes use a declared historical Juno snapshot, not mutable current balances.
-3. **Agents are participants, not hidden administrators.** Automation uses public interfaces and leaves evidence.
-4. **Signal is not binding governance.** Juno Voice ranks work; it does not spend treasury funds or execute chain governance.
-5. **Small credible loop first.** The MVP supports requests, stake-weighted support, lifecycle changes, and delivery evidence.
-
-## Repository shape
-
-```text
-app/                   maintained uni-7 read + bounded public-write application
-contracts/             Rust/CosmWasm contract workspace
-schema/                checked-in canonical contract schemas
-docs/                  architecture, design, plans, and testnet evidence
-artifacts/              reproducible checked Wasm and checksums
-prototype/             unchanged historical interaction prototype
-```
 
 ## License
 

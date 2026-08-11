@@ -15,6 +15,11 @@ describe('live ledger states', () => {
     expect(screen.getByText('Fresh direct-RPC data')).toBeInTheDocument();
     expect(screen.getAllByText('uni-7').length).toBeGreaterThan(0);
     expect(screen.getByText('85')).toBeInTheDocument();
+    expect(screen.getByText('JUNOX')).toBeInTheDocument();
+    expect(screen.getAllByText('1 JUNOX')).toHaveLength(2);
+    expect(screen.getByText('+0.004 JUNOX')).toBeInTheDocument();
+    expect(screen.getByText('0.0042 JUNOX support')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /net signal \+0\.004 JUNOX/ })).toBeInTheDocument();
   });
   it('renders stale and search-filtered states', async () => {
     const source = { loadLedger: vi.fn().mockResolvedValue({ ...ledger, refreshedAt: new Date(0) }), loadDetail: vi.fn() };
@@ -23,6 +28,16 @@ describe('live ledger states', () => {
     await userEvent.type(screen.getByRole('searchbox'), 'does-not-exist');
     expect(screen.getByText('No matching signal')).toBeInTheDocument();
     expect(screen.getByText(/Stale/)).toBeInTheDocument();
+  });
+  it('keeps every lifecycle status in one compact filter', async () => {
+    const source = { loadLedger: vi.fn().mockResolvedValue(ledger), loadDetail: vi.fn() };
+    render(<Ledger config={config} source={source} onOpen={vi.fn()} />);
+    const status = await screen.findByRole('combobox', { name: 'Status' });
+    expect(screen.getAllByRole('option')).toHaveLength(11);
+    await userEvent.selectOptions(status, 'open');
+    expect(screen.getByText('No matching signal')).toBeInTheDocument();
+    await userEvent.selectOptions(status, 'qualified');
+    expect(screen.getByText('Real RPC feature')).toBeInTheDocument();
   });
   it('renders an authoritative empty contract state', async () => {
     const ranked = Object.fromEntries(Object.keys(ledger.ranked).map((key) => [key, []])) as unknown as typeof ledger.ranked;
