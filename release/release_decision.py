@@ -13,6 +13,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deployment"))
 import juno_voice_deploy as deploy  # noqa: E402
+import release_auth  # noqa: E402
 import release_manifest as release  # noqa: E402
 
 
@@ -165,37 +166,52 @@ def validate_prepared_payload(value: Any, config: dict[str, Any]) -> dict[str, A
 
 
 def finalize_decision(
-    prepared: Any, signatures: list[Any], config: dict[str, Any]
+    prepared: Any,
+    declarations: list[Any],
+    config: dict[str, Any],
+    *,
+    authorization: Any,
+    allowed_signers: Path,
+    authorization_principal: str,
 ) -> dict[str, Any]:
     prepared = validate_prepared_payload(prepared, config)
     _signers, expected_identities = decision_signers(prepared["signers"])
-    if len(signatures) != len(expected_identities):
-        raise ReleaseDecisionError("one signature per release signer is required")
+    if len(declarations) != len(expected_identities):
+        raise ReleaseDecisionError("one declaration per release reviewer is required")
     observed_identities = set()
     normalized = []
-    for index, signature in enumerate(signatures):
-        if not isinstance(signature, dict) or set(signature) != {
+    for index, declaration in enumerate(declarations):
+        if not isinstance(declaration, dict) or set(declaration) != {
             "identity",
             "payload_sha256",
             "method",
             "value",
         }:
-            raise ReleaseDecisionError(f"signature {index} has an unexpected shape")
-        identity = signature["identity"]
+            raise ReleaseDecisionError(f"declaration {index} has an unexpected shape")
+        identity = declaration["identity"]
         if not isinstance(identity, str) or not identity:
-            raise ReleaseDecisionError(f"signature {index} identity must be nonempty")
+            raise ReleaseDecisionError(f"declaration {index} identity must be nonempty")
         if identity in observed_identities:
-            raise ReleaseDecisionError("signature identities must be distinct")
+            raise ReleaseDecisionError("declaration identities must be distinct")
         observed_identities.add(identity)
-        if signature["payload_sha256"] != prepared["signed_payload_sha256"]:
-            raise ReleaseDecisionError(f"signature {index} does not bind the decision")
+        if declaration["payload_sha256"] != prepared["signed_payload_sha256"]:
+            raise ReleaseDecisionError(f"declaration {index} does not bind the decision")
         for field in ("method", "value"):
-            if not isinstance(signature[field], str) or not signature[field]:
-                raise ReleaseDecisionError(f"signature {index} {field} must be nonempty")
-        normalized.append(signature)
+            if not isinstance(declaration[field], str) or not declaration[field]:
+                raise ReleaseDecisionError(f"declaration {index} {field} must be nonempty")
+        normalized.append(declaration)
     if observed_identities != set(expected_identities):
-        raise ReleaseDecisionError("signatures do not cover every release signer")
-    return {**prepared, "signatures": normalized}
+        raise ReleaseDecisionError("declarations do not cover every release reviewer")
+    try:
+        release_auth.verify_authorization(
+            authorization,
+            prepared["signed_payload_sha256"],
+            allowed_signers,
+            authorization_principal,
+        )
+    except release_auth.AuthorizationError as error:
+        raise ReleaseDecisionError(str(error)) from error
+    return {**prepared, "reviewer_declarations": normalized, "authorization_record": authorization}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -212,8 +228,11 @@ def parser() -> argparse.ArgumentParser:
     finalize = commands.add_parser("finalize")
     finalize.add_argument("--payload", type=Path, required=True)
     finalize.add_argument(
-        "--signature", type=Path, action="append", required=True, metavar="FILE"
+        "--declaration", type=Path, action="append", required=True, metavar="FILE"
     )
+    finalize.add_argument("--authorization", type=Path, required=True)
+    finalize.add_argument("--allowed-signers", type=Path, required=True)
+    finalize.add_argument("--authorization-principal", required=True)
     return result
 
 
@@ -224,12 +243,7 @@ def main() -> int:
         config = deploy.load_config(args.config.resolve(), root)
         if args.command == "prepare":
             evidence = read_json(args.evidence, "release evidence")
-            release.validate_evidence(
-                evidence,
-                root,
-                config,
-                require_release_decision=False,
-            )
+            release.validate_pre_decision_evidence(evidence, root, config)
             value = build_payload(
                 evidence,
                 config,
@@ -239,10 +253,13 @@ def main() -> int:
             value = finalize_decision(
                 read_json(args.payload, "prepared release decision"),
                 [
-                    read_json(path, f"signature {index}")
-                    for index, path in enumerate(args.signature)
+                    read_json(path, f"reviewer declaration {index}")
+                    for index, path in enumerate(args.declaration)
                 ],
                 config,
+                authorization=read_json(args.authorization, "release authorization"),
+                allowed_signers=args.allowed_signers.resolve(),
+                authorization_principal=args.authorization_principal,
             )
         write_new_output(args.output.resolve(), root, value)
     except (ReleaseDecisionError, deploy.ValidationError, release.EvidenceError) as error:

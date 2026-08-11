@@ -28,7 +28,8 @@ build and deployment config:
 - observed snapshot activation, retention, and liquid-staking power basis;
 - maximum-bound gas/response evidence for contributors, projects, options,
   messages, pagination/history, and cleanup, plus the finalized gas report
-  signed over one canonical payload hash by a distinct measurer and reviewer;
+  with unauthenticated declarations over one canonical payload hash by a
+  distinct measurer and reviewer;
 - monitoring and recovery rehearsal; and
 - two low-value canary epochs followed by an explicit governance decision.
 
@@ -37,17 +38,18 @@ mock adapter/DAO, unindexed transaction, or transaction against different code
 does not satisfy a gate.
 
 Prepare and finalize the gas report with `release/gas_report.py` as documented
-in `release/README.md`. The tool never signs: both external signature records
+in `release/README.md`. The tool never signs: both external declarations
 must bind the prepared `signed_payload_sha256`, and final release validation
 recomputes that hash and the hash of the seven measurement records.
 
 Once every other record is immutable, prepare and finalize the release decision
-with `release/release_decision.py`. All four release roles sign the same payload
-hash. Its canonical reviewed-evidence hash covers the complete evidence packet
+with `release/release_decision.py`. All release reviewers make unauthenticated
+declarations over the same payload hash; a separately trusted release authority
+authorizes it with SSHSIG. Its canonical reviewed-evidence hash covers the packet
 except the decision's own file reference, avoiding a hash cycle without leaving
-scenario, snapshot, canary, rehearsal, or runbook evidence unsigned. Preparation
+scenario, snapshot, canary, rehearsal, or runbook evidence unbound. Preparation
 first runs the complete semantic gate with only the not-yet-created decision
-omitted, so an invalid candidate never reaches the signing step.
+omitted, so an invalid candidate never reaches the declaration/authorization step.
 
 ## Authorization boundary
 

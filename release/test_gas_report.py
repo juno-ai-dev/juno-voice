@@ -44,13 +44,13 @@ class GasReportTests(unittest.TestCase):
             methodology="instrumented target-chain configured-maximum observations",
         )
 
-    def signatures(self, prepared):
+    def declarations(self, prepared):
         return [
             {
                 "identity": identity,
                 "payload_sha256": prepared["signed_payload_sha256"],
-                "method": "fixture",
-                "value": f"signed-by-{identity}",
+                "method": "unauthenticated-declaration",
+                "value": f"declared-by-{identity}",
             }
             for identity in (prepared["measured_by"], prepared["reviewed_by"])
         ]
@@ -58,7 +58,7 @@ class GasReportTests(unittest.TestCase):
     def test_prepare_and_finalize_bind_measurements_roles_and_payload(self):
         prepared = self.prepared()
         report = gas_report.finalize_report(
-            prepared, self.signatures(prepared), self.config
+            prepared, self.declarations(prepared), self.config
         )
         release.validate_gas_report_document(report, self.gas, self.config)
         self.assertEqual(
@@ -66,22 +66,22 @@ class GasReportTests(unittest.TestCase):
             report["measurements_sha256"],
         )
 
-    def test_tampered_payload_measurements_and_signatures_are_rejected(self):
+    def test_tampered_payload_measurements_and_declarations_are_rejected(self):
         prepared = self.prepared()
         tampered = copy.deepcopy(prepared)
         tampered["methodology"] = "changed after signing"
         with self.assertRaisesRegex(gas_report.GasReportError, "payload hash"):
             gas_report.finalize_report(
-                tampered, self.signatures(prepared), self.config
+                tampered, self.declarations(prepared), self.config
             )
 
-        signatures = self.signatures(prepared)
-        signatures[0]["payload_sha256"] = "00" * 32
+        declarations = self.declarations(prepared)
+        declarations[0]["payload_sha256"] = "00" * 32
         with self.assertRaisesRegex(gas_report.GasReportError, "does not bind"):
-            gas_report.finalize_report(prepared, signatures, self.config)
+            gas_report.finalize_report(prepared, declarations, self.config)
 
         report = gas_report.finalize_report(
-            prepared, self.signatures(prepared), self.config
+            prepared, self.declarations(prepared), self.config
         )
         changed_gas = copy.deepcopy(self.gas)
         changed_gas["measurements"][0]["fixture"] = False
@@ -104,7 +104,7 @@ class GasReportTests(unittest.TestCase):
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(set(schema["required"]), set(schema["properties"]))
         self.assertEqual(
-            {*release.GAS_REPORT_PAYLOAD_FIELDS, "signed_payload_sha256", "signatures"},
+            {*release.GAS_REPORT_PAYLOAD_FIELDS, "signed_payload_sha256", "declarations"},
             set(schema["required"]),
         )
         cases = [
@@ -112,9 +112,9 @@ class GasReportTests(unittest.TestCase):
             for item in schema["properties"]["measurement_cases"]["prefixItems"]
         ]
         self.assertEqual(sorted(release.REQUIRED_GAS_CASES), cases)
-        signature = schema["$defs"]["signature"]
-        self.assertFalse(signature["additionalProperties"])
-        self.assertEqual(set(signature["required"]), set(signature["properties"]))
+        declaration = schema["$defs"]["declaration"]
+        self.assertFalse(declaration["additionalProperties"])
+        self.assertEqual(set(declaration["required"]), set(declaration["properties"]))
 
     def test_constructed_report_round_trips_through_complete_release_gate(self):
         packet = release_tests.ReleaseEvidenceTests(
@@ -136,28 +136,21 @@ class GasReportTests(unittest.TestCase):
                 methodology="round-trip fixture",
             )
             report = gas_report.finalize_report(
-                prepared, self.signatures(prepared), packet.config
+                prepared, self.declarations(prepared), packet.config
             )
             report_path = packet.root / gas["report"]["path"]
             report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
             gas["report"]["sha256"] = deploy.sha256_file(report_path)
 
-            decision_ref = packet.evidence["release_signoff"]["decision"]
-            decision_path = packet.root / decision_ref["path"]
-            decision = json.loads(decision_path.read_text())
-            decision["bound_evidence"] = release.release_decision_bound_evidence(
-                packet.evidence
-            )
-            payload_sha256 = release.release_decision_payload_sha256(decision)
-            decision["signed_payload_sha256"] = payload_sha256
-            for signature in decision["signatures"]:
-                signature["payload_sha256"] = payload_sha256
-            decision_path.write_text(
-                json.dumps(decision, indent=2, sort_keys=True) + "\n"
-            )
-            decision_ref["sha256"] = deploy.sha256_file(decision_path)
+            packet.resign_release_decision(packet.evidence)
 
-            release.validate_evidence(packet.evidence, packet.root, packet.config)
+            release.validate_evidence(
+                packet.evidence,
+                packet.root,
+                packet.config,
+                allowed_signers=packet.root / "release-trusted-signers",
+                authorization_principal="release-authority",
+            )
         finally:
             packet.tearDown()
 

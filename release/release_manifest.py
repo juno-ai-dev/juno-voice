@@ -13,6 +13,7 @@ from typing import Any, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deployment"))
 import juno_voice_deploy as deploy  # noqa: E402
+import release_auth  # noqa: E402
 
 
 EVIDENCE_SCHEMA = "juno-voice/release-evidence/v1"
@@ -697,7 +698,7 @@ def validate_gas_report_document(
     document = obj(
         document,
         path,
-        (*GAS_REPORT_PAYLOAD_FIELDS, "signed_payload_sha256", "signatures"),
+        (*GAS_REPORT_PAYLOAD_FIELDS, "signed_payload_sha256", "declarations"),
     )
     if document["schema_version"] != GAS_REPORT_SCHEMA:
         fail(f"{path}.schema_version", "is invalid")
@@ -746,27 +747,27 @@ def validate_gas_report_document(
         fail(f"{path}.signed_payload_sha256", "must be SHA-256")
     if signed_payload_sha256 != gas_report_payload_sha256(payload):
         fail(f"{path}.signed_payload_sha256", "does not match the report payload")
-    signatures = document["signatures"]
-    if not isinstance(signatures, list) or len(signatures) != 2:
-        fail(f"{path}.signatures", "must contain measurer and reviewer signatures")
-    seen_signers: set[str] = set()
-    for index, signature in enumerate(signatures):
-        signature_path = f"{path}.signatures[{index}]"
-        signature = obj(
-            signature,
-            signature_path,
+    declarations = document["declarations"]
+    if not isinstance(declarations, list) or len(declarations) != 2:
+        fail(f"{path}.declarations", "must contain measurer and reviewer declarations")
+    seen_identities: set[str] = set()
+    for index, declaration in enumerate(declarations):
+        declaration_path = f"{path}.declarations[{index}]"
+        declaration = obj(
+            declaration,
+            declaration_path,
             ("identity", "payload_sha256", "method", "value"),
         )
-        identity = nonempty(signature["identity"], f"{signature_path}.identity")
-        if identity in seen_signers:
-            fail(f"{signature_path}.identity", "is duplicated")
-        seen_signers.add(identity)
-        if signature["payload_sha256"] != signed_payload_sha256:
-            fail(f"{signature_path}.payload_sha256", "does not match the signed payload")
-        nonempty(signature["method"], f"{signature_path}.method")
-        nonempty(signature["value"], f"{signature_path}.value")
-    if seen_signers != {measured_by, reviewed_by}:
-        fail(f"{path}.signatures", "must be made by the measurer and reviewer")
+        identity = nonempty(declaration["identity"], f"{declaration_path}.identity")
+        if identity in seen_identities:
+            fail(f"{declaration_path}.identity", "is duplicated")
+        seen_identities.add(identity)
+        if declaration["payload_sha256"] != signed_payload_sha256:
+            fail(f"{declaration_path}.payload_sha256", "does not match the reviewed payload")
+        nonempty(declaration["method"], f"{declaration_path}.method")
+        nonempty(declaration["value"], f"{declaration_path}.value")
+    if seen_identities != {measured_by, reviewed_by}:
+        fail(f"{path}.declarations", "must be made by the measurer and reviewer")
     return document
 
 
@@ -1699,7 +1700,42 @@ def validate_evidence(
     root: Path,
     config: dict[str, Any],
     *,
-    require_release_decision: bool = True,
+    allowed_signers: Path,
+    authorization_principal: str,
+) -> None:
+    """Validate a complete packet, including final release authorization."""
+    _validate_evidence(
+        evidence,
+        root,
+        config,
+        require_release_decision=True,
+        allowed_signers=allowed_signers,
+        authorization_principal=authorization_principal,
+    )
+
+
+def validate_pre_decision_evidence(
+    evidence: dict[str, Any], root: Path, config: dict[str, Any]
+) -> None:
+    """Validate every gate except the explicitly not-yet-created decision."""
+    _validate_evidence(
+        evidence,
+        root,
+        config,
+        require_release_decision=False,
+        allowed_signers=None,
+        authorization_principal=None,
+    )
+
+
+def _validate_evidence(
+    evidence: dict[str, Any],
+    root: Path,
+    config: dict[str, Any],
+    *,
+    require_release_decision: bool,
+    allowed_signers: Path | None,
+    authorization_principal: str | None,
 ) -> None:
     obj(
         evidence,
@@ -3057,6 +3093,12 @@ def validate_evidence(
         fail("release_signoff", "maintainer, security, and operations roles must be distinct")
     if not require_release_decision:
         return
+    if allowed_signers is None or authorization_principal is None:
+        fail(
+            "release_signoff.decision.authorization_record",
+            "requires explicit authorization trust parameters",
+        )
+        return
     decision_ref = file_ref(signoff["decision"], "release_signoff.decision", root)
     try:
         decision = json.loads((root / decision_ref["path"]).read_text())
@@ -3077,7 +3119,8 @@ def validate_evidence(
             "signers",
             "decided_at",
             "signed_payload_sha256",
-            "signatures",
+            "reviewer_declarations",
+            "authorization_record",
         ),
     )
     if decision["schema_version"] != RELEASE_DECISION_SCHEMA:
@@ -3129,30 +3172,39 @@ def validate_evidence(
             "release_signoff.decision.signed_payload_sha256",
             "does not match the release decision payload",
         )
-    signatures = decision["signatures"]
-    if not isinstance(signatures, list) or len(signatures) != len(all_signers):
-        fail("release_signoff.decision.signatures", "must contain one signature per signer")
-    observed_signature_identities: set[str] = set()
-    for index, signature in enumerate(signatures):
-        signature_path = f"release_signoff.decision.signatures[{index}]"
-        signature = obj(
-            signature,
-            signature_path,
+    declarations = decision["reviewer_declarations"]
+    if not isinstance(declarations, list) or len(declarations) != len(all_signers):
+        fail("release_signoff.decision.reviewer_declarations", "must contain one declaration per reviewer")
+    observed_identities: set[str] = set()
+    for index, declaration in enumerate(declarations):
+        declaration_path = f"release_signoff.decision.reviewer_declarations[{index}]"
+        declaration = obj(
+            declaration,
+            declaration_path,
             ("identity", "payload_sha256", "method", "value"),
         )
-        identity = nonempty(signature["identity"], f"{signature_path}.identity")
-        if identity in observed_signature_identities:
-            fail(f"{signature_path}.identity", "is duplicated")
-        observed_signature_identities.add(identity)
-        if signature["payload_sha256"] != signed_payload_sha256:
+        identity = nonempty(declaration["identity"], f"{declaration_path}.identity")
+        if identity in observed_identities:
+            fail(f"{declaration_path}.identity", "is duplicated")
+        observed_identities.add(identity)
+        if declaration["payload_sha256"] != signed_payload_sha256:
             fail(
-                f"{signature_path}.payload_sha256",
-                "does not match the signed release decision payload",
+                f"{declaration_path}.payload_sha256",
+                "does not match the reviewed release decision payload",
             )
-        nonempty(signature["method"], f"{signature_path}.method")
-        nonempty(signature["value"], f"{signature_path}.value")
-    if observed_signature_identities != set(all_signers):
-        fail("release_signoff.decision.signatures", "does not cover every release signer")
+        nonempty(declaration["method"], f"{declaration_path}.method")
+        nonempty(declaration["value"], f"{declaration_path}.value")
+    if observed_identities != set(all_signers):
+        fail("release_signoff.decision.reviewer_declarations", "does not cover every release reviewer")
+    try:
+        release_auth.verify_authorization(
+            decision["authorization_record"],
+            signed_payload_sha256,
+            allowed_signers,
+            authorization_principal,
+        )
+    except release_auth.AuthorizationError as error:
+        fail("release_signoff.decision.authorization_record", str(error))
 
 
 def validate_build_manifest(
@@ -3352,6 +3404,9 @@ def generate_manifest(
     verification_path: Path,
     build_path: Path,
     evidence_path: Path,
+    *,
+    allowed_signers: Path,
+    authorization_principal: str,
 ) -> dict[str, Any]:
     config = deploy.load_config(config_path, root)
     state = deploy.load_state(state_path, config)
@@ -3383,7 +3438,13 @@ def generate_manifest(
     build = json.loads(build_path.read_text())
     validate_build_manifest(build, config, root, build_path.resolve())
     evidence = load_evidence(evidence_path)
-    validate_evidence(evidence, root, config)
+    validate_evidence(
+        evidence,
+        root,
+        config,
+        allowed_signers=allowed_signers,
+        authorization_principal=authorization_principal,
+    )
     if evidence["build_manifest"]["sha256"] != deploy.sha256_file(build_path):
         fail("evidence.build_manifest", "does not bind the supplied build manifest")
     if evidence["deployment_verification"]["sha256"] != deploy.sha256_file(verification_path):
@@ -3436,12 +3497,16 @@ def main() -> int:
     validate = subcommands.add_parser("validate-evidence")
     validate.add_argument("--config", type=Path, required=True)
     validate.add_argument("--evidence", type=Path, required=True)
+    validate.add_argument("--allowed-signers", type=Path, required=True)
+    validate.add_argument("--authorization-principal", required=True)
     generate = subcommands.add_parser("generate")
     generate.add_argument("--config", type=Path, required=True)
     generate.add_argument("--state", type=Path, required=True)
     generate.add_argument("--verification", type=Path, required=True)
     generate.add_argument("--build", type=Path, required=True)
     generate.add_argument("--evidence", type=Path, required=True)
+    generate.add_argument("--allowed-signers", type=Path, required=True)
+    generate.add_argument("--authorization-principal", required=True)
     generate.add_argument("--output", type=Path, required=True)
     try:
         args = parser.parse_args()
@@ -3449,7 +3514,13 @@ def main() -> int:
         config = deploy.load_config(args.config.resolve(), root)
         evidence = load_evidence(args.evidence.resolve())
         if args.command == "validate-evidence":
-            validate_evidence(evidence, root, config)
+            validate_evidence(
+                evidence,
+                root,
+                config,
+                allowed_signers=args.allowed_signers.resolve(),
+                authorization_principal=args.authorization_principal,
+            )
             print(json.dumps({"valid": True}, sort_keys=True))
         else:
             manifest = generate_manifest(
@@ -3459,6 +3530,8 @@ def main() -> int:
                 args.verification.resolve(),
                 args.build.resolve(),
                 args.evidence.resolve(),
+                allowed_signers=args.allowed_signers.resolve(),
+                authorization_principal=args.authorization_principal,
             )
             deploy.atomic_write_json(args.output.resolve(), manifest)
             print(json.dumps({"valid": True, "manifest_sha256": deploy.sha256_file(args.output.resolve())}, sort_keys=True))

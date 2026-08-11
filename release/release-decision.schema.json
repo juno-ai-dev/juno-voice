@@ -7,7 +7,7 @@
   "required": [
     "schema_version", "status", "authorization", "production_authorized",
     "chain_id", "config_sha256", "source", "bound_evidence", "signers",
-    "decided_at", "signed_payload_sha256", "signatures"
+    "decided_at", "signed_payload_sha256", "reviewer_declarations", "authorization_record"
   ],
   "properties": {
     "schema_version": {"const": "juno-voice/release-decision/v1"},
@@ -21,12 +21,13 @@
     "signers": {"$ref": "#/$defs/signers"},
     "decided_at": {"$ref": "#/$defs/nonempty"},
     "signed_payload_sha256": {"$ref": "#/$defs/sha256"},
-    "signatures": {
+    "reviewer_declarations": {
       "type": "array",
       "minItems": 4,
       "uniqueItems": true,
-      "items": {"$ref": "#/$defs/signature"}
-    }
+      "items": {"$ref": "#/$defs/declaration"}
+    },
+    "authorization_record": {"$ref": "#/$defs/authorizationRecord"}
   },
   "$defs": {
     "nonempty": {"type": "string", "minLength": 1},
@@ -79,7 +80,7 @@
         "operations_reviewer": {"$ref": "#/$defs/nonempty"}
       }
     },
-    "signature": {
+    "declaration": {
       "type": "object",
       "additionalProperties": false,
       "required": ["identity", "payload_sha256", "method", "value"],
@@ -88,6 +89,18 @@
         "payload_sha256": {"$ref": "#/$defs/sha256"},
         "method": {"$ref": "#/$defs/nonempty"},
         "value": {"$ref": "#/$defs/nonempty"}
+      }
+    },
+    "authorizationRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "payload_sha256", "method", "namespace", "signature"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/nonempty"},
+        "payload_sha256": {"$ref": "#/$defs/sha256"},
+        "method": {"const": "sshsig"},
+        "namespace": {"const": "juno-voice-release-v1"},
+        "signature": {"type": "string", "pattern": "^-----BEGIN SSH SIGNATURE-----"}
       }
     }
   }

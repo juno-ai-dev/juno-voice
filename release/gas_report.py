@@ -168,37 +168,37 @@ def validate_prepared_payload(value: Any, config: dict[str, Any]) -> dict[str, A
 
 
 def finalize_report(
-    prepared: Any, signatures: list[Any], config: dict[str, Any]
+    prepared: Any, declarations: list[Any], config: dict[str, Any]
 ) -> dict[str, Any]:
     prepared = validate_prepared_payload(prepared, config)
-    if len(signatures) != 2:
-        raise GasReportError("exactly two signature records are required")
+    if len(declarations) != 2:
+        raise GasReportError("exactly two declaration records are required")
     expected_identities = {prepared["measured_by"], prepared["reviewed_by"]}
     observed_identities = set()
     normalized = []
-    for index, signature in enumerate(signatures):
-        if not isinstance(signature, dict) or set(signature) != {
+    for index, declaration in enumerate(declarations):
+        if not isinstance(declaration, dict) or set(declaration) != {
             "identity",
             "payload_sha256",
             "method",
             "value",
         }:
-            raise GasReportError(f"signature {index} has an unexpected shape")
-        identity = signature["identity"]
+            raise GasReportError(f"declaration {index} has an unexpected shape")
+        identity = declaration["identity"]
         if not isinstance(identity, str) or not identity:
-            raise GasReportError(f"signature {index} identity must be nonempty")
-        if signature["payload_sha256"] != prepared["signed_payload_sha256"]:
-            raise GasReportError(f"signature {index} does not bind the prepared payload")
+            raise GasReportError(f"declaration {index} identity must be nonempty")
+        if declaration["payload_sha256"] != prepared["signed_payload_sha256"]:
+            raise GasReportError(f"declaration {index} does not bind the prepared payload")
         for field in ("method", "value"):
-            if not isinstance(signature[field], str) or not signature[field]:
-                raise GasReportError(f"signature {index} {field} must be nonempty")
+            if not isinstance(declaration[field], str) or not declaration[field]:
+                raise GasReportError(f"declaration {index} {field} must be nonempty")
         if identity in observed_identities:
-            raise GasReportError("signature identities must be distinct")
+            raise GasReportError("declaration identities must be distinct")
         observed_identities.add(identity)
-        normalized.append(signature)
+        normalized.append(declaration)
     if observed_identities != expected_identities:
-        raise GasReportError("signatures must be from the declared measurer and reviewer")
-    return {**prepared, "signatures": normalized}
+        raise GasReportError("declarations must be from the declared measurer and reviewer")
+    return {**prepared, "declarations": normalized}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -218,7 +218,7 @@ def parser() -> argparse.ArgumentParser:
 
     finalize = commands.add_parser("finalize")
     finalize.add_argument(
-        "--signature", type=Path, action="append", required=True, metavar="FILE"
+        "--declaration", type=Path, action="append", required=True, metavar="FILE"
     )
     finalize.add_argument("--payload", type=Path, required=True)
     return result
@@ -243,8 +243,8 @@ def main() -> int:
             value = finalize_report(
                 read_json(args.payload, "prepared gas payload"),
                 [
-                    read_json(path, f"signature {index}")
-                    for index, path in enumerate(args.signature)
+                    read_json(path, f"declaration {index}")
+                    for index, path in enumerate(args.declaration)
                 ],
                 config,
             )

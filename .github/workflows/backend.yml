@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/backend.yml"
+      - ".gitmodules"
       - "Cargo.lock"
       - "Cargo.toml"
       - "contracts/juno-voice-bounties/**"
@@ -21,6 +22,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/backend.yml"
+      - ".gitmodules"
       - "Cargo.lock"
       - "Cargo.toml"
       - "contracts/juno-voice-bounties/**"

@@ -39,7 +39,7 @@ chain operations.
   The deterministic release-candidate job separately installs the same native
   dependency because GitHub jobs do not share runner packages.
 - Deployment, integration, and release Python discovery commands pass. Their
-  displayed counts are 17, 21, and 59 respectively; integration and release
+  displayed counts are 19, 23, and 62 respectively; integration and release
   include imported deployment fixtures, so the counts are not summed as unique
   tests.
 - Build-manifest generator discovery runs 3 direct tests covering artifact,
@@ -99,7 +99,7 @@ chain operations.
   collection or the maximum cleanup event. The gas report is no longer an
   opaque file: it binds the canonical seven-record hash, exact source/config,
   safety margin, methodology, distinct measurer/reviewer roles, and two
-  payload-bound signatures. Canary records bind full successful
+  payload-bound, unauthenticated traceability declarations. Canary records bind full successful
   transaction captures, exact gauge distribution events, post-execution epoch
   queries, and Program Vault native transfers summing to the declared value.
 - Operational readiness cannot pass on runbook filenames alone: required
@@ -114,8 +114,11 @@ chain operations.
   and final release decisions are parsed signed records; the latter binds a
   canonical hash covering the entire reviewed packet except its own file
   reference, every named report hash, exact testnet-only authority, and every
-  required signer. Each signature binds the same decision payload hash while
-  production remains explicitly unauthorized. Decision preparation first runs
+  required reviewer. Reviewer declarations bind the same decision payload hash
+  for traceability but are unauthenticated and cannot authorize release. A
+  separate SSHSIG authorization must verify against an explicitly supplied
+  OpenSSH allowed-signers trust root, while production remains explicitly
+  unauthorized. Decision preparation first runs
   the complete semantic evidence gate with only the pending decision omitted.
 - Regenerated public schemas include the snapshot-gauge API and explicit sparse
   pagination cursors.
