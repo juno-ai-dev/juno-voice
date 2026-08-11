@@ -242,6 +242,42 @@ class DeploymentPlannerTests(unittest.TestCase):
         self.assertEqual(99, schema["$defs"]["registry"]["properties"]["max_active_projects"]["const"])
         self.assertEqual(100, schema["$defs"]["gauge"]["properties"]["option_capacity"]["const"])
 
+    def test_cw721_schema_and_runtime_constraints_are_equivalent(self):
+        schema = json.loads(Path(__file__).with_name("config.schema.json").read_text())
+        token_schema = schema["$defs"]["agent_token"]
+        proposal_schema = schema["$defs"]["agent_proposal"]
+        threshold_schema = proposal_schema["properties"]["threshold"]["oneOf"][1]
+        self.assertEqual(256, token_schema["properties"]["token_id"]["maxLength"])
+        self.assertEqual(128, token_schema["properties"]["role"]["maxLength"])
+        self.assertEqual(
+            "#/$defs/positive_decimal_fraction",
+            threshold_schema["properties"]["quorum"]["$ref"],
+        )
+        self.assertEqual(
+            "integer",
+            proposal_schema["properties"]["voting_duration_seconds"]["type"],
+        )
+
+        too_long_token = copy.deepcopy(self.config)
+        too_long_token["agent_operations"]["membership"]["tokens"][0]["token_id"] = "x" * 257
+        with self.assertRaisesRegex(deploy.ValidationError, "token_id"):
+            deploy.validate_config(too_long_token, self.root)
+
+        too_long_role = copy.deepcopy(self.config)
+        too_long_role["agent_operations"]["membership"]["tokens"][0]["role"] = "x" * 129
+        with self.assertRaisesRegex(deploy.ValidationError, "role"):
+            deploy.validate_config(too_long_role, self.root)
+
+        duration_string = copy.deepcopy(self.config)
+        duration_string["agent_operations"]["proposal"]["voting_duration_seconds"] = "86400"
+        with self.assertRaisesRegex(deploy.ValidationError, "voting_duration_seconds"):
+            deploy.validate_config(duration_string, self.root)
+
+        zero_quorum = copy.deepcopy(self.config)
+        zero_quorum["agent_operations"]["proposal"]["threshold"]["quorum"] = "0"
+        with self.assertRaisesRegex(deploy.ValidationError, "quorum"):
+            deploy.validate_config(zero_quorum, self.root)
+
     def test_rejects_wrong_denom_artifact_and_retention(self):
         wrong = copy.deepcopy(self.config)
         wrong["chain"]["native_denom"] = "uatom"

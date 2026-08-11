@@ -2103,6 +2103,25 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(release.EvidenceError, "cover every rehearsal transaction"):
             self.validate_evidence(wrong)
 
+    def test_verification_normalizes_schema_valid_agent_numeric_strings(self):
+        config = copy.deepcopy(self.config)
+        agent = config["agent_operations"]
+        for field in ("core_code_id", "voting_code_id", "proposal_code_id"):
+            agent[field] = str(agent[field])
+        agent["membership"]["nft_code_id"] = str(agent["membership"]["nft_code_id"])
+        for token in agent["membership"]["tokens"]:
+            token["weight"] = str(token["weight"])
+        verification = json.loads(
+            (self.root / "deployment" / "verification.json").read_text()
+        )
+        deploy.validate_config(config, self.root)
+        deploy.validate_verification_observations(
+            config,
+            verification["code_ids"],
+            verification["addresses"],
+            verification["observations"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

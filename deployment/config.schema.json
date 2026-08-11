@@ -48,6 +48,10 @@
       "type": "string",
       "pattern": "^(?:0(?:\\.[0-9]{1,18})?|1(?:\\.0{1,18})?)$"
     },
+    "positive_decimal_fraction": {
+      "type": "string",
+      "pattern": "^(?!0(?:\\.0{1,18})?$)(?:0(?:\\.[0-9]{1,18})?|1(?:\\.0{1,18})?)$"
+    },
     "juno_address": {
       "type": "string",
       "pattern": "^juno1[023456789acdefghjklmnpqrstuvwxyz]{38,58}$",
@@ -224,7 +228,7 @@
         "threshold": {
           "oneOf": [
             {"type": "object", "additionalProperties": false, "required": ["kind", "weight"], "properties": {"kind": {"const": "absolute_count"}, "weight": {"$ref": "#/$defs/positive_uint"}}},
-            {"type": "object", "additionalProperties": false, "required": ["kind", "threshold", "quorum"], "properties": {"kind": {"const": "threshold_quorum"}, "threshold": {"const": "majority"}, "quorum": {"$ref": "#/$defs/decimal_fraction"}}}
+            {"type": "object", "additionalProperties": false, "required": ["kind", "threshold", "quorum"], "properties": {"kind": {"const": "threshold_quorum"}, "threshold": {"const": "majority"}, "quorum": {"$ref": "#/$defs/positive_decimal_fraction"}}}
           ]
         },
         "voting_duration_seconds": {"type": "integer", "minimum": 1, "maximum": 2592000}
