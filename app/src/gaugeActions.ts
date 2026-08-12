@@ -1,5 +1,6 @@
 import { fromBech32 } from "@cosmjs/encoding";
 import type { AppConfig } from "./config";
+import { formatJuno } from "./junoAmount";
 import { canonicalDecimal, DECIMAL_SCALE, GAUGE_ID, parseDecimal18, type GaugeActionContext, type GaugeVote } from "./gauge";
 import type { TransactionIntent, TransactionOutcome, TransactionReview } from "./transactions";
 
@@ -61,7 +62,7 @@ export function buildGaugeIntent(config: AppConfig, sender: string, context: Gau
   if (action === "open_epoch") {
     if (!eligibility.open) fail("Canonical chain state does not currently permit opening a funded epoch.");
     executeMessage = { open_epoch: { gauge: GAUGE_ID } };
-    consequence = `Open the next epoch with a new historical power snapshot and the fixed ${data.gauge.snapshotPolicy.epochBudget}${data.gauge.snapshotPolicy.denom} budget.`;
+    consequence = `Open the next epoch with a new historical power snapshot and the fixed ${formatJuno(data.gauge.snapshotPolicy.epochBudget)} budget.`;
   } else if (action === "execute") {
     if (!eligibility.execute || !epoch) fail("Canonical chain state does not currently permit executing this epoch.");
     executeMessage = { execute: { gauge: GAUGE_ID } };

@@ -32,7 +32,10 @@ describe("canonical gauge eligibility and messages", () => {
     expect(buildGaugeIntent(config, voter, gaugeContext, "place_votes", [{ option: "alpha", weight: "0.5" }])).toMatchObject({ contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }] } }, funds: [] });
     expect(buildGaugeIntent(config, voter, gaugeContext, "remove_votes")).toMatchObject({ executeMessage: { place_votes: { gauge: 0, votes: null } }, funds: [] });
     const terminal = { ...gaugeContext, data: { ...gaugeData, current: { ...gaugeData.current!, outcome: "distributed" as const, messageCount: 1 }, gauge: { ...gaugeData.gauge, nextEpoch: 2400 } } };
-    expect(buildGaugeIntent(config, voter, terminal, "open_epoch").executeMessage).toEqual({ open_epoch: { gauge: 0 } });
+    expect(buildGaugeIntent(config, voter, terminal, "open_epoch")).toMatchObject({
+      executeMessage: { open_epoch: { gauge: 0 } },
+      consequences: [expect.stringContaining("$JUNO 10")],
+    });
     const closed = { ...gaugeContext, data: { ...gaugeData, chainTimeNanos: "3000000000000" } };
     expect(buildGaugeIntent(config, voter, closed, "execute").executeMessage).toEqual({ execute: { gauge: 0 } });
   });
