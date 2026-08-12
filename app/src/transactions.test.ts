@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BroadcastDependencyError,
   TransactionSafetyError,
+  TransactionReviewRegistry,
   createTransactionFlow,
   type TransactionDependencies,
   type TransactionIntent,
@@ -11,14 +12,14 @@ import { DEFAULT_BOUNTY_CONTRACT } from "./config";
 import { WalletSession, type WalletConnector } from "./wallet";
 
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
-const otherSender = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+const otherSender = toBech32("juno", new Uint8Array(20).fill(3));
 const identity = { chainId: "juno-1", address: sender } as const;
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
-function setup() {
+function setup(reviewRegistry = new TransactionReviewRegistry()) {
   let listener: (() => void) | undefined;
   let current: { chainId: string; address: string } = identity;
   const walletPort: WalletConnector = {
@@ -35,6 +36,7 @@ function setup() {
     signAndBroadcast: vi.fn(async () => ({ status: "confirmed" as const, txHash: "ABC123", height: 101 })),
     refreshCanonical: vi.fn(async () => undefined),
     explorerBaseUrl: "https://www.mintscan.io/juno",
+    reviewRegistry,
   };
   return {
     wallet, walletPort, dependencies,
@@ -100,6 +102,17 @@ describe("exact pre-sign transaction review", () => {
     await expect(one).rejects.toMatchObject({ code: "stale_state" });
     expect(dependencies.signAndBroadcast).not.toHaveBeenCalled();
   });
+  it("binds unguessable reviews to one flow and prevents cross-flow and recreated-flow replay", async () => {
+    const registry = new TransactionReviewRegistry(); const fixture = setup(registry); await fixture.wallet.connect();
+    const first = createTransactionFlow(fixture.dependencies); const review = await first.prepare(intent);
+    expect(review.reviewId).toMatch(/^[0-9a-f-]{36}$/); expect(review.flowBinding).toMatch(/^[0-9a-f-]{36}$/);
+    const otherFlow = createTransactionFlow(fixture.dependencies);
+    await expect(otherFlow.submit(review)).rejects.toMatchObject({ code: "invalid_review" });
+    await first.submit(review);
+    const recreated = createTransactionFlow(fixture.dependencies);
+    await expect(recreated.submit(review)).rejects.toMatchObject({ code: "invalid_review" });
+    expect(fixture.dependencies.signAndBroadcast).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("address and centrally-owned execute policy", () => {
@@ -138,6 +151,37 @@ describe("address and centrally-owned execute policy", () => {
     await expect(flow.prepare({ ...intent, executeMessage: { contribute: { bounty_id: "7" } } }))
       .rejects.toMatchObject({ code: "message_forbidden" });
   });
+  it.each([
+    ["no funds", []], ["zero", [{ denom: "ujuno", amount: "0" }]],
+    ["duplicate", [{ denom: "ujuno", amount: "1" }, { denom: "ujuno", amount: "2" }]],
+    ["other denom", [{ denom: "uatom", amount: "1" }]],
+    ["Uint128 overflow", [{ denom: "ujuno", amount: "340282366920938463463374607431768211456" }]],
+  ])("rejects contribute intent with %s", async (_, funds) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, funds }))
+      .rejects.toMatchObject({ code: "invalid_transaction" });
+    expect(dependencies.estimateFee).not.toHaveBeenCalled();
+  });
+  it("accepts lossless Uint128 and gas boundaries", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    vi.mocked(dependencies.estimateFee).mockResolvedValueOnce({ gas: String(Number.MAX_SAFE_INTEGER),
+      amount: [{ denom: "ujuno", amount: "340282366920938463463374607431768211455" }] });
+    const review = await createTransactionFlow(dependencies).prepare({ ...intent,
+      funds: [{ denom: "ujuno", amount: "340282366920938463463374607431768211455" }] });
+    expect(review.fee.gas).toBe("9007199254740991");
+  });
+  it.each([
+    ["zero gas", { gas: "0", amount: [{ denom: "ujuno", amount: "1" }] }],
+    ["unsafe gas", { gas: "9007199254740992", amount: [{ denom: "ujuno", amount: "1" }] }],
+    ["zero coins", { gas: "1", amount: [] }],
+    ["duplicate coins", { gas: "1", amount: [{ denom: "ujuno", amount: "1" }, { denom: "ujuno", amount: "1" }] }],
+    ["other denom", { gas: "1", amount: [{ denom: "uatom", amount: "1" }] }],
+    ["fee overflow", { gas: "1", amount: [{ denom: "ujuno", amount: "340282366920938463463374607431768211456" }] }],
+  ])("rejects estimator output with %s before signer", async (_, fee) => {
+    const { wallet, dependencies } = setup(); await wallet.connect(); vi.mocked(dependencies.estimateFee).mockResolvedValueOnce(fee);
+    await expect(createTransactionFlow(dependencies).prepare(intent)).rejects.toMatchObject({ code: "invalid_transaction" });
+    expect(dependencies.signAndBroadcast).not.toHaveBeenCalled();
+  });
 });
 
 describe("strict canonical JSON review", () => {
@@ -159,6 +203,29 @@ describe("strict canonical JSON review", () => {
     const clone = structuredClone(review) as typeof review;
     (clone.executeMessage as { contribute: { bounty_id: number } }).contribute.bounty_id = 8;
     await expect(flow.submit(clone)).rejects.toMatchObject({ code: "invalid_review" });
+  });
+  it.each([
+    ["array string key", () => Object.assign(["ok"], { hidden: true })],
+    ["array symbol key", () => Object.assign(["ok"], { [Symbol("hidden")]: true })],
+    ["array accessor", () => Object.defineProperty(["ok"], "0", { enumerable: true, configurable: true, get: () => "ok" })],
+    ["array descriptor anomaly", () => Object.defineProperty(["ok"], "0", { enumerable: true, configurable: false, writable: true, value: "ok" })],
+    ["object descriptor anomaly", () => Object.defineProperty({}, "contribute", { enumerable: true, configurable: false, writable: true, value: { bounty_id: 7 } })],
+  ])("rejects %s", async (_, make) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, consequences: make() as string[] }))
+      .rejects.toMatchObject({ code: "invalid_transaction" });
+  });
+  it("normalizes intent and canonical-state cycles and structuredClone failures", async () => {
+    const first = setup(); await first.wallet.connect(); const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+    await expect(createTransactionFlow(first.dependencies).prepare({ ...intent, executeMessage: cyclic }))
+      .rejects.toBeInstanceOf(TransactionSafetyError);
+    const second = setup(); await second.wallet.connect();
+    vi.mocked(second.dependencies.readCanonicalState).mockResolvedValueOnce(cyclic as never);
+    await expect(createTransactionFlow(second.dependencies).prepare(intent)).rejects.toMatchObject({ code: "invalid_transaction" });
+    const third = setup(); await third.wallet.connect();
+    const original = globalThis.structuredClone; vi.stubGlobal("structuredClone", () => { throw new DOMException("no", "DataCloneError"); });
+    await expect(createTransactionFlow(third.dependencies).prepare(intent)).rejects.toBeInstanceOf(TransactionSafetyError);
+    vi.stubGlobal("structuredClone", original);
   });
 });
 

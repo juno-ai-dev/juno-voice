@@ -1,8 +1,9 @@
+import { toBech32 } from "@cosmjs/encoding";
 import { describe, expect, it, vi } from "vitest";
 import { BrowserWalletDiscovery, WalletSafetyError, WalletSession, type WalletConnector, type WalletIdentity } from "./wallet";
 
 const alice = { chainId: "juno-1", address: "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730" } as const;
-const bob = { chainId: "juno-1", address: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } as const;
+const bob = { chainId: "juno-1", address: toBech32("juno", new Uint8Array(20).fill(2)) } as const;
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: unknown) => void;
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 function connector(identity: WalletIdentity): WalletConnector & { change(next?: WalletIdentity): void } {
@@ -52,6 +53,40 @@ describe("wallet safety session", () => {
     const gate = deferred<WalletIdentity>(); vi.mocked(port.readIdentity).mockReturnValueOnce(gate.promise); port.change(bob); wallet.dispose();
     gate.resolve(bob); await wallet.settled(); expect(wallet.snapshot()).toMatchObject({ status: "disconnected", identity: null });
     port.change(alice); expect(port.readIdentity).toHaveBeenCalledTimes(1);
+  });
+  it("supersedes concurrent connects and never commits the older reversed result", async () => {
+    const port = connector(alice); const wallet = new WalletSession(port, "juno-1");
+    const older = deferred<WalletIdentity>(); const newer = deferred<WalletIdentity>();
+    vi.mocked(port.connect).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+    const first = wallet.connect(); const second = wallet.connect();
+    newer.resolve(bob); await expect(second).resolves.toMatchObject(bob);
+    older.resolve(alice); await expect(first).rejects.toMatchObject({ code: "stale_identity" });
+    expect(wallet.snapshot()).toMatchObject({ status: "connected", identity: bob });
+  });
+  it("never commits a connect invalidated by change or disposal", async () => {
+    const changedPort = connector(alice); const changed = new WalletSession(changedPort, "juno-1");
+    const first = deferred<WalletIdentity>(); vi.mocked(changedPort.connect).mockReturnValueOnce(first.promise);
+    const connecting = changed.connect(); changedPort.change(bob); first.resolve(alice);
+    await expect(connecting).rejects.toMatchObject({ code: "stale_identity" }); await changed.settled();
+    expect(changed.snapshot()).not.toMatchObject({ identity: alice });
+
+    const disposedPort = connector(alice); const disposed = new WalletSession(disposedPort, "juno-1");
+    const second = deferred<WalletIdentity>(); vi.mocked(disposedPort.connect).mockReturnValueOnce(second.promise);
+    const pending = disposed.connect(); disposed.dispose(); second.resolve(alice);
+    await expect(pending).rejects.toMatchObject({ code: "stale_identity" });
+    expect(disposed.snapshot()).toMatchObject({ status: "disconnected", identity: null });
+  });
+  it("disposal terminally revokes identity and revision and all authorization paths fail closed", async () => {
+    const port = connector(alice); const wallet = new WalletSession(port, "juno-1"); const authorization = await wallet.connect();
+    wallet.dispose();
+    expect(wallet.snapshot()).toMatchObject({ status: "disconnected", identity: null, revision: authorization.revision + 1 });
+    expect(() => wallet.assertRevision(authorization)).toThrowError(WalletSafetyError);
+    await expect(wallet.current()).rejects.toMatchObject({ code: "stale_identity" });
+    await expect(wallet.connect()).rejects.toMatchObject({ code: "stale_identity" });
+  });
+  it("rejects 32-byte Juno addresses as wallet accounts", async () => {
+    const wallet = new WalletSession(connector({ chainId: "juno-1", address: toBech32("juno", new Uint8Array(32)) }), "juno-1");
+    await expect(wallet.connect()).rejects.toMatchObject({ code: "invalid_identity" });
   });
   it.each([["missing", new WalletSafetyError("missing_wallet", "not installed")], ["locked", new WalletSafetyError("wallet_locked", "locked")],
     ["rejected", Object.assign(new Error("Request rejected"), { code: 4001 })]])("keeps read-only operation independent when wallet is %s", async (_, error) => {

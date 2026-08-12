@@ -77,10 +77,16 @@ export class WalletSession {
   }
 
   async connect(): Promise<WalletAuthorization> {
+    if (this.disposed)
+      throw new WalletSafetyError("stale_identity", "Wallet session was disposed.");
+    // A newer connect explicitly supersedes every older connect attempt.
+    const generation = ++this.generation;
     this.state = { ...this.state, status: "connecting", identity: null, error: null };
     try {
       const identity = await this.connectorPort.connect();
       this.validate(identity);
+      if (this.disposed || generation !== this.generation)
+        throw new WalletSafetyError("stale_identity", "Wallet connection was superseded.");
       this.state = {
         status: "connected",
         identity: { ...identity },
@@ -91,23 +97,28 @@ export class WalletSession {
       return this.authorization();
     } catch (error) {
       const safe = normalizedError(error);
-      this.state = { ...this.state, status: "disconnected", identity: null, error: safe };
+      if (!this.disposed && generation === this.generation)
+        this.state = { ...this.state, status: "disconnected", identity: null, error: safe };
       throw safe;
     }
   }
 
   async current(): Promise<WalletAuthorization> {
-    if (this.state.status !== "connected")
+    if (this.disposed || this.state.status !== "connected")
       throw new WalletSafetyError("stale_identity", "Wallet is not connected.");
+    const generation = this.generation;
+    const revision = this.state.revision;
     let identity: WalletIdentity;
     try {
       identity = await this.connectorPort.readIdentity();
       this.validate(identity);
     } catch (error) {
       const safe = error instanceof WalletSafetyError ? error : normalizedError(error);
-      this.invalidate(safe.message);
+      if (!this.disposed && generation === this.generation) this.invalidate(safe.message);
       throw safe;
     }
+    if (this.disposed || generation !== this.generation || revision !== this.state.revision)
+      throw new WalletSafetyError("stale_identity", "Wallet identity changed.");
     if (
       identity.address !== this.state.identity?.address ||
       identity.chainId !== this.state.identity.chainId
@@ -120,6 +131,7 @@ export class WalletSession {
 
   assertRevision(authorization: WalletAuthorization): void {
     if (
+      this.disposed ||
       this.state.status !== "connected" ||
       authorization.revision !== this.state.revision ||
       authorization.address !== this.state.identity?.address ||
@@ -140,6 +152,7 @@ export class WalletSession {
     this.disposed = true;
     this.generation += 1;
     this.removeListener();
+    this.invalidate("Wallet session was disposed.");
   }
 
   private authorization(): WalletAuthorization {
@@ -160,7 +173,7 @@ export class WalletSession {
     try {
       if (identity.address !== identity.address.toLowerCase()) throw new Error();
       const decoded = fromBech32(identity.address);
-      if (decoded.prefix !== "juno" || ![20, 32].includes(decoded.data.length)) throw new Error();
+      if (decoded.prefix !== "juno" || decoded.data.length !== 20) throw new Error();
     } catch {
       throw new WalletSafetyError("invalid_identity", "Wallet returned an invalid Juno account.");
     }
