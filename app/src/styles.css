@@ -253,3 +253,34 @@ footer {
   color: var(--color-coral-300, #ff9a9b);
   font-weight: 700;
 }
+.topbar nav { display: flex; gap: 4px; }
+.topbar nav button { min-height: 36px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #d7bda1; cursor: pointer; }
+.topbar nav .nav-active { color: #ffebd2; border-color: #ff9a9b; }
+.button.secondary { background: transparent; color: #ff9a9b; }
+.registry-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.project-list { border: 1px solid #6f3e40; background: #160608; }
+.project-card { padding: 20px; border-bottom: 1px solid #553033; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.project-card h3, .project-card p { margin: 8px 0 0; }
+.project-card small { color: #d7bda1; display: block; }
+.option-note { border-left: 3px solid #ff9a9b; background: #160608; padding: 16px 20px; margin-bottom: 32px; }
+.option-note p { margin: 4px 0 0; color: #d7bda1; }
+.detail-panel, .workbench { margin-top: 40px; padding: 24px; border: 1px solid #a65a5c; background: #160608; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+dl { display: grid; grid-template-columns: 140px 1fr; gap: 8px 16px; }
+dt { color: #d7bda1; font-family: var(--font-family-mono, monospace); font-size: 11px; text-transform: uppercase; }
+dd { margin: 0; }
+.break { overflow-wrap: anywhere; }
+.history ol { padding-left: 24px; }
+.history li { padding: 8px 0; }
+.history small { display: block; color: #d7bda1; }
+.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 24px 0; }
+.form-grid label { font-family: var(--font-family-mono, monospace); font-size: 11px; }
+.form-grid input, .form-grid select { display: block; width: 100%; min-height: 44px; margin-top: 5px; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; padding: 8px; }
+.review-card { background: #100405; padding: 20px; border: 1px solid #553033; }
+.review-card pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #ffebd2; }
+@media (max-width: 800px) {
+  .registry-columns, .detail-grid, .form-grid { grid-template-columns: 1fr; }
+  .topbar-inner { width: calc(100% - 20px); }
+  .brand span { display: none; }
+  .project-card { align-items: stretch; flex-direction: column; }
+}
