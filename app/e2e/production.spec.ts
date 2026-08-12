@@ -23,6 +23,25 @@ const deployments = {
   "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn": [5154, "524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f"],
 } as const;
 
+function captureBrowserErrors(page: Page) {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(`console: ${message.text()} (${message.location().url})`);
+  });
+  return () => expect(errors, "page and console errors").toEqual([]);
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const dimensions = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    content: document.documentElement.scrollWidth,
+  }));
+  expect(dimensions.content, `content width at ${dimensions.viewport}px`).toBeLessThanOrEqual(
+    dimensions.viewport,
+  );
+}
+
 async function gotoDeployableArtifact(page: Page) {
   const criticalTypes = ["script", "stylesheet", "image"];
   const responses = new Map(criticalTypes.map((type) => [type, [] as number[]]));
@@ -125,7 +144,13 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
       let response: unknown = key in fixture.responses ? fixture.responses[key as keyof typeof fixture.responses] : undefined;
       if (request.address === "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg") response = key === "voting_module" ? "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2" : [{ address: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", prefix: "A", status: "enabled" }];
       if (request.address === "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2") response = "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg";
-      if (request.address === "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n") response = key === "pause" ? { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null } : { options: ["do-not-distribute"] };
+      if (request.address === "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n") {
+        if (key === "config") response = { native_denom: "ujuno", registration_bond: "1000000", max_active_projects: 99, max_metadata_uri_bytes: 512, max_page_limit: 50, max_reason_bytes: 500, payout_address_delay_seconds: 86400, curator: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac", governor: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", version: 1 };
+        else if (key === "pause") response = { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null };
+        else if (key === "health") response = { accounting: { active_projects: 0, pending_applications: 0, bond_liability: "0", lifetime_bonds_received: "0", lifetime_bonds_refunded: "0", lifetime_bonds_forfeited: "0" }, actual_native_balance: "0", fully_backed: true };
+        else if (key === "projects" || key === "applications") response = { projects: [] };
+        else if (key === "all_options") response = { options: ["do-not-distribute"] };
+      }
       if (request.address === "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn") {
         if (key === "config") response = { owner: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", dao_core: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", voting_powers: "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2", hook_caller: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", power_source: { epoch_snapshot: { guardian: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } } };
         if (key === "gauge") response = { id: 0, title: "Hack Juno", adapter: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n", epoch_size: 604800, min_percent_selected: "0.01", max_options_selected: 20, max_available_percentage: "0.2", is_stopped: false, next_epoch: 0, reset: null, snapshot_policy: { min_turnout_bps: 1000, epoch_budget: "100000000", denom: "ujuno" }, current_epoch: null };
@@ -197,4 +222,38 @@ test("gauge route verifies the full deployment and renders live-empty safety sem
   await expect(page.getByText(/Nothing shown here implies automatic rollover/)).toBeVisible();
   await expect(page.getByText(/transaction support is unavailable in this browser/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Prepare open epoch" })).toHaveCount(0);
+});
+
+test("mobile public routes do not overflow or emit browser errors", async ({ page }) => {
+  const expectNoBrowserErrors = captureBrowserErrors(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockMainnet(page);
+  await gotoDeployableArtifact(page);
+
+  await expect(page.getByRole("heading", { name: "Public bounty ledger" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Gauge" }).click();
+  await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Projects" }).click();
+  await expect(page.getByRole("heading", { name: "Eligible projects" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  expectNoBrowserErrors();
+});
+
+test("keyboard reaches primary navigation and the public retry action", async ({ page }) => {
+  await mockMainnet(page, { failures: 1 });
+  await gotoDeployableArtifact(page);
+  await expect(page.getByText("Mainnet data unavailable")).toBeVisible();
+
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Juno VOICE" })).toBeFocused();
+  for (const name of ["Gauge", "Projects", "Bounties"]) {
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name, exact: true })).toBeFocused();
+  }
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Retry query" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
 });
