@@ -227,6 +227,15 @@ export function Ledger({
             value={d.observationHeight.toLocaleString()}
           />
           <Fact label="Observed" value={d.refreshedAt.toISOString()} />
+          <Fact
+            label="Release commit"
+            value={
+              config.releaseCommit === "local-uncommitted"
+                ? config.releaseCommit
+                : `${config.releaseCommit.slice(0, 12)}…`
+            }
+            title={config.releaseCommit}
+          />
         </div>
         <p>
           The height is a separate observation. Paginated contract queries are

@@ -6,6 +6,7 @@ describe("fail-closed production configuration", () => {
       chainId: "juno-1",
       contract: DEFAULT_BOUNTY_CONTRACT,
       codeId: 5150,
+      releaseCommit: "local-uncommitted",
     }));
   it("rejects a wrong chain or contract", () => {
     expect(() => loadConfig({ VITE_CHAIN_ID: "uni-7" })).toThrow(
@@ -30,4 +31,11 @@ describe("fail-closed production configuration", () => {
     expect(() =>
       loadConfig({ VITE_EXPLORER_URL: "https://evil.example" }),
     ).toThrow("Unsupported explorer"));
+  it("binds production artifacts to an exact release commit", () => {
+    const commit = "a".repeat(40);
+    expect(loadConfig({ VITE_RELEASE_COMMIT: commit }).releaseCommit).toBe(commit);
+    expect(() => loadConfig({ VITE_RELEASE_COMMIT: "main" })).toThrow(
+      "Release commit",
+    );
+  });
 });

@@ -8,6 +8,7 @@ export const config: AppConfig = {
   codeId: 5150,
   codeChecksum:
     "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1",
+  releaseCommit: "local-uncommitted",
 };
 export const bounty: Bounty = {
   id: 1,

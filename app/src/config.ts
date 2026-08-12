@@ -17,12 +17,14 @@ export interface AppConfig {
   explorer: typeof DEFAULT_EXPLORER;
   codeId: typeof CODE_ID;
   codeChecksum: typeof CODE_CHECKSUM;
+  releaseCommit: string;
 }
 export interface ConfigEnvironment {
   VITE_CHAIN_ID?: string;
   VITE_BOUNTY_CONTRACT_ADDRESS?: string;
   VITE_RPC_URL?: string;
   VITE_EXPLORER_URL?: string;
+  VITE_RELEASE_COMMIT?: string;
 }
 export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
   const chainId = env.VITE_CHAIN_ID ?? DEFAULT_CHAIN_ID;
@@ -32,6 +34,12 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
     /\/$/,
     "",
   );
+  const releaseCommit = env.VITE_RELEASE_COMMIT ?? "local-uncommitted";
+  if (
+    releaseCommit !== "local-uncommitted" &&
+    !/^[0-9a-f]{40}$/.test(releaseCommit)
+  )
+    throw new Error("Release commit must be a lowercase 40-character Git SHA.");
   if (chainId !== DEFAULT_CHAIN_ID)
     throw new Error(
       `Unsupported chain: ${chainId}. Juno Voice is pinned to juno-1.`,
@@ -72,5 +80,6 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
     explorer,
     codeId: CODE_ID,
     codeChecksum: CODE_CHECKSUM,
+    releaseCommit,
   };
 }

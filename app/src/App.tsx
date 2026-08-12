@@ -9,6 +9,7 @@ export function App({
   source?: VoiceDataSource;
   config: AppConfig;
 }) {
+  const base = import.meta.env.BASE_URL;
   const source = useMemo(
     () => supplied ?? createDataSource(config),
     [supplied, config],
@@ -17,9 +18,9 @@ export function App({
     <div className="shell juno-grid">
       <header className="topbar">
         <div className="topbar-inner">
-          <a className="brand" href="/">
-            <img src="/assets/logo-salmon.svg" alt="" />
-            <img src="/assets/wordmark-salmon.svg" alt="Juno" />
+          <a className="brand" href={base}>
+            <img src={`${base}assets/logo-salmon.svg`} alt="" />
+            <img src={`${base}assets/wordmark-salmon.svg`} alt="Juno" />
             <span>VOICE</span>
           </a>
           <span className="mainnet">JUNO-1 · READ ONLY</span>

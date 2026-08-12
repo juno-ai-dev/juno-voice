@@ -12,6 +12,7 @@ try {
     VITE_BOUNTY_CONTRACT_ADDRESS: import.meta.env.VITE_BOUNTY_CONTRACT_ADDRESS,
     VITE_RPC_URL: import.meta.env.VITE_RPC_URL,
     VITE_EXPLORER_URL: import.meta.env.VITE_EXPLORER_URL,
+    VITE_RELEASE_COMMIT: import.meta.env.VITE_RELEASE_COMMIT,
   });
   createRoot(root).render(
     <StrictMode>

@@ -1,6 +1,8 @@
 /target/
 /app/node_modules/
 /app/dist/
+/app/test-results/
+/app/playwright-report/
 __pycache__/
 *.pyc
 .env.local
