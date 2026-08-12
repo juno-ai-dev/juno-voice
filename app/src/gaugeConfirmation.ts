@@ -35,8 +35,9 @@ export function confirmGaugeMutation({ action, events, refreshed, before, sender
 }) {
   if (funds.length !== 0) throw new Error("Gauge actions must not attach funds.");
   const expectedAction = action === "open_epoch" ? "open_snapshot_epoch" : action === "execute" ? "execute_snapshot_epoch" : "place_snapshot_vote";
-  const event = events.find((item) => attribute(item, "action") === expectedAction);
-  if (!event || attribute(event, "gauge_id") !== String(GAUGE_ID) || attribute(event, "sender") !== sender) throw new Error("Gauge mutation event did not match the reviewed action.");
+  const matchingEvents = events.filter((item) => attribute(item, "action") === expectedAction);
+  const event = matchingEvents.length === 1 ? matchingEvents[0] : undefined;
+  if (!event || attribute(event, "gauge_id") !== String(GAUGE_ID) || attribute(event, "sender") !== sender) throw new Error("Gauge event mismatch.");
   if (action === "open_epoch") {
     const current = refreshed.data.current;
     if (!current || current.outcome !== "open" || current.epochId <= (before.data.current?.epochId ?? 0) || attribute(event, "epoch_id") !== String(current.epochId) || attribute(event, "snapshot_height") !== String(current.snapshotHeight))

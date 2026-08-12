@@ -75,6 +75,25 @@ describe("canonical gauge post-transaction confirmation", () => {
     expect(() => confirmGaugeMutation({ action: "execute", events: [event("execute_snapshot_epoch", { outcome: "distributed" })], before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] })).toThrow("outcome");
   });
 
+  it("requires exactly one matching action event for open, vote, remove, and execute while allowing unrelated wasm events", () => {
+    const revised = { ...gaugeContext, data: { ...gaugeData, chainTimeNanos: "2501000000000", ballot: { ...gaugeData.ballot!, revisedAt: 2501, revisions: 2 } } };
+    const removed = { ...gaugeContext, data: { ...gaugeData, ballot: null, current: { ...gaugeData.current!, participatingPower: "400", totalCast: "350", voterCount: 0 } } };
+    const beforeOpen = { ...gaugeContext, data: { ...gaugeData, current: gaugeData.previous } };
+    const terminal = { ...gaugeContext, data: { ...gaugeData, current: { ...gaugeData.current!, outcome: "no_distribution_turnout" as const } } };
+    const cases = [
+      { input: { action: "open_epoch", before: beforeOpen, refreshed: gaugeContext, sender: voter, executeMessage: { open_epoch: { gauge: 0 } }, funds: [] }, matching: event("open_snapshot_epoch", { snapshot_height: String(gaugeData.current!.snapshotHeight) }) },
+      { input: { ...mutation("place_votes", gaugeContext, revised, gaugeData.ballot!.votes), events: undefined }, matching: voteEvent(revised, gaugeData.ballot!.votes.length) },
+      { input: { ...mutation("remove_votes", gaugeContext, removed, null), events: undefined }, matching: voteEvent(removed, 0) },
+      { input: { action: "execute", before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] }, matching: event("execute_snapshot_epoch", { outcome: "no_distribution_turnout" }) },
+    ] as const;
+    const unrelated = event("unrelated_wasm_action");
+    for (const { input, matching } of cases) {
+      expect(() => confirmGaugeMutation({ ...input, events: [unrelated, matching] })).not.toThrow();
+      expect(() => confirmGaugeMutation({ ...input, events: [unrelated] })).toThrow(/event/);
+      expect(() => confirmGaugeMutation({ ...input, events: [matching, unrelated, matching] })).toThrow(/event/);
+    }
+  });
+
   it("rejects missing events, wrong epochs, and attached funds", () => {
     expect(() => confirmGaugeMutation({ action: "place_votes", events: [], before: gaugeContext, refreshed: gaugeContext, sender: voter, executeMessage: { place_votes: { gauge: 0, votes: [] } }, funds: [] })).toThrow("event");
     expect(() => confirmGaugeMutation({ action: "place_votes", events: [voteEvent(gaugeContext, 1)], before: gaugeContext, refreshed: gaugeContext, sender: voter, executeMessage: { place_votes: { gauge: 0, votes: gaugeData.ballot!.votes } }, funds: [{ denom: "ujuno", amount: "1" }] })).toThrow("must not attach");
