@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserTransactionAccess } from "./browserTransactions";
 import type { VoiceDataSource } from "./client";
 import { contributeIntent } from "./bountyFlows";
+import { votePayoutIntent } from "./settlementFlows";
 import { bounty, config, ledger } from "./test/bountyFixtures";
 import type { BountyDetail } from "./types";
 
@@ -14,7 +15,7 @@ vi.mock("@cosmjs/cosmwasm-stargate", () => ({
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
 const detail: BountyDetail = {
   bounty: { ...bounty, creator: sender }, config: ledger.config, pause: ledger.pause,
-  activeRound: null, moderation: null, graduation: null, contributions: [], claims: [], history: [],
+  activeRound: null, rounds: [], receipts: [], moderation: null, graduation: null, contributions: [], claims: [], history: [],
   observationHeight: ledger.observationHeight, chainTimeNanos: ledger.chainTimeNanos, fingerprint: "bounty:1:v1",
 };
 const intent = contributeIntent(detail.bounty, "1000000", sender, [], {
@@ -93,5 +94,32 @@ describe("browser transaction broadcast boundary", () => {
     const lastIdentityRead = fixture.getKey.mock.invocationCallOrder.at(-1) ?? 0;
     expect(lastIdentityRead).toBeGreaterThan(cosmwasm.connectWithSigner.mock.invocationCallOrder.at(-1) ?? 0);
     expect(fixture.signing.execute.mock.invocationCallOrder[0]).toBeGreaterThan(lastIdentityRead);
+  });
+
+  it("routes a nonpayable ballot through the shared signer and confirms canonical event plus refreshed receipt", async () => {
+    const fixture = setup();
+    const round = { bounty_id: 1, number: 1, nomination: { nominator: sender, recipient: sender, evidence_uri: "ipfs://evidence",
+      evidence_digest: `sha256:${"ab".repeat(32)}`, rationale: "done" }, rule: "contribution_weighted_majority" as const,
+      total_weight: "2500000", contributor_count: 1, opens_at: "1", closes_at: "1800000000000000000",
+      yes_weight: "0", no_weight: "0", voter_count: 0, outcome: "pending" as const, finalized_at: null };
+    const before: BountyDetail = { ...detail, bounty: { ...detail.bounty, status: "ratifying", active_round: 1 },
+      activeRound: round, rounds: [round], contributions: [{ bounty_id: 1, contributor: sender, contributor_index: 1,
+        current_amount: "2500000", weight_at_round: "2500000" }], fingerprint: "vote:v1" };
+    const receipt = { bounty_id: 1, round: 1, voter: sender, weight: "2500000", vote: "yes" as const, rationale: null,
+      cast_at: "2", revised_at: "2", revisions: 0, voter_index: 1 };
+    const updatedRound = { ...round, yes_weight: "2500000", voter_count: 1 };
+    const refreshed = { ...before, activeRound: updatedRound, rounds: [updatedRound], receipts: [receipt], fingerprint: "vote:v2" };
+    fixture.loadBountyDetail.mockReset().mockResolvedValueOnce(before).mockResolvedValueOnce(before)
+      .mockResolvedValueOnce(refreshed).mockResolvedValueOnce(refreshed);
+    fixture.signing.execute.mockResolvedValueOnce({ ...successfulResult, events: [{ type: "wasm-juno_voice_bounties.payout_vote_recorded",
+      attributes: [{ key: "bounty_id", value: "1" }, { key: "round", value: "1" }, { key: "voter", value: sender },
+        { key: "vote", value: "yes" }, { key: "weight", value: "2500000" }, { key: "yes_weight", value: "2500000" },
+        { key: "no_weight", value: "0" }, { key: "revisions", value: "0" }] }] });
+    await fixture.access.connect();
+    const review = await fixture.access.prepare(votePayoutIntent(before, sender, 1, "yes", ""));
+    expect(review.funds).toEqual([]);
+    await expect(fixture.access.submit(review)).resolves.toMatchObject({ status: "confirmed", txHash: "KNOWN" });
+    expect(fixture.signing.execute).toHaveBeenCalledWith(sender, config.contract,
+      { vote_payout: { bounty_id: 1, round: 1, vote: "yes", rationale: null } }, review.fee, "", []);
   });
 });

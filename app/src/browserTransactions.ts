@@ -4,12 +4,13 @@ import type { OfflineSigner } from "@cosmjs/proto-signing";
 import type { BountyTransactionAccess } from "./BountyActions";
 import type { VoiceDataSource } from "./client";
 import type { AppConfig } from "./config";
+import type { BountyDetail } from "./types";
 import type { RegistryDataSource } from "./registry";
 import { buildRegistryIntent, type RegistryAction, type RegistryActionInput, type RegistryTransactionFlow } from "./registryActions";
 import { confirmRegistryMutation } from "./registryConfirmation";
 import { BroadcastDependencyError, createTransactionFlow, type ExactExecuteRequest, type TransactionIntent } from "./transactions";
 import { BrowserWalletDiscovery, WalletSession, type WalletKind } from "./wallet";
-import { confirmBountyMutation } from "./bountyConfirmation";
+import { confirmBountyMutation, confirmSettlementMutation, type SettlementAction } from "./bountyConfirmation";
 import type { GaugeActionContext, GaugeDataSource } from "./gauge";
 import { buildGaugeIntent, type GaugeAction, type GaugeTransactionFlow, type PreferenceInput } from "./gaugeActions";
 import { confirmGaugeMutation } from "./gaugeConfirmation";
@@ -53,9 +54,9 @@ export function createBrowserTransactionAccess(
   const discovery = new BrowserWalletDiscovery(browser);
   const wallet = new WalletSession(discovery.connector(kind, config.chainId), config.chainId);
   let expectedIntent: TransactionIntent | null = null;
-  let priorTotal: string | undefined;
+  let canonicalBefore: BountyDetail | undefined;
   let gaugeBefore: GaugeActionContext | undefined;
-  const pending = new Map<string, { intent: TransactionIntent; priorTotal?: string; gaugeBefore?: GaugeActionContext }>();
+  const pending = new Map<string, { intent: TransactionIntent; canonicalBefore?: BountyDetail; gaugeBefore?: GaugeActionContext }>();
   const readCanonicalState = async () => {
     if (!expectedIntent) throw new Error("No transaction is being reviewed.");
     const action = Object.keys(expectedIntent.executeMessage)[0];
@@ -102,11 +103,13 @@ export function createBrowserTransactionAccess(
         throw new Error("Canonical registry transaction changed; review again.");
       return { fingerprint: context.fingerprint, height: context.data.observationHeight };
     }
-    if (action === "contribute") {
-      const id = (expectedIntent.executeMessage.contribute as { bounty_id: number }).bounty_id;
+    if (action !== "create_bounty") {
+      const body = expectedIntent.executeMessage[action] as { bounty_id?: unknown };
+      const id = body.bounty_id;
+      if (typeof id !== "number" || !Number.isSafeInteger(id)) throw new Error("Canonical bounty identifier is unavailable.");
       if (!source.loadBountyDetail) throw new Error("Canonical bounty detail is unavailable.");
       const detail = await source.loadBountyDetail(id);
-      priorTotal = detail.bounty.total_contribution;
+      canonicalBefore = detail;
       return { fingerprint: detail.fingerprint, height: detail.observationHeight };
     }
     const ledger = await source.loadLedger();
@@ -145,7 +148,7 @@ export function createBrowserTransactionAccess(
           if (typeof body?.project_id !== "string") throw new Error("Canonical registry project could not be refreshed.");
           const refreshed = await registrySource.loadActionContext(body.project_id, false);
           confirmRegistryMutation({ action: registryAction, events, refreshed, sender: request.sender,
-            executeMessage: request.executeMessage, funds: request.funds });
+           executeMessage: request.executeMessage, funds: request.funds });
           return { status: "confirmed" as const, txHash, height: result.height };
         }
         if (request.contract === config.gaugeContract) {
@@ -156,14 +159,22 @@ export function createBrowserTransactionAccess(
           confirmGaugeMutation({ action: gaugeAction, events, refreshed, before: gaugeBefore, sender: request.sender, executeMessage: request.executeMessage, funds: request.funds });
           return { status: "confirmed" as const, txHash, height: result.height };
         }
-        const bountyAction = action as "create_bounty" | "contribute";
-        const eventType = bountyAction === "create_bounty" ? "juno_voice_bounties.bounty_created" : "juno_voice_bounties.contributed";
-        const id = Number(events.find((event) => event.type === eventType || event.type === `wasm-${eventType}`)
-          ?.attributes.find((item) => item.key === "bounty_id")?.value);
+        const creation = action === "create_bounty";
+        const eventType = creation ? "juno_voice_bounties.bounty_created" : action === "contribute" ? "juno_voice_bounties.contributed" : "";
+        const body = request.executeMessage[action] as { bounty_id?: unknown };
+        const id = creation ? Number(events.find((event) => event.type === eventType || event.type === `wasm-${eventType}`)
+          ?.attributes.find((item) => item.key === "bounty_id")?.value) : body.bounty_id;
         if (!Number.isSafeInteger(id) || !source.loadBountyDetail) throw new Error("Canonical mutation event could not be refreshed.");
-        const refreshed = await source.loadBountyDetail(id);
-        confirmBountyMutation({ action: bountyAction, events, refreshed: refreshed.bounty, sender: request.sender,
-          amount: request.funds[0].amount, ...(bountyAction === "contribute" ? { priorTotal } : {}) });
+        const refreshed = await source.loadBountyDetail(id as number);
+        if (action === "create_bounty" || action === "contribute") {
+          confirmBountyMutation({ action, events, refreshed: refreshed.bounty, sender: request.sender,
+            amount: request.funds[0].amount,
+            ...(action === "contribute" && canonicalBefore ? { priorTotal: canonicalBefore.bounty.total_contribution } : {}) });
+        } else {
+          if (!canonicalBefore) throw new Error("Canonical pre-transaction detail is unavailable.");
+          confirmSettlementMutation({ action: action as SettlementAction, events, before: canonicalBefore,
+            refreshed, sender: request.sender, message: request.executeMessage as Record<string, unknown> });
+        }
         return { status: "confirmed" as const, txHash, height: result.height };
       } catch (error) {
         if (error instanceof BroadcastDependencyError) throw error;
@@ -191,15 +202,15 @@ export function createBrowserTransactionAccess(
   return {
     async connect() { return wallet.connect(); },
     async prepare(intent) {
-      expectedIntent = intent; priorTotal = undefined; gaugeBefore = undefined;
+      expectedIntent = intent; canonicalBefore = undefined; gaugeBefore = undefined;
       const review = await flow.prepare(intent);
-      pending.set(review.reviewId, { intent, ...(priorTotal === undefined ? {} : { priorTotal }), ...(gaugeBefore === undefined ? {} : { gaugeBefore }) });
+      pending.set(review.reviewId, { intent, ...(canonicalBefore === undefined ? {} : { canonicalBefore }), ...(gaugeBefore === undefined ? {} : { gaugeBefore }) });
       return review;
     },
     async submit(review) {
       const context = pending.get(review.reviewId);
       if (!context) throw new Error("Transaction review is no longer available.");
-      expectedIntent = context.intent; priorTotal = context.priorTotal; gaugeBefore = context.gaugeBefore;
+      expectedIntent = context.intent; canonicalBefore = context.canonicalBefore; gaugeBefore = context.gaugeBefore;
       try { return await flow.submit(review); }
       finally { pending.delete(review.reviewId); }
     },

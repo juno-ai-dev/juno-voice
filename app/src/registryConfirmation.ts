@@ -70,8 +70,8 @@ export function confirmRegistryMutation({
   const projectId = body.project_id;
   if (typeof projectId !== "string" || refreshed.project?.id !== projectId)
     throw new Error("Canonical registry project could not be refreshed.");
-  const event = events.find((item) => item.type === eventNames[action] || item.type === `wasm-${eventNames[action]}`);
-  if (event?.attributes.find((item) => item.key === "project_id")?.value !== projectId)
-    throw new Error("Registry mutation event did not match the reviewed project.");
+  const matches = events.filter((item) => item.type === eventNames[action] || item.type === `wasm-${eventNames[action]}`);
+  if (matches.length !== 1 || matches[0].attributes.find((item) => item.key === "project_id")?.value !== projectId)
+    throw new Error("Registry mutation event is missing, ambiguous, or did not match the reviewed project.");
   assertProject(action, refreshed.project, body, sender, funds);
 }

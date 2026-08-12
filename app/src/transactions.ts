@@ -152,7 +152,9 @@ function objectWithExactKeys(value: unknown, keys: readonly string[]): value is 
   return exactDataObject(value, keys);
 }
 const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 && !Object.is(value, -0);
+const uint32 = (value: unknown) => uint(value) && (value as number) <= 4294967295;
 const digest = (value: unknown) => typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+const text = (value: unknown) => typeof value === "string" && value.trim().length > 0;
 const gaugeOnly = (body: unknown) => objectWithExactKeys(body, ["gauge"]) && body.gauge === 0;
 const decimalAtomics = (value: unknown): bigint | null => {
   if (typeof value !== "string" || !/^(0|[1-9]\d*)(?:\.\d{1,18})?$/.test(value)) return null;
@@ -185,6 +187,19 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
     validAmount(body.expires_at, true) &&
     BigInt(body.expires_at as string) <= 18446744073709551615n && projectCandidate(body.project_candidate),
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
+  nominate_payout: (body) => objectWithExactKeys(body, ["bounty_id", "recipient", "evidence_uri", "evidence_digest", "rationale"]) &&
+    uint(body.bounty_id) && typeof body.recipient === "string" && validJunoAddress(body.recipient, [20]) &&
+    text(body.evidence_uri) && digest(body.evidence_digest) && text(body.rationale),
+  confirm_sole_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round"]) && uint(body.bounty_id) && uint32(body.round),
+  decline_sole_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round", "reason"]) &&
+    uint(body.bounty_id) && uint32(body.round) && text(body.reason),
+  vote_payout: (body) => (objectWithExactKeys(body, ["bounty_id", "round", "vote"]) ||
+    objectWithExactKeys(body, ["bounty_id", "round", "vote", "rationale"])) && uint(body.bounty_id) && uint32(body.round) &&
+    (body.vote === "yes" || body.vote === "no") && (!("rationale" in body) || body.rationale === null || text(body.rationale)),
+  finalize_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round"]) && uint(body.bounty_id) && uint32(body.round),
+  cancel_sole_funded: (body) => objectWithExactKeys(body, ["bounty_id", "reason"]) && uint(body.bounty_id) && text(body.reason),
+  expire: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
+  claim_refund: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   register_project: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest", "payout_address"]) &&
     projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
   update_pending_metadata: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest"]) &&
@@ -201,6 +216,16 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
   place_votes: placeVotes,
   execute: gaugeOnly,
 });
+const BOUNTY_ACTIONS = new Set([
+  "create_bounty", "contribute", "nominate_payout", "confirm_sole_payout", "decline_sole_payout",
+  "vote_payout", "finalize_payout", "cancel_sole_funded", "expire", "claim_refund",
+]);
+const REGISTRY_ACTIONS = new Set([
+  "register_project", "update_pending_metadata", "propose_payout_address", "cancel_payout_address_change",
+  "accept_payout_address", "claim_registration_bond", "retire",
+]);
+const GAUGE_ACTIONS = new Set(["open_epoch", "place_votes", "execute"]);
+const PAYABLE_ACTIONS = new Set(["create_bounty", "contribute", "register_project"]);
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
   safeCanonical(intent);
   if (intent.chainId !== "juno-1" || authorization.chainId !== intent.chainId)
@@ -212,12 +237,11 @@ function validateIntent(intent: TransactionIntent, authorization: WalletAuthoriz
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
-  const requiresFunds = action === "create_bounty" || action === "contribute" || action === "register_project";
-  const bountyActions = action === "create_bounty" || action === "contribute";
-  const gaugeActions = action === "open_epoch" || action === "place_votes" || action === "execute";
-  if (intent.contract === DEFAULT_BOUNTY_CONTRACT ? !bountyActions : intent.contract === DEFAULT_GAUGE_CONTRACT ? !gaugeActions : bountyActions || gaugeActions)
+  const contractActions = intent.contract === DEFAULT_BOUNTY_CONTRACT ? BOUNTY_ACTIONS :
+    intent.contract === DEFAULT_GAUGE_CONTRACT ? GAUGE_ACTIONS : REGISTRY_ACTIONS;
+  if (!contractActions.has(action))
     throw new TransactionSafetyError("message_forbidden", "Execute action is not permitted for this contract.");
-  if (requiresFunds ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]) : intent.funds.length !== 0)
+  if (PAYABLE_ACTIONS.has(action) ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]) : intent.funds.length !== 0)
     throw new TransactionSafetyError("invalid_transaction", "Invalid funds for this execute action.");
   if (!intent.expectedStateFingerprint || !Array.isArray(intent.consequences) || intent.consequences.length === 0 ||
     intent.consequences.some((item) => typeof item !== "string" || !item.trim()))

@@ -34,6 +34,8 @@ describe("mainnet bounty client", () => {
     expect(queries.bounties(50)).toEqual({
       bounties: { start_after: 50, limit: 50 },
     });
+    expect(queries.rounds(7)).toEqual({ rounds: { bounty_id: 7, start_after: null, limit: 50 } });
+    expect(queries.receipts(7, 2)).toEqual({ receipts: { bounty_id: 7, round: 2, start_after: null, limit: 50 } });
   });
 
   it("validates uint strings, statuses, refund reasons, projects, and timestamp bounds", () => {
@@ -136,6 +138,7 @@ describe("mainnet bounty client", () => {
           current_amount: "1000000", weight_at_round: null })) });
       }
       if ("claims" in query) return Promise.resolve({ claims: [], next_start_after: null });
+      if ("rounds" in query) return Promise.resolve({ rounds: [] });
       if ("history" in query) {
         const cursor = (query.history as { start_after: number | null }).start_after;
         const start = cursor === null ? 1 : 51, count = cursor === null ? 50 : 1;
@@ -147,10 +150,43 @@ describe("mainnet bounty client", () => {
     const result = await createDataSource(config, vi.fn().mockResolvedValue(rpc)).loadBountyDetail?.(1);
     expect(result?.contributions).toHaveLength(51);
     expect(result?.history).toHaveLength(51);
+    expect(result?.rounds).toEqual([]);
     expect(result?.config).toEqual(ledger.config);
     expect(result?.pause).toEqual(ledger.pause);
     expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.contract, queries.contributions(1, 50));
     expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.contract, queries.history(1, 50));
+  });
+
+  it("loads active-round snapshot weights and canonical ballot receipts", async () => {
+    const rpc = base(), voters = ["juno1first", "juno1second"];
+    const active = { bounty_id: 1, number: 1, nomination: { nominator: bounty.creator, recipient: bounty.creator,
+      evidence_uri: "ipfs://evidence", evidence_digest: `sha256:${"ab".repeat(32)}`, rationale: "done" },
+      rule: "contribution_weighted_majority", total_weight: "30", contributor_count: 2,
+      opens_at: "1690000000000000000", closes_at: "1750000000000000000", yes_weight: "10", no_weight: "0",
+      voter_count: 1, outcome: "pending", finalized_at: null };
+    const detailBounty = { ...bounty, status: "ratifying", contributor_count: 2, total_contribution: "30", active_round: 1 };
+    rpc.queryContractSmart.mockImplementation((_address: string, query: Record<string, unknown>) => {
+      if ("config" in query) return Promise.resolve(ledger.config);
+      if ("pause" in query) return Promise.resolve(ledger.pause);
+      if ("bounty" in query) return Promise.resolve({ bounty: detailBounty, active_round: active, moderation: null, graduation: null });
+      if ("contributions" in query) return Promise.resolve({ contributions: voters.map((contributor, index) => ({ bounty_id: 1,
+        contributor, contributor_index: index + 1, current_amount: index ? "20" : "10", weight_at_round: null })) });
+      if ("contribution" in query) { const body = query.contribution as { contributor: string; round: number };
+        const index = voters.indexOf(body.contributor); return Promise.resolve({ bounty_id: 1, contributor: body.contributor,
+          contributor_index: index + 1, current_amount: index ? "20" : "10", weight_at_round: index ? "20" : "10" }); }
+      if ("rounds" in query) return Promise.resolve({ rounds: [active] });
+      if ("receipts" in query) return Promise.resolve({ receipts: [{ bounty_id: 1, round: 1, voter: voters[0], weight: "10",
+        vote: "yes", rationale: null, cast_at: "1690000000000000001", revised_at: "1690000000000000001", revisions: 0, voter_index: 1 }] });
+      if ("claims" in query) return Promise.resolve({ claims: [], next_start_after: null });
+      if ("history" in query) return Promise.resolve({ entries: [{ bounty_id: 1, sequence: 1, actor: bounty.creator,
+        at: bounty.created_at, action: "created" }] });
+      throw new Error("Unexpected active detail query");
+    });
+    const result = await createDataSource(config, vi.fn().mockResolvedValue(rpc)).loadBountyDetail?.(1);
+    expect(result?.contributions.map((item) => item.weight_at_round)).toEqual(["10", "20"]);
+    expect(result?.receipts).toHaveLength(1);
+    expect(result?.activeRound).toEqual(active);
+    expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.contract, queries.contribution(1, voters[0], 1));
   });
 
   it("fails repeated/non-increasing IDs and disconnects", async () => {
