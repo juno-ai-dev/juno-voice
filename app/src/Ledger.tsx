@@ -4,6 +4,7 @@ import type { AppConfig } from "./config";
 import type { Bounty, BountyDetail, BountyStatus } from "./types";
 import { useAsync } from "./useAsync";
 import { BountyActions, type BountyTransactionAccess } from "./BountyActions";
+import { formatJuno } from "./junoAmount";
 const labels: Record<BountyStatus, string> = {
   open: "Open",
   single_confirmation: "Awaiting confirmation",
@@ -12,15 +13,7 @@ const labels: Record<BountyStatus, string> = {
   refunded: "Refunded",
   paid: "Paid",
 };
-const fmt = (amount: string) => {
-  const value = BigInt(amount),
-    whole = value / 1_000_000n,
-    fraction = (value % 1_000_000n)
-      .toString()
-      .padStart(6, "0")
-      .replace(/0+$/, "");
-  return `${whole.toLocaleString()}${fraction ? `.${fraction}` : ""} JUNO`;
-};
+const fmt = formatJuno;
 const compact = (v: string) => `${v.slice(0, 12)}…${v.slice(-6)}`;
 const timestampDate = (nanoseconds: string) =>
   new Date(Number(BigInt(nanoseconds) / 1_000_000n));

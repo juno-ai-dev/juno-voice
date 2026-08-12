@@ -2,6 +2,7 @@ import { fromBech32 } from "@cosmjs/encoding";
 import type { AppConfig } from "./config";
 import type { Project, RegistryData } from "./registry";
 import type { TransactionIntent, TransactionReview, TransactionOutcome } from "./transactions";
+import { formatJuno } from "./junoAmount";
 
 export const PROJECT_ID_PATTERN = /^[a-z0-9-]{3,64}$/;
 export const METADATA_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
@@ -56,7 +57,7 @@ export function buildRegistryIntent(config: AppConfig, sender: string, context: 
     : action === "retire" ? { project_id: projectId, reason: { code: "voluntary_retirement", note } }
     : { project_id: projectId };
   const consequences: Record<RegistryAction, string> = {
-    register_project: `Attach exactly ${data.config.registration_bond}${data.config.native_denom} as a registration bond.`,
+    register_project: `Attach exactly ${formatJuno(data.config.registration_bond)} as a registration bond.`,
     update_pending_metadata: "Replace the pending application's metadata URI and digest.",
     propose_payout_address: "Start or replace the delayed payout-address change.",
     cancel_payout_address_change: "Cancel the currently pending payout-address change.",

@@ -13,7 +13,7 @@ const journeys: Journey[] = [
     title: "Create or fund a bounty",
     view: "bounties",
     destination: "Open bounties",
-    intro: "Publish a task with acceptance criteria, or add JUNO to an open task.",
+    intro: "Publish a task with acceptance criteria, or add $JUNO to an open task.",
     steps: [
       "Funds attached to a transaction leave your wallet if it confirms; they are then controlled by the bounty contract, not by this app.",
       "The deadline uses Juno chain time, not your device clock. After it passes, the contract rules decide whether expiry and refunds are available.",

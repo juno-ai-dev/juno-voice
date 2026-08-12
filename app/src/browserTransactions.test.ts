@@ -18,7 +18,7 @@ const detail: BountyDetail = {
   activeRound: null, rounds: [], receipts: [], moderation: null, graduation: null, contributions: [], claims: [], history: [],
   observationHeight: ledger.observationHeight, chainTimeNanos: ledger.chainTimeNanos, fingerprint: "bounty:1:v1",
 };
-const intent = contributeIntent(detail.bounty, "1000000", sender, [], {
+const intent = contributeIntent(detail.bounty, "1", sender, [], {
   config: detail.config, pause: detail.pause, chainTimeNanos: detail.chainTimeNanos, fingerprint: detail.fingerprint,
 });
 const successfulResult = {

@@ -1,16 +1,11 @@
 import type { Bounty, ContractConfig, PauseState } from "./types";
 import type { TransactionIntent } from "./transactions";
 import { DEFAULT_BOUNTY_CONTRACT } from "./config";
+import { formatJuno, parseJuno } from "./junoAmount";
 
-const U128_MAX = 340282366920938463463374607431768211455n;
 const U64_MAX = 18446744073709551615n;
 const utf8 = (value: string) => new TextEncoder().encode(value).length;
-const amount = (value: string, label: string): bigint => {
-  if (!/^[1-9]\d*$/.test(value)) throw new Error(`${label} must be a positive whole ujuno amount.`);
-  const parsed = BigInt(value);
-  if (parsed > U128_MAX) throw new Error(`${label} exceeds the Uint128 range.`);
-  return parsed;
-};
+
 const required = (value: string, max: number, label: string) => {
   if (!value.trim()) throw new Error(`${label} is required.`);
   if (utf8(value) > max) throw new Error(`${label} exceeds the live ${max}-byte limit.`);
@@ -27,7 +22,7 @@ const optionalPair = (uri: string, digest: string, max: number, label: string) =
 };
 export interface CreateBountyInput {
   title: string; summary: string; acceptanceCriteria: string;
-  contentUri: string; contentDigest: string; expiresAtNanos: string; initialUjuno: string;
+  contentUri: string; contentDigest: string; expiresAtNanos: string; initialJuno: string;
   projectCandidate?: { projectId: string; metadataUri: string; metadataDigest: string };
 }
 export interface EligibilityState {
@@ -41,7 +36,8 @@ function assertConfig(state: EligibilityState) {
 }
 export function createBountyIntent(input: CreateBountyInput, state: EligibilityState): TransactionIntent {
   assertConfig(state);
-  const initial = amount(input.initialUjuno, "Initial contribution");
+  const initialUjuno = parseJuno(input.initialJuno);
+  const initial = BigInt(initialUjuno);
   if (initial < BigInt(state.config.min_contribution) || initial > BigInt(state.config.max_bounty_total))
     throw new Error("Initial contribution is outside the live contract limits.");
   if (!/^\d+$/.test(input.expiresAtNanos)) throw new Error("Expiration must be an exact nanosecond timestamp.");
@@ -72,17 +68,18 @@ export function createBountyIntent(input: CreateBountyInput, state: EligibilityS
       content_uri: content.uri, content_digest: content.digest,
       expires_at: input.expiresAtNanos, project_candidate,
     } },
-    funds: [{ denom: "ujuno", amount: input.initialUjuno }],
-    consequences: [`Create a bounty and escrow exactly ${input.initialUjuno} ujuno.`,
+    funds: [{ denom: "ujuno", amount: initialUjuno }],
+    consequences: [`Create a bounty and escrow exactly ${formatJuno(initialUjuno)}.`,
       `Terms and limits are snapshotted at config version ${state.config.version}.`,
       project_candidate ? "This is only a project candidate; graduation is a later authorized action." : "No project candidate is attached."],
     expectedStateFingerprint: state.fingerprint,
   };
 }
-export function contributeIntent(bounty: Bounty, ujuno: string, contributor: string | null,
+export function contributeIntent(bounty: Bounty, juno: string, contributor: string | null,
   knownContributors: readonly string[], state: EligibilityState): TransactionIntent {
   assertConfig(state);
-  const value = amount(ujuno, "Contribution");
+  const ujuno = parseJuno(juno);
+  const value = BigInt(ujuno);
   if (value < BigInt(state.config.min_contribution)) throw new Error("Contribution is below the live minimum.");
   if (bounty.status !== "open") throw new Error("This bounty is not open for contributions.");
   if (BigInt(state.chainTimeNanos) >= BigInt(bounty.expires_at)) throw new Error("This bounty has expired according to chain time.");
@@ -94,7 +91,7 @@ export function contributeIntent(bounty: Bounty, ujuno: string, contributor: str
   return {
     chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
     executeMessage: { contribute: { bounty_id: bounty.id } }, funds: [{ denom: "ujuno", amount: ujuno }],
-    consequences: [`Add exactly ${ujuno} ujuno to bounty #${bounty.id}; escrowed funds may only leave through contract rules.`,
+    consequences: [`Add exactly ${formatJuno(ujuno)} to bounty #${bounty.id}; escrowed funds may only leave through contract rules.`,
       `Eligibility uses canonical chain time and the bounty's snapshotted caps.`],
     expectedStateFingerprint: state.fingerprint,
   };
