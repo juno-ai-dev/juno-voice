@@ -9,6 +9,11 @@ export const DEFAULT_EXPLORER = "https://www.mintscan.io/juno" as const;
 export const CODE_ID = 5150 as const;
 export const CODE_CHECKSUM =
   "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1" as const;
+export const DEFAULT_REGISTRY_CONTRACT =
+  "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n" as const;
+export const REGISTRY_CODE_ID = 5151 as const;
+export const REGISTRY_CODE_CHECKSUM =
+  "1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf" as const;
 
 export interface AppConfig {
   chainId: typeof DEFAULT_CHAIN_ID;
@@ -17,6 +22,9 @@ export interface AppConfig {
   explorer: typeof DEFAULT_EXPLORER;
   codeId: typeof CODE_ID;
   codeChecksum: typeof CODE_CHECKSUM;
+  registryContract: typeof DEFAULT_REGISTRY_CONTRACT;
+  registryCodeId: typeof REGISTRY_CODE_ID;
+  registryCodeChecksum: typeof REGISTRY_CODE_CHECKSUM;
   releaseCommit: string;
 }
 export interface ConfigEnvironment {
@@ -80,6 +88,9 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
     explorer,
     codeId: CODE_ID,
     codeChecksum: CODE_CHECKSUM,
+    registryContract: DEFAULT_REGISTRY_CONTRACT,
+    registryCodeId: REGISTRY_CODE_ID,
+    registryCodeChecksum: REGISTRY_CODE_CHECKSUM,
     releaseCommit,
   };
 }

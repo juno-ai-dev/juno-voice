@@ -5,6 +5,9 @@ import type { BountyTransactionAccess } from "./BountyActions";
 import type { VoiceDataSource } from "./client";
 import type { AppConfig } from "./config";
 import type { BountyDetail } from "./types";
+import type { RegistryDataSource } from "./registry";
+import { buildRegistryIntent, type RegistryAction, type RegistryActionInput, type RegistryTransactionFlow } from "./registryActions";
+import { confirmRegistryMutation } from "./registryConfirmation";
 import { BroadcastDependencyError, createTransactionFlow, type ExactExecuteRequest, type TransactionIntent } from "./transactions";
 import { BrowserWalletDiscovery, WalletSession, type WalletKind } from "./wallet";
 import { confirmBountyMutation, confirmSettlementMutation, type SettlementAction } from "./bountyConfirmation";
@@ -32,8 +35,15 @@ function structuredTxHash(error: unknown): string | undefined {
     .find((candidate): candidate is string => typeof candidate === "string" && candidate.trim().length > 0);
 }
 
+export type BrowserTransactionAccess = BountyTransactionAccess & RegistryTransactionFlow;
+
 /** Production adapter for #32's exact review lifecycle. No signer is invoked by connect or prepare. */
-export function createBrowserTransactionAccess(config: AppConfig, source: VoiceDataSource, kind: WalletKind): BountyTransactionAccess {
+export function createBrowserTransactionAccess(
+  config: AppConfig,
+  source: VoiceDataSource,
+  kind: WalletKind,
+  registrySource?: RegistryDataSource,
+): BrowserTransactionAccess {
   const browser = window as SigningWindow;
   const extension = browser[kind];
   if (!extension?.getOfflineSigner) throw new Error(`${kind} signing support is unavailable.`);
@@ -45,6 +55,31 @@ export function createBrowserTransactionAccess(config: AppConfig, source: VoiceD
   const readCanonicalState = async () => {
     if (!expectedIntent) throw new Error("No transaction is being reviewed.");
     const action = Object.keys(expectedIntent.executeMessage)[0];
+    if (expectedIntent.contract === config.registryContract) {
+      if (!registrySource) throw new Error("Canonical registry state is unavailable.");
+      const body = expectedIntent.executeMessage[action];
+      const projectId = body && typeof body === "object" && !Array.isArray(body)
+        ? (body as { project_id?: unknown }).project_id
+        : undefined;
+      if (typeof projectId !== "string") throw new Error("Registry project identity is unavailable.");
+      const context = await registrySource.loadActionContext(projectId, action === "register_project");
+      const sender = wallet.snapshot().identity?.address;
+      if (!sender) throw new Error("Wallet identity is unavailable for canonical authorization.");
+      const value = body as Record<string, unknown>;
+      const input: RegistryActionInput = {
+        action: action as RegistryAction,
+        projectId,
+        metadataUri: typeof value.metadata_uri === "string" ? value.metadata_uri : "",
+        metadataDigest: typeof value.metadata_digest === "string" ? value.metadata_digest : "",
+        address: typeof value.payout_address === "string" ? value.payout_address : typeof value.address === "string" ? value.address : "",
+        note: value.reason && typeof value.reason === "object" && !Array.isArray(value.reason) &&
+          typeof (value.reason as { note?: unknown }).note === "string" ? (value.reason as { note: string }).note : "",
+      };
+      const rebuilt = buildRegistryIntent(config, sender, context, input);
+      if (JSON.stringify([rebuilt.executeMessage, rebuilt.funds]) !== JSON.stringify([expectedIntent.executeMessage, expectedIntent.funds]))
+        throw new Error("Canonical registry transaction changed; review again.");
+      return { fingerprint: context.fingerprint, height: context.data.observationHeight };
+    }
     if (action !== "create_bounty") {
       const body = expectedIntent.executeMessage[action] as { bounty_id?: unknown };
       const id = body.bounty_id;
@@ -81,8 +116,18 @@ export function createBrowserTransactionAccess(config: AppConfig, source: VoiceD
           throw new BroadcastDependencyError("rejected", "Wallet identity changed; review again.");
         const result = await signing.execute(request.sender, request.contract, request.executeMessage, request.fee, "", [...request.funds]);
         txHash = result.transactionHash;
-        const action = Object.keys(request.executeMessage)[0];
         const events = result.events.map((event) => ({ type: event.type, attributes: event.attributes.map((item) => ({ key: item.key, value: item.value })) }));
+        const action = Object.keys(request.executeMessage)[0];
+        if (request.contract === config.registryContract) {
+          if (!registrySource) throw new Error("Canonical registry state is unavailable.");
+          const registryAction = action as RegistryAction;
+          const body = request.executeMessage[registryAction] as { project_id?: unknown } | undefined;
+          if (typeof body?.project_id !== "string") throw new Error("Canonical registry project could not be refreshed.");
+          const refreshed = await registrySource.loadActionContext(body.project_id, false);
+          confirmRegistryMutation({ action: registryAction, events, refreshed, sender: request.sender,
+           executeMessage: request.executeMessage, funds: request.funds });
+          return { status: "confirmed" as const, txHash, height: result.height };
+        }
         const creation = action === "create_bounty";
         const eventType = creation ? "juno_voice_bounties.bounty_created" : action === "contribute" ? "juno_voice_bounties.contributed" : "";
         const body = request.executeMessage[action] as { bounty_id?: unknown };
@@ -108,7 +153,15 @@ export function createBrowserTransactionAccess(config: AppConfig, source: VoiceD
         throw new BroadcastDependencyError("transport", message, { txHash: txHash ?? structuredTxHash(error) });
       } finally { signing.disconnect(); }
     },
-    refreshCanonical: async () => { await readCanonicalState(); }, explorerBaseUrl: config.explorer,
+    refreshCanonical: async () => {
+      if (expectedIntent?.contract === config.registryContract) {
+        if (!registrySource) throw new Error("Canonical registry state is unavailable.");
+        const action = Object.keys(expectedIntent.executeMessage)[0];
+        const body = expectedIntent.executeMessage[action] as { project_id?: unknown } | undefined;
+        if (typeof body?.project_id !== "string") throw new Error("Registry project identity is unavailable.");
+        await registrySource.loadActionContext(body.project_id, false);
+      } else await readCanonicalState();
+    }, explorerBaseUrl: config.explorer,
   });
   return {
     async connect() { return wallet.connect(); },
