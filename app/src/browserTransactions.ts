@@ -1,4 +1,4 @@
-import { calculateFee, GasPrice } from "@cosmjs/stargate";
+import { BroadcastTxError, calculateFee, GasPrice, TimeoutError } from "@cosmjs/stargate";
 import { SigningCosmWasmClient } from "@cosmjs/cosmwasm-stargate";
 import type { OfflineSigner } from "@cosmjs/proto-signing";
 import type { BountyTransactionAccess } from "./BountyActions";
@@ -14,6 +14,22 @@ interface SigningExtension {
   getOfflineSigner(chainId: string): OfflineSigner;
 }
 type SigningWindow = Window & { keplr?: SigningExtension; leap?: SigningExtension };
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : "Wallet submission failed.";
+}
+function definiteWalletRejection(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 4001 || code === "ACTION_REJECTED";
+}
+function structuredTxHash(error: unknown): string | undefined {
+  if (error instanceof TimeoutError) return error.txId;
+  if (!error || typeof error !== "object") return undefined;
+  const value = error as { txId?: unknown; txHash?: unknown; transactionHash?: unknown };
+  return [value.txId, value.txHash, value.transactionHash]
+    .find((candidate): candidate is string => typeof candidate === "string" && candidate.trim().length > 0);
+}
 
 /** Production adapter for #32's exact review lifecycle. No signer is invoked by connect or prepare. */
 export function createBrowserTransactionAccess(config: AppConfig, source: VoiceDataSource, kind: WalletKind): BountyTransactionAccess {
@@ -53,8 +69,15 @@ export function createBrowserTransactionAccess(config: AppConfig, source: VoiceD
     },
     signAndBroadcast: async (request: ExactExecuteRequest) => {
       const signing = await client();
+      let txHash: string | undefined;
       try {
+        // connectWithSigner performs RPC IO. Re-read the extension identity after
+        // it completes so this is the final await before the signer is invoked.
+        const authorization = await wallet.current();
+        if (authorization.address !== request.sender || authorization.chainId !== request.chainId)
+          throw new BroadcastDependencyError("rejected", "Wallet identity changed; review again.");
         const result = await signing.execute(request.sender, request.contract, request.executeMessage, request.fee, "", [...request.funds]);
+        txHash = result.transactionHash;
         const action = Object.keys(request.executeMessage)[0] as "create_bounty" | "contribute";
         const events = result.events.map((event) => ({ type: event.type, attributes: event.attributes.map((item) => ({ key: item.key, value: item.value })) }));
         const eventType = action === "create_bounty" ? "juno_voice_bounties.bounty_created" : "juno_voice_bounties.contributed";
@@ -64,11 +87,13 @@ export function createBrowserTransactionAccess(config: AppConfig, source: VoiceD
         const refreshed = await source.loadBountyDetail(id);
         confirmBountyMutation({ action, events, refreshed: refreshed.bounty, sender: request.sender,
           amount: request.funds[0].amount, ...(action === "contribute" ? { priorTotal } : {}) });
-        return { status: "confirmed" as const, txHash: result.transactionHash, height: result.height };
+        return { status: "confirmed" as const, txHash, height: result.height };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Wallet submission failed.";
-        if (/reject|denied/i.test(message)) throw new BroadcastDependencyError("rejected", message);
-        throw new BroadcastDependencyError("transport", message);
+        if (error instanceof BroadcastDependencyError) throw error;
+        const message = messageOf(error);
+        if (error instanceof BroadcastTxError) return { status: "failed" as const, reason: message };
+        if (definiteWalletRejection(error)) throw new BroadcastDependencyError("rejected", message);
+        throw new BroadcastDependencyError("transport", message, { txHash: txHash ?? structuredTxHash(error) });
       } finally { signing.disconnect(); }
     },
     refreshCanonical: async () => { await readCanonicalState(); }, explorerBaseUrl: config.explorer,

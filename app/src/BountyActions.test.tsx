@@ -61,4 +61,31 @@ describe("bounty action UI", () => {
     expect(port.submit).toHaveBeenCalledWith(review);
     expect(await screen.findByRole("status")).toHaveTextContent(/Confirmed at height 124/);
   });
+  it("keeps known-hash evidence visible while canonical state is incomplete", async () => {
+    const port = access();
+    vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown", txHash: "KNOWN",
+      explorerUrl: "https://example/tx/KNOWN" });
+    const view = render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/do not submit again/i);
+    const evidence = screen.getByRole("link", { name: /transaction evidence KNOWN/ });
+    expect(evidence).toHaveAttribute("href", "https://example/tx/KNOWN");
+    expect(screen.getByRole("button", { name: /review contribution/ })).toBeDisabled();
+    view.rerender(<BountyActions canonical={{ ...canonical, chainTimeNanos: "1700000001000000000" }}
+      stale={false} access={port} bounty={bounty} />);
+    expect(evidence).toBeInTheDocument();
+  });
+  it("discloses hashless post-sign uncertainty without explorer evidence or a retry action", async () => {
+    const port = access(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
+    render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/may have occurred.*Do not submit again/i);
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Recheck state, then sign/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /review contribution/ })).toBeDisabled();
+  });
 });

@@ -30,7 +30,7 @@ export type BroadcastResponse =
   | { readonly status: "unknown"; readonly txHash?: string };
 export type TransactionOutcome =
   | (Extract<BroadcastResponse, { status: "confirmed" }> & { readonly confirmationStatus: "confirmed"; readonly refreshStatus: "refreshed" | "failed"; readonly explorerUrl: string })
-  | Exclude<BroadcastResponse, { status: "confirmed" }>
+  | (Exclude<BroadcastResponse, { status: "confirmed" }> & { readonly explorerUrl?: string })
   | { readonly status: "rejected"; readonly reason: string };
 export interface TransactionDependencies {
   readonly wallet: WalletSession;
@@ -220,6 +220,10 @@ export class TransactionReviewRegistry {
 const applicationReviewRegistry = new TransactionReviewRegistry();
 
 export function createTransactionFlow(dependencies: TransactionDependencies) {
+  const withExplorer = <T extends Exclude<BroadcastResponse, { status: "confirmed" }>>(outcome: T): T & { explorerUrl?: string } =>
+    "txHash" in outcome && outcome.txHash
+      ? { ...outcome, explorerUrl: `${dependencies.explorerBaseUrl.replace(/\/$/, "")}/tx/${encodeURIComponent(outcome.txHash)}` }
+      : outcome;
   const flowBinding = crypto.randomUUID();
   const registry = dependencies.reviewRegistry ?? applicationReviewRegistry;
   const assertExact = (review: TransactionReview, authorization: WalletAuthorization): void => {
@@ -271,13 +275,13 @@ export function createTransactionFlow(dependencies: TransactionDependencies) {
       catch (error) {
         if (error instanceof BroadcastDependencyError) {
           if (error.kind === "rejected") return { status: "rejected", reason: error.message };
-          return { status: "unknown", ...(error.txHash ? { txHash: error.txHash } : {}) };
+          return withExplorer({ status: "unknown", ...(error.txHash ? { txHash: error.txHash } : {}) });
         }
         return { status: "unknown" };
       }
       const validatedOutcome = validateBroadcastResponse(outcome);
       if (!validatedOutcome) return { status: "unknown" };
-      if (validatedOutcome.status !== "confirmed") return validatedOutcome;
+      if (validatedOutcome.status !== "confirmed") return withExplorer(validatedOutcome);
       let refreshStatus: "refreshed" | "failed" = "refreshed";
       try { await dependencies.refreshCanonical(); } catch { refreshStatus = "failed"; }
       return { ...validatedOutcome, confirmationStatus: "confirmed", refreshStatus,

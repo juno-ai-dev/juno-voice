@@ -354,7 +354,7 @@ describe("broadcast and confirmation outcomes", () => {
     vi.mocked(dependencies.signAndBroadcast).mockRejectedValueOnce(
       new BroadcastDependencyError("transport", kind, { txHash: kind === "post-broadcast" ? "KNOWN" : undefined }));
     await expect(flow.submit(review)).resolves.toEqual({ status: "unknown",
-      ...(kind === "post-broadcast" ? { txHash: "KNOWN" } : {}) });
+      ...(kind === "post-broadcast" ? { txHash: "KNOWN", explorerUrl: "https://www.mintscan.io/juno/tx/KNOWN" } : {}) });
   });
   it("uses typed rejection and preserves authoritative chain failure", async () => {
     const first = await prepared();
@@ -362,7 +362,8 @@ describe("broadcast and confirmation outcomes", () => {
     await expect(first.flow.submit(first.review)).resolves.toEqual({ status: "rejected", reason: "User rejected" });
     const second = await prepared();
     vi.mocked(second.dependencies.signAndBroadcast).mockResolvedValueOnce({ status: "failed", txHash: "FAILED1", reason: "out of gas" });
-    await expect(second.flow.submit(second.review)).resolves.toEqual({ status: "failed", txHash: "FAILED1", reason: "out of gas" });
+    await expect(second.flow.submit(second.review)).resolves.toEqual({ status: "failed", txHash: "FAILED1", reason: "out of gas",
+      explorerUrl: "https://www.mintscan.io/juno/tx/FAILED1" });
   });
   it("never loses a confirmed transaction when canonical refresh fails", async () => {
     const { dependencies, flow, review } = await prepared();

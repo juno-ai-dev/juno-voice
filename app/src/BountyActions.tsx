@@ -17,9 +17,11 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
   const [address, setAddress] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState>(null);
   const [message, setMessage] = useState("");
-  const [confirmed, setConfirmed] = useState<{ hash: string; url: string } | null>(null);
+  const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
+  const [submissionLocked, setSubmissionLocked] = useState(false);
   const act = async (make: (sender: string) => TransactionIntent) => {
-    setMessage(""); setConfirmed(null);
+    setMessage("");
+    if (submissionLocked) return setMessage("This action is locked because an earlier submission is not canonically confirmed.");
     if (!access) return setMessage("Wallet transaction support is unavailable; the public ledger remains fully readable.");
     if (stale) return setMessage("Canonical state is stale. Refresh the ledger before preparing a transaction.");
     if (canonical.pause.paused) return setMessage("New bounty activity is paused on chain.");
@@ -35,24 +37,30 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
     try {
       const result = await access.submit(review.review);
       setMessage(result.status === "confirmed" ? `Confirmed at height ${result.height}. Canonical state ${result.refreshStatus}.` :
-        result.status === "failed" || result.status === "rejected" ? result.reason : "Submission outcome is not yet confirmed; check the explorer before retrying.");
-      if (result.status === "confirmed") setConfirmed({ hash: result.txHash, url: result.explorerUrl });
+        result.status === "failed" || result.status === "rejected" ? result.reason : result.txHash
+          ? "Submission is not canonically confirmed. Use the transaction evidence below and do not submit again."
+          : "Signing began and submission may have occurred, but no transaction hash is available. Do not submit again until you inspect this account on Juno.");
+      if ("txHash" in result && result.txHash && result.explorerUrl)
+        setReceipt({ hash: result.txHash, url: result.explorerUrl, confirmed: result.status === "confirmed" });
+      if (result.status === "pending" || result.status === "unknown") setSubmissionLocked(true);
       setReview(null);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Transaction was blocked before signing."); setReview(null); }
   };
   return <section className="action-panel" aria-labelledby={bounty ? "contribute-title" : "create-title"}>
     <p className="eyebrow">OPTIONAL WALLET ACTION · READ BEFORE SIGNING</p>
-    {bounty ? <ContributeForm bounty={bounty} onPrepare={(value) => act((sender) =>
+    {bounty ? <ContributeForm bounty={bounty} disabled={submissionLocked} onPrepare={(value) => act((sender) =>
       contributeIntent(bounty, value, sender, contributions.map((item) => item.contributor), canonical))} /> :
-      <CreateForm canonical={canonical} onPrepare={(input) => act(() => createBountyIntent(input, canonical))} />}
+      <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical))} />}
     <p className="chain-time">Eligibility uses canonical chain time {canonical.chainTimeNanos} ns, never browser time.</p>
     {!access && <p>Wallet actions are unavailable in this environment. Browsing does not require a wallet.</p>}
     {message && <p role="status" className="notice">{message}</p>}
-    {confirmed && <p><a href={confirmed.url} target="_blank" rel="noopener noreferrer">View confirmed transaction {confirmed.hash}</a></p>}
+    {receipt && <p><a href={receipt.url} target="_blank" rel="noopener noreferrer">
+      View {receipt.confirmed ? "confirmed transaction" : "transaction evidence"} {receipt.hash}
+    </a></p>}
     {review && <TransactionReviewPanel value={review.review} busy={review.submitting} onCancel={() => setReview(null)} onSubmit={submit} />}
   </section>;
 }
-function CreateForm({ canonical, onPrepare }: { canonical: EligibilityState; onPrepare: (input: Parameters<typeof createBountyIntent>[0]) => void }) {
+function CreateForm({ canonical, disabled, onPrepare }: { canonical: EligibilityState; disabled: boolean; onPrepare: (input: Parameters<typeof createBountyIntent>[0]) => void }) {
   const now = BigInt(canonical.chainTimeNanos);
   const minLifetime = BigInt(canonical.config.min_lifetime_seconds);
   const maxLifetime = BigInt(canonical.config.max_lifetime_seconds);
@@ -79,14 +87,14 @@ function CreateForm({ canonical, onPrepare }: { canonical: EligibilityState; onP
         <label>Metadata digest (sha256: + 64 lowercase hex)<input name="projectDigest" pattern="sha256:[0-9a-f]{64}" /></label>
       </fieldset>
       <label className="wide">Expiration (exact Unix nanoseconds)<input name="expiry" inputMode="numeric" pattern="[0-9]+" defaultValue={defaultExpiry} required /></label>
-    </div><button className="button" type="submit">Prepare bounty review</button>
+    </div><button className="button" type="submit" disabled={disabled}>Prepare bounty review</button>
   </form>;
 }
-function ContributeForm({ bounty, onPrepare }: { bounty: Bounty; onPrepare: (amount: string) => void }) {
+function ContributeForm({ bounty, disabled, onPrepare }: { bounty: Bounty; disabled: boolean; onPrepare: (amount: string) => void }) {
   return <form onSubmit={(event) => { event.preventDefault(); onPrepare(String(new FormData(event.currentTarget).get("amount"))); }}>
     <h2 id="contribute-title">Contribute to bounty #{bounty.id}</h2>
     <label>Contribution (exact ujuno)<input name="amount" inputMode="numeric" pattern="[1-9][0-9]*" required /></label>{" "}
-    <button className="button" type="submit">Connect and review contribution</button>
+    <button className="button" type="submit" disabled={disabled}>Connect and review contribution</button>
   </form>;
 }
 function TransactionReviewPanel({ value, busy, onCancel, onSubmit }: { value: TransactionReview; busy: boolean; onCancel: () => void; onSubmit: () => void }) {
