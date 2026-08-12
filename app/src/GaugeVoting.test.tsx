@@ -27,6 +27,10 @@ describe("gauge voting UI", () => {
     render(<GaugeVoting source={source} config={config} sender={voter} />);
     expect(await screen.findByRole("heading", { name: "Weighted allocation" })).toBeVisible();
     expect(screen.getByText("40,000,002")).toBeVisible();
+    expect(screen.getAllByText("$JUNO 0.001").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\$JUNO 0\.0005 · 50\.00%/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/\$JUNO 0\.0001 power · 25\.00%/)).toBeVisible();
+    expect(screen.getByText(/snapshot power \$JUNO 0\.0001/)).toBeVisible();
     expect(screen.getAllByText("do-not-distribute").length).toBeGreaterThan(0);
     expect(screen.getByText(/Nothing shown here implies automatic rollover/)).toBeVisible();
     expect(screen.getByDisplayValue("0.5")).toBeVisible();
