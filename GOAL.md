@@ -1,6 +1,8 @@
-# GOAL: build the Juno Voice v1 backend
+# Historical goal: build the Juno Voice v1 backend
 
-**Status:** In progress — implemented locally but not release-approved or deployed
+**Status:** Historical backend-only scope. Later release work deployed the v1
+contracts and frontend on `juno-1`; this document preserves the original goal
+and must not be read as current deployment status.
 
 **Scope owner:** Juno Voice backend
 
@@ -347,9 +349,9 @@ The canary's actual economic settings are deployment/governance inputs, not cont
 
 Parallel work is acceptable after shared schemas and authority boundaries are frozen, but no release may substitute mocked DAO/gauge behavior for exact pinned artifacts.
 
-## Definition of done
+## Historical definition of done
 
-The backend goal is complete only when all of the following are true:
+Under this original backend-only scope, completion required all of the following:
 
 - [ ] Bounty and registry contracts implement the accepted state machines and authority split.
 - [ ] Every protocol invariant in the architecture has a direct automated test or model assertion.

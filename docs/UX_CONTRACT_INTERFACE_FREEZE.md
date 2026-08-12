@@ -2,8 +2,10 @@
 
 **Freeze baseline:** repository commit `3ad9998b69e2588e5092b26f0da6ca246e26fecd`; `deps/dao-contracts` commit `8f26e510dc89e56576e2dbbd35c96edb45d4b778`
 
-**Status:** v1 contracts deployed and verified on `juno-1`; the first production
-read-only bounty-ledger profile is defined in section 11.
+**Status:** v1 contracts are deployed and verified on `juno-1`. Section 11
+preserves the historical first read-only frontend release profile; the current
+application also supports exact-review transaction preparation for the public
+bounty, registry, settlement, and gauge surfaces documented here.
 
 **Audience:** wallet, frontend, explorer, and indexer implementers
 
@@ -237,8 +239,8 @@ All transaction UX must show exact message, sender, contract, and funds before s
 
 ## 9. Prototype assumptions reconciled with backend reality
 
-- `app/` reads only the deployed v1 bounty contract through the production
-  read-only profile in section 11. The removed request ledger/ranking,
+- The first `app/` release read only the deployed v1 bounty contract through the
+  historical profile in section 11. The removed request ledger/ranking,
   support/oppose voting, builder/verifier evidence, and request-bond UI are
   **not** the v1 bounty UX.
 - The prototype’s `Submit a request` sends `submission_bond`; v1 `create_bounty` sends an initial **contribution** governed by bounty min/max and expiry. Do not rename one payload into the other.
@@ -260,10 +262,12 @@ These do not block implementing the frozen wire messages, but require a product/
 
 Until any decision produces new checked-in schemas, this commit—not aspirational prose—is the UX integration baseline.
 
-## 11. Production read-only bounty ledger profile
+## 11. Historical first production read-only bounty ledger profile
 
-The first production UI slice is strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`.
+The first production UI slice was strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`.
 
 After verifying chain ID, contract address, Code ID, and wasm checksum, clients query `config {}`, `pause {}`, `health {}`, the first `bounties { start_after: null, limit: 50 }` page, and an independent observation height concurrently. Bounty pages are ascending by numeric `id`; a full page requires another query with `start_after` equal to the last ID, including an extra empty query for an exactly full final page. Repeated or non-increasing IDs are invalid. Contract pages have no observation height and are weakly consistent. Amounts and CosmWasm timestamps remain decimal strings and clients must parse them with arbitrary-precision integers.
 
-The production slice contains no wallet, signing, execute, admin, registry, gauge, sample, or fallback-data path.
+That historical production slice contained no wallet, signing, execute, admin,
+registry, gauge, sample, or fallback-data path. This is not the current frontend
+feature boundary.

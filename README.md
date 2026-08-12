@@ -74,7 +74,11 @@ specified in:
 - [Product behavior](docs/design/PRODUCT_DESIGN.md)
 - [Architecture decisions](docs/architecture/decisions/)
 
-`contracts/juno-voice` is a pre-release prototype and is not the v1 protocol specification or a migration input. The checked-in `app/` is the read-only interface for the verified mainnet bounty deployment described below.
+`contracts/juno-voice` is preserved as clearly labeled pre-release history and
+is not the v1 protocol specification or a migration input. The current `app/`
+is the public mainnet interface for the verified deployment described below.
+Operators and trial users must follow the
+[mainnet user-trial and release runbook](docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
 
 ## Backend composition
 
@@ -121,10 +125,10 @@ git submodule update --init --recursive
 ## Repository shape
 
 ```text
-app/                    read-only verified mainnet bounty ledger
+app/                    public verified mainnet application
 contracts/              Juno Voice-owned CosmWasm contracts
 deps/dao-contracts/     exact upstream DAO DAO source pin (submodule)
-schema/                 canonical v1 prototype-contract schema set
+schema/                 preserved pre-release contract schema set
 docs/architecture/      target architecture and decision records
 docs/design/            governance report and product behavior
 artifacts/               reproducible Juno Voice Wasm artifacts
@@ -135,9 +139,25 @@ release/                release evidence, readiness, and decision gates
 contracts/*/schema/     canonical v1 owned-contract schemas
 ```
 
-## Read-only mainnet application
+## Public mainnet application
 
-`app/` is the read-only Juno Voice bounty ledger. It is pinned to chain `juno-1`, bounty contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, and the verified Wasm checksum above. Runtime reads go directly to the configured HTTPS RPC. Invalid provenance blocks rendering, RPC failures remain visible, and no sample-data, wallet, signing, or transaction fallback is included.
+The public application is <https://juno-ai-dev.github.io/juno-voice/>. `app/` is
+pinned to chain `juno-1`, the five contracts and checksums above, and the exact
+release commit displayed in the interface. Runtime reads go directly to the
+configured HTTPS RPC. Invalid provenance blocks rendering, RPC failures remain
+visible, and no sample-data fallback is included. Supported Keplr and Leap
+wallets can prepare exact bounty, project-registry, settlement, and gauge
+transactions; preparation does not sign, and every submission requires an
+explicit final wallet approval. Pending or unknown outcomes remain locked
+against duplicate submission.
+
+The Program Vault is **unfunded unless a fresh authoritative mainnet balance
+query proves otherwise**. Agent funds must not be used. Governance proposal preparation,
+submission, deposit, signing, broadcast, and every follow-up transaction require
+separate approvals. Funding and the first epoch rehearsal in issue #37 are not
+claimed complete. See the
+[mainnet trial/release and recovery runbook](docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md)
+before any public trial or transaction.
 
 Node.js 22 and `app/package-lock.json` are authoritative. The local equivalent of the non-browser release gates is:
 
@@ -151,13 +171,36 @@ npm run test:e2e
 git diff --exit-code
 ```
 
-`npm run verify` runs lint, typecheck, unit/component/accessibility and production-policy tests, both a full dependency-tree audit and a production-only dependency audit at the high-severity threshold, the Vite build, bundle budgets, and forbidden signing-symbol checks. Browser smoke builds the deployable `/juno-voice/` Pages artifact with the exact checked-out 40-character commit, verifies its critical script, stylesheet, and image requests, and uses deterministic intercepted RPC responses to exercise the configured `juno-1` provenance, authoritative live-empty, freshness/staleness, explicit error/retry, mismatch, and project-path hard-refresh behavior; it is not evidence that a public RPC or deployment is currently available.
+`npm run verify` runs lint, typecheck, unit/component/accessibility and
+production-policy tests, both a full dependency-tree audit and a production-only
+dependency audit at the high-severity threshold, the Vite build, bundle budgets,
+and signing-policy checks. Browser smoke builds the deployable `/juno-voice/`
+Pages artifact with the exact checked-out 40-character commit, verifies its
+critical requests, and uses deterministic intercepted RPC responses to exercise
+provenance, transaction review/uncertainty behavior, freshness/staleness,
+explicit error/retry, mismatch, and project-path hard refresh. Those tests do
+not by themselves prove that a public RPC or the current deployment is healthy.
 
 ### GitHub Pages deployment
 
-`.github/workflows/frontend.yml` builds on pull requests and `main`. Only a successful **push to `main`** can package and deploy a Pages artifact. The artifact is rebuilt with base path `/juno-voice/` and embeds the exact 40-character release commit; the interface displays that commit alongside chain, contract, code, observation height, and freshness. Actions are pinned to immutable commits, PR jobs have read-only permissions, and the deploy job alone receives Pages/OIDC write permissions through the `github-pages` environment.
+`.github/workflows/frontend.yml` is configured to build on pull requests and
+`main`. Only a successful **push to `main`** can package and deploy a Pages
+artifact. The artifact is rebuilt with base path `/juno-voice/` and embeds the
+exact 40-character release commit; the interface displays that commit alongside
+chain, contract, code, observation height, and freshness. Actions are pinned to
+immutable commits, PR jobs have read-only permissions, and the deploy job alone
+requests Pages/OIDC write permissions through the `github-pages` environment.
+This describes the checked-in workflow, not current enforcement: as of
+2026-08-12 GitHub reported no workflow runs, manual dispatch returned `Actions
+has been disabled for this user`, and `main` had no branch protection. Issue #31
+tracks restoration of hosted release automation.
 
-The repository does **not** claim a public application URL is live. A maintainer must configure Pages to use GitHub Actions, require reviewed changes on `main`, and (if desired) add environment protection. After the first eligible `main` run, verify the URL reported by the deploy job, its hard-refresh behavior at the project path, and a live direct-RPC observation before announcing it as production-ready.
+The production URL is <https://juno-ai-dev.github.io/juno-voice/>. Each release
+must still verify the Pages workflow result, final URL and hard-refresh behavior,
+displayed release commit, five contract identities/checksums, and a fresh
+direct-RPC observation. Follow the
+[release checklist and stop criteria](docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md);
+availability observed for an earlier release is not evidence for a later one.
 
 ## License
 

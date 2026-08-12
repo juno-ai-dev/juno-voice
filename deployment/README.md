@@ -1,5 +1,10 @@
 # Juno Voice v1 deployment
 
+> **Historical `uni-7` tooling:** this directory documents the backend release
+> planner and testnet workflow used before the `juno-1` deployment. It is not the
+> current mainnet trial entry point. See
+> [`docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
+
 `juno_voice_deploy.py` is the authority-preserving deployment planner for the
 v1 backend. It validates one versioned configuration, checks every Wasm byte
 against its declared SHA-256 digest, predicts every circularly-dependent

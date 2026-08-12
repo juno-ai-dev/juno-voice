@@ -1,11 +1,14 @@
 # Juno Voice product behavior
 
-**Status:** Accepted Juno Voice v1 behavior; implemented locally but not
-release-approved or deployed
+**Status:** Accepted Juno Voice v1 behavior. The contracts and public frontend
+are deployed on `juno-1`; funded production trials remain separately gated.
 
-**Implementation scope:** Backend behavior is in scope for [GOAL.md](../../GOAL.md). A prototype frontend redesign exists in [`app/`](../../app/), but it remains pre-release, is not the v1 protocol surface, and is outside backend release approval.
+**Implementation scope:** Backend behavior was specified by the historical,
+backend-only [GOAL.md](../../GOAL.md). The current [`app/`](../../app/) implements
+the public v1 bounty, registry, settlement, and gauge surfaces.
 
-**Prototype:** [`app/`](../../app/) is a pre-release `uni-7` implementation reference
+**Historical prototype:** the earlier `uni-7` request-prioritization interface is
+retained only in repository history and legacy contract documentation.
 
 ## Product promise
 
@@ -119,9 +122,10 @@ The exact contract enums may be more granular, but every state transition must b
 - Make stopped and suspended states visible, including who invoked the action and which authority can resume.
 - Do not present a broadcast transaction as complete until canonical state confirms it.
 
-## Prototype interface direction
+## Historical prototype interface direction
 
-Frontend release work is not part of the current backend goal. The checked-in prototype has undergone a redesign, but remains an implementation reference rather than a release-approved v1 interface. A future v1-aligned surface should include:
+The original backend goal excluded frontend release work. The subsequently
+released v1-aligned surface includes:
 
 - a bounty ledger and bounty detail/ratification flow;
 - a project registry with provenance and status;
@@ -139,6 +143,8 @@ The redesigned prototype layout and Juno Design System assets can inform present
 - Weakly consistent multi-query views must expose their observed height or clearly disclose the limitation.
 - Wallet-free reading remains a requirement.
 
-## Prototype isolation
+## Historical prototype isolation
 
-The current [`app/`](../../app/) implements an earlier non-binding request-prioritization prototype. It is not silently reinterpreted as social-bounty or Hack Juno functionality and creates no migration requirement for v1.
+The earlier non-binding request-prioritization prototype is not silently
+reinterpreted as social-bounty or Hack Juno state and creates no migration
+requirement for v1. The current [`app/`](../../app/) uses the fresh v1 contracts.
