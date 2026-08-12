@@ -1,3 +1,5 @@
+import { fromBech32 } from "@cosmjs/encoding";
+
 export type WalletKind = "keplr" | "leap";
 export interface WalletIdentity {
   chainId: string;
@@ -53,6 +55,8 @@ export class WalletSession {
   private state: WalletSnapshot;
   private lifecycleTask: Promise<void> = Promise.resolve();
   private readonly removeListener: () => void;
+  private generation = 0;
+  private disposed = false;
 
   constructor(
     private readonly connectorPort: WalletConnector,
@@ -65,9 +69,7 @@ export class WalletSession {
       revision: 0,
       error: null,
     };
-    this.removeListener = connectorPort.onChange(() => {
-      this.lifecycleTask = this.refreshAfterChange();
-    });
+    this.removeListener = connectorPort.onChange(() => this.handleChange());
   }
 
   snapshot(): Readonly<WalletSnapshot> {
@@ -97,10 +99,15 @@ export class WalletSession {
   async current(): Promise<WalletAuthorization> {
     if (this.state.status !== "connected")
       throw new WalletSafetyError("stale_identity", "Wallet is not connected.");
-    const identity = await this.connectorPort.readIdentity().catch((error: unknown) => {
-      throw normalizedError(error);
-    });
-    this.validate(identity);
+    let identity: WalletIdentity;
+    try {
+      identity = await this.connectorPort.readIdentity();
+      this.validate(identity);
+    } catch (error) {
+      const safe = error instanceof WalletSafetyError ? error : normalizedError(error);
+      this.invalidate(safe.message);
+      throw safe;
+    }
     if (
       identity.address !== this.state.identity?.address ||
       identity.chainId !== this.state.identity.chainId
@@ -129,6 +136,9 @@ export class WalletSession {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.generation += 1;
     this.removeListener();
   }
 
@@ -147,8 +157,13 @@ export class WalletSession {
         "wrong_chain",
         `Wrong chain: expected ${this.targetChainId}, wallet reported ${identity.chainId}.`,
       );
-    if (!identity.address || !identity.address.startsWith("juno1"))
+    try {
+      if (identity.address !== identity.address.toLowerCase()) throw new Error();
+      const decoded = fromBech32(identity.address);
+      if (decoded.prefix !== "juno" || ![20, 32].includes(decoded.data.length)) throw new Error();
+    } catch {
       throw new WalletSafetyError("invalid_identity", "Wallet returned an invalid Juno account.");
+    }
   }
 
   private invalidate(message: string): void {
@@ -161,11 +176,19 @@ export class WalletSession {
     };
   }
 
-  private async refreshAfterChange(): Promise<void> {
-    const revision = this.state.revision + 1;
+  private handleChange(): void {
+    if (this.disposed) return;
+    const generation = ++this.generation;
+    this.invalidate("Wallet identity may have changed; validating again.");
+    this.lifecycleTask = this.lifecycleTask.then(() => this.refreshAfterChange(generation));
+  }
+
+  private async refreshAfterChange(generation: number): Promise<void> {
+    const revision = this.state.revision;
     try {
       const identity = await this.connectorPort.readIdentity();
       this.validate(identity);
+      if (this.disposed || generation !== this.generation) return;
       this.state = {
         status: "connected",
         identity: { ...identity },
@@ -174,6 +197,7 @@ export class WalletSession {
         error: null,
       };
     } catch (error) {
+      if (this.disposed || generation !== this.generation) return;
       this.state = {
         ...this.state,
         status: "disconnected",
