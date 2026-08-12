@@ -11,6 +11,9 @@ import { confirmRegistryMutation } from "./registryConfirmation";
 import { BroadcastDependencyError, createTransactionFlow, type ExactExecuteRequest, type TransactionIntent } from "./transactions";
 import { BrowserWalletDiscovery, WalletSession, type WalletKind } from "./wallet";
 import { confirmBountyMutation, confirmSettlementMutation, type SettlementAction } from "./bountyConfirmation";
+import type { GaugeActionContext, GaugeDataSource } from "./gauge";
+import { buildGaugeIntent, type GaugeAction, type GaugeTransactionFlow, type PreferenceInput } from "./gaugeActions";
+import { confirmGaugeMutation } from "./gaugeConfirmation";
 
 interface SigningExtension {
   enable(chainId: string): Promise<void>;
@@ -35,7 +38,7 @@ function structuredTxHash(error: unknown): string | undefined {
     .find((candidate): candidate is string => typeof candidate === "string" && candidate.trim().length > 0);
 }
 
-export type BrowserTransactionAccess = BountyTransactionAccess & RegistryTransactionFlow;
+export type BrowserTransactionAccess = BountyTransactionAccess & RegistryTransactionFlow & GaugeTransactionFlow;
 
 /** Production adapter for #32's exact review lifecycle. No signer is invoked by connect or prepare. */
 export function createBrowserTransactionAccess(
@@ -43,6 +46,7 @@ export function createBrowserTransactionAccess(
   source: VoiceDataSource,
   kind: WalletKind,
   registrySource?: RegistryDataSource,
+  gaugeSource?: GaugeDataSource,
 ): BrowserTransactionAccess {
   const browser = window as SigningWindow;
   const extension = browser[kind];
@@ -51,10 +55,29 @@ export function createBrowserTransactionAccess(
   const wallet = new WalletSession(discovery.connector(kind, config.chainId), config.chainId);
   let expectedIntent: TransactionIntent | null = null;
   let canonicalBefore: BountyDetail | undefined;
-  const pending = new Map<string, { intent: TransactionIntent }>();
+  let gaugeBefore: GaugeActionContext | undefined;
+  const pending = new Map<string, { intent: TransactionIntent; canonicalBefore?: BountyDetail; gaugeBefore?: GaugeActionContext }>();
   const readCanonicalState = async () => {
     if (!expectedIntent) throw new Error("No transaction is being reviewed.");
     const action = Object.keys(expectedIntent.executeMessage)[0];
+    if (expectedIntent.contract === config.gaugeContract) {
+      if (!gaugeSource) throw new Error("Canonical gauge state is unavailable.");
+      const sender = wallet.snapshot().identity?.address;
+      if (!sender) throw new Error("Wallet identity is unavailable for canonical gauge authorization.");
+      const context = await gaugeSource.loadActionContext(sender);
+      const body = expectedIntent.executeMessage[action] as { votes?: unknown } | undefined;
+      const gaugeAction: GaugeAction = action === "place_votes" ? body?.votes === null ? "remove_votes" : "place_votes" : action as GaugeAction;
+      const preferences: PreferenceInput[] = Array.isArray(body?.votes) ? body.votes.map((vote) => {
+        if (!vote || typeof vote !== "object" || Array.isArray(vote)) throw new Error("Reviewed gauge preferences are malformed.");
+        const item = vote as { option?: unknown; weight?: unknown };
+        if (typeof item.option !== "string" || typeof item.weight !== "string") throw new Error("Reviewed gauge preferences are malformed.");
+        return { option: item.option, weight: item.weight };
+      }) : [];
+      const rebuilt = buildGaugeIntent(config, sender, context, gaugeAction, preferences);
+      if (JSON.stringify([rebuilt.executeMessage, rebuilt.funds]) !== JSON.stringify([expectedIntent.executeMessage, expectedIntent.funds])) throw new Error("Canonical gauge transaction changed; review again.");
+      gaugeBefore = context;
+      return { fingerprint: context.fingerprint, height: context.data.observationHeight };
+    }
     if (expectedIntent.contract === config.registryContract) {
       if (!registrySource) throw new Error("Canonical registry state is unavailable.");
       const body = expectedIntent.executeMessage[action];
@@ -128,6 +151,14 @@ export function createBrowserTransactionAccess(
            executeMessage: request.executeMessage, funds: request.funds });
           return { status: "confirmed" as const, txHash, height: result.height };
         }
+        if (request.contract === config.gaugeContract) {
+          if (!gaugeSource || !gaugeBefore) throw new Error("Canonical pre-transaction gauge state is unavailable.");
+          const refreshed = await gaugeSource.loadActionContext(request.sender);
+          const body = request.executeMessage[action] as { votes?: unknown } | undefined;
+          const gaugeAction: GaugeAction = action === "place_votes" ? body?.votes === null ? "remove_votes" : "place_votes" : action as GaugeAction;
+          confirmGaugeMutation({ action: gaugeAction, events, refreshed, before: gaugeBefore, sender: request.sender, executeMessage: request.executeMessage, funds: request.funds });
+          return { status: "confirmed" as const, txHash, height: result.height };
+        }
         const creation = action === "create_bounty";
         const eventType = creation ? "juno_voice_bounties.bounty_created" : action === "contribute" ? "juno_voice_bounties.contributed" : "";
         const body = request.executeMessage[action] as { bounty_id?: unknown };
@@ -160,21 +191,26 @@ export function createBrowserTransactionAccess(
         const body = expectedIntent.executeMessage[action] as { project_id?: unknown } | undefined;
         if (typeof body?.project_id !== "string") throw new Error("Registry project identity is unavailable.");
         await registrySource.loadActionContext(body.project_id, false);
+      } else if (expectedIntent?.contract === config.gaugeContract) {
+        if (!gaugeSource) throw new Error("Canonical gauge state is unavailable.");
+        const sender = wallet.snapshot().identity?.address;
+        if (!sender) throw new Error("Wallet identity is unavailable.");
+        await gaugeSource.loadActionContext(sender);
       } else await readCanonicalState();
     }, explorerBaseUrl: config.explorer,
   });
   return {
     async connect() { return wallet.connect(); },
     async prepare(intent) {
-      expectedIntent = intent; canonicalBefore = undefined;
+      expectedIntent = intent; canonicalBefore = undefined; gaugeBefore = undefined;
       const review = await flow.prepare(intent);
-      pending.set(review.reviewId, { intent });
+      pending.set(review.reviewId, { intent, ...(canonicalBefore === undefined ? {} : { canonicalBefore }), ...(gaugeBefore === undefined ? {} : { gaugeBefore }) });
       return review;
     },
     async submit(review) {
       const context = pending.get(review.reviewId);
       if (!context) throw new Error("Transaction review is no longer available.");
-      expectedIntent = context.intent; canonicalBefore = undefined;
+      expectedIntent = context.intent; canonicalBefore = context.canonicalBefore; gaugeBefore = context.gaugeBefore;
       try { return await flow.submit(review); }
       finally { pending.delete(review.reviewId); }
     },

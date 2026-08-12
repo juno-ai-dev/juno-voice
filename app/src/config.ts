@@ -14,6 +14,21 @@ export const DEFAULT_REGISTRY_CONTRACT =
 export const REGISTRY_CODE_ID = 5151 as const;
 export const REGISTRY_CODE_CHECKSUM =
   "1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf" as const;
+export const DEFAULT_VAULT_CONTRACT =
+  "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg" as const;
+export const VAULT_CODE_ID = 5152 as const;
+export const VAULT_CODE_CHECKSUM =
+  "bc8b049a03496d3383376a469ccb581996238003532083895f68d4a02990a2da" as const;
+export const DEFAULT_VOTING_CONTRACT =
+  "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2" as const;
+export const VOTING_CODE_ID = 5153 as const;
+export const VOTING_CODE_CHECKSUM =
+  "2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64" as const;
+export const DEFAULT_GAUGE_CONTRACT =
+  "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn" as const;
+export const GAUGE_CODE_ID = 5154 as const;
+export const GAUGE_CODE_CHECKSUM =
+  "524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f" as const;
 
 export interface AppConfig {
   chainId: typeof DEFAULT_CHAIN_ID;
@@ -25,6 +40,15 @@ export interface AppConfig {
   registryContract: typeof DEFAULT_REGISTRY_CONTRACT;
   registryCodeId: typeof REGISTRY_CODE_ID;
   registryCodeChecksum: typeof REGISTRY_CODE_CHECKSUM;
+  vaultContract: typeof DEFAULT_VAULT_CONTRACT;
+  vaultCodeId: typeof VAULT_CODE_ID;
+  vaultCodeChecksum: typeof VAULT_CODE_CHECKSUM;
+  votingContract: typeof DEFAULT_VOTING_CONTRACT;
+  votingCodeId: typeof VOTING_CODE_ID;
+  votingCodeChecksum: typeof VOTING_CODE_CHECKSUM;
+  gaugeContract: typeof DEFAULT_GAUGE_CONTRACT;
+  gaugeCodeId: typeof GAUGE_CODE_ID;
+  gaugeCodeChecksum: typeof GAUGE_CODE_CHECKSUM;
   releaseCommit: string;
 }
 export interface ConfigEnvironment {
@@ -91,6 +115,15 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
     registryContract: DEFAULT_REGISTRY_CONTRACT,
     registryCodeId: REGISTRY_CODE_ID,
     registryCodeChecksum: REGISTRY_CODE_CHECKSUM,
+    vaultContract: DEFAULT_VAULT_CONTRACT,
+    vaultCodeId: VAULT_CODE_ID,
+    vaultCodeChecksum: VAULT_CODE_CHECKSUM,
+    votingContract: DEFAULT_VOTING_CONTRACT,
+    votingCodeId: VOTING_CODE_ID,
+    votingCodeChecksum: VOTING_CODE_CHECKSUM,
+    gaugeContract: DEFAULT_GAUGE_CONTRACT,
+    gaugeCodeId: GAUGE_CODE_ID,
+    gaugeCodeChecksum: GAUGE_CODE_CHECKSUM,
     releaseCommit,
   };
 }

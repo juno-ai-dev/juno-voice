@@ -1,5 +1,5 @@
 import { fromBech32 } from "@cosmjs/encoding";
-import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
+import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_GAUGE_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
 import type { WalletAuthorization, WalletSession } from "./wallet";
 
 export interface Coin { readonly denom: string; readonly amount: string }
@@ -155,6 +155,25 @@ const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number
 const uint32 = (value: unknown) => uint(value) && (value as number) <= 4294967295;
 const digest = (value: unknown) => typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
 const text = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+const gaugeOnly = (body: unknown) => objectWithExactKeys(body, ["gauge"]) && body.gauge === 0;
+const decimalAtomics = (value: unknown): bigint | null => {
+  if (typeof value !== "string" || !/^(0|[1-9]\d*)(?:\.\d{1,18})?$/.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  const parsed = BigInt(whole) * 1_000_000_000_000_000_000n + BigInt(fraction.padEnd(18, "0") || "0");
+  return parsed <= UINT128_MAX ? parsed : null;
+};
+const placeVotes = (body: unknown) => {
+  if (!objectWithExactKeys(body, ["gauge", "votes"]) || body.gauge !== 0) return false;
+  if (body.votes === null) return true;
+  if (!Array.isArray(body.votes) || body.votes.length < 1 || body.votes.length > 100) return false;
+  const seen = new Set<string>(); let sum = 0n;
+  for (const vote of body.votes) {
+    if (!objectWithExactKeys(vote, ["option", "weight"]) || typeof vote.option !== "string" || !vote.option || vote.option.length > 128 || seen.has(vote.option)) return false;
+    const weight = decimalAtomics(vote.weight); if (weight === null || weight <= 0n) return false;
+    seen.add(vote.option); sum += weight; if (sum > 1_000_000_000_000_000_000n) return false;
+  }
+  return true;
+};
 const projectCandidate = (value: unknown) => value === null ||
   (objectWithExactKeys(value, ["project_id", "metadata_uri", "metadata_digest"]) &&
     typeof value.project_id === "string" && /^[a-z0-9-]{3,64}$/.test(value.project_id) &&
@@ -193,6 +212,9 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
     if (!objectWithExactKeys(body, ["project_id", "reason"]) || !projectId(body.project_id) || !objectWithExactKeys(body.reason, ["code", "note"])) return false;
     return body.reason.code === "voluntary_retirement" && typeof body.reason.note === "string" && body.reason.note.trim().length > 0 && new TextEncoder().encode(body.reason.note).length <= 2_048;
   },
+  open_epoch: gaugeOnly,
+  place_votes: placeVotes,
+  execute: gaugeOnly,
 });
 const BOUNTY_ACTIONS = new Set([
   "create_bounty", "contribute", "nominate_payout", "confirm_sole_payout", "decline_sole_payout",
@@ -202,19 +224,21 @@ const REGISTRY_ACTIONS = new Set([
   "register_project", "update_pending_metadata", "propose_payout_address", "cancel_payout_address_change",
   "accept_payout_address", "claim_registration_bond", "retire",
 ]);
+const GAUGE_ACTIONS = new Set(["open_epoch", "place_votes", "execute"]);
 const PAYABLE_ACTIONS = new Set(["create_bounty", "contribute", "register_project"]);
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
   safeCanonical(intent);
   if (intent.chainId !== "juno-1" || authorization.chainId !== intent.chainId)
     throw new TransactionSafetyError("wrong_chain", "Transaction and wallet must both target juno-1.");
   if (!validJunoAddress(authorization.address, [20]) || !validJunoAddress(intent.contract, [32]) ||
-    ![DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT].includes(intent.contract as never) || !Array.isArray(intent.funds))
+    ![DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT, DEFAULT_GAUGE_CONTRACT].includes(intent.contract as never) || !Array.isArray(intent.funds))
     throw new TransactionSafetyError("invalid_transaction", "Invalid or unapproved contract or funds.");
   const keys = Object.keys(intent.executeMessage);
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
-  const contractActions = intent.contract === DEFAULT_BOUNTY_CONTRACT ? BOUNTY_ACTIONS : REGISTRY_ACTIONS;
+  const contractActions = intent.contract === DEFAULT_BOUNTY_CONTRACT ? BOUNTY_ACTIONS :
+    intent.contract === DEFAULT_GAUGE_CONTRACT ? GAUGE_ACTIONS : REGISTRY_ACTIONS;
   if (!contractActions.has(action))
     throw new TransactionSafetyError("message_forbidden", "Execute action is not permitted for this contract.");
   if (PAYABLE_ACTIONS.has(action) ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]) : intent.funds.length !== 0)

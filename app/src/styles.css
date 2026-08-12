@@ -305,3 +305,26 @@ dd { margin: 0; }
 .review dt { color: #d7bda1; }.review dd { margin: 0; overflow-wrap: anywhere; }.secondary { background: transparent; color: #ffebd2; }
 @media (max-width: 800px) { .detail-panel { inset: 66px 0 0; padding: 20px; } .detail-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .action-grid { grid-template-columns: 1fr; } .action-grid .wide { grid-column: auto; } .review { inset: 20px; } .review dl { grid-template-columns: 1fr; } }
+.epoch-index { border: 1px solid #6f3e40; background: #160608; }
+.epoch-index > .toolbar { padding: 20px; }
+.epoch-detail { padding: 24px; }
+.epoch-heading { display: flex; align-items: start; justify-content: space-between; gap: 24px; border-bottom: 1px solid #553033; margin-bottom: 24px; }
+.epoch-heading h3 { font-size: 30px; margin: 8px 0 18px; }
+.epoch-number { color: rgba(255, 123, 124, .24); font-family: var(--font-family-mono, monospace); font-size: clamp(52px, 10vw, 92px); line-height: .8; }
+.allocation-list { margin-top: 28px; border: 1px solid #553033; }
+.allocation-row { min-height: 54px; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 10px 14px; border-bottom: 1px solid #553033; font-family: var(--font-family-mono, monospace); font-size: 12px; }
+.allocation-row:last-child { border-bottom: 0; }
+.allocation-row small { display: block; color: #ff9a9b; }
+.preference-editor { margin: 24px 0; padding: 20px; border: 1px solid #6f3e40; }
+.preference-editor legend { padding: 0 8px; font-family: var(--font-family-mono, monospace); text-transform: uppercase; letter-spacing: .12em; }
+.preference-editor > label { min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 20px; align-items: center; border-bottom: 1px solid #553033; }
+.preference-editor input { min-height: 44px; width: 100%; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; padding: 8px; font-family: var(--font-family-mono, monospace); }
+.preference-editor small, .preference-editor p { color: #d7bda1; }
+.gauge-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.gauge-workbench pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #ffebd2; }
+@media (max-width: 600px) {
+  .allocation-row { align-items: start; flex-direction: column; gap: 4px; }
+  .preference-editor > label { grid-template-columns: 1fr; gap: 6px; padding: 10px 0; }
+  .epoch-detail { padding: 16px; }
+  .topbar nav button { padding-inline: 6px; }
+}
