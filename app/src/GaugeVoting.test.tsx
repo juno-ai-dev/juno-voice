@@ -160,6 +160,29 @@ describe("gauge voting UI", () => {
     expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
   });
 
+  it.each([
+    { label: "an unknown status", result: { status: "bogus" } },
+    { label: "a missing status", result: {} },
+    { label: "a null result", result: null },
+  ])("retains the prewritten fail-closed lock when submit resolves $label", async ({ result }) => {
+    const transactionFlow = flow();
+    vi.mocked(transactionFlow.submit).mockResolvedValueOnce(result as unknown as TransactionOutcome);
+    const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await prepareAndSubmit(transactionFlow);
+    expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
+    expect(sessionStorage.length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Prepare ballot removal" })).toBeDisabled();
+
+    view.unmount();
+    render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Prepare ballot removal" })).toBeDisabled();
+  });
+
   it.each(["malformed", "read exception"])("keeps %s restored evidence fail-closed across remount", async (failure) => {
     saveGaugeSubmission({ ...submissionScope, version: 1, action: "place_votes", epoch: 2, status: "unknown" });
     if (failure === "malformed") {
