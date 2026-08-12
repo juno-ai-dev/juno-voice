@@ -1,0 +1,63 @@
+/* ============================================================
+   JUNO NETWORK — SPACING, RADII, LAYOUT
+   4px base grid. Angular, technical — radii stay small.
+   ============================================================ */
+
+:root {
+  /* --- Space scale (4px base) --- */
+  --sp-0: 0; /* @kind spacing */
+  --sp-1: 0.25rem;   /* 4  */
+  --sp-2: 0.5rem;    /* 8  */
+  --sp-3: 0.75rem;   /* 12 */
+  --sp-4: 1rem;      /* 16 */
+  --sp-5: 1.5rem;    /* 24 */
+  --sp-6: 2rem;      /* 32 */
+  --sp-7: 3rem;      /* 48 */
+  --sp-8: 4rem;      /* 64 */
+  --sp-9: 6rem;      /* 96 */
+  --sp-10: 8rem;     /* 128 */
+
+  /* --- Radii — deliberately sharp. The system is diagrammatic. --- */
+  --r-none: 0; /* @kind radius */
+  --r-xs: 2px;
+  --r-sm: 3px;
+  --r-md: 5px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+  --r-circle: 50%;
+
+  /* --- Border widths --- */
+  --bw-hair: 1px;
+  --bw-line: 1.5px;
+  --bw-bold: 2px;
+
+  /* --- Layout --- */
+  --container: 1200px;
+  --container-wide: 1440px;
+  --container-read: 680px;
+  --gutter: var(--sp-5);
+
+  /* --- Grid unit (numogram / graph-paper motif) --- */
+  --cell: 32px;
+
+  /* --- Z-index --- */
+  --z-base: 0; /* @kind other */
+  --z-raised: 10; /* @kind other */
+  --z-sticky: 100; /* @kind other */
+  --z-overlay: 500; /* @kind other */
+  --z-modal: 1000; /* @kind other */
+  --z-toast: 1500; /* @kind other */
+
+  /* --- Motion — mechanical, precise; short & linear-ish. --- */
+  --ease-mech: cubic-bezier(0.22, 0.61, 0.36, 1); /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --dur-fast: 120ms; /* @kind other */
+  --dur-base: 200ms; /* @kind other */
+  --dur-slow: 360ms; /* @kind other */
+
+  /* --- Shadows / glow --- */
+  --shadow-card: 0 1px 0 rgba(255,235,210,0.03), 0 12px 32px rgba(0,0,0,0.5);
+  --shadow-pop: 0 24px 60px rgba(0,0,0,0.6);
+  --glow-coral: 0 0 0 1px rgba(255,123,124,0.4), 0 0 24px rgba(255,123,124,0.28);
+  --glow-soft: 0 0 32px rgba(255,123,124,0.18);
+}

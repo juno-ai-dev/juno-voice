@@ -1,0 +1,83 @@
+/* ============================================================
+   JUNO NETWORK — COLOR TOKENS
+   A three-body system: blood-coral, maroon-void, bone-cream.
+   ============================================================ */
+
+:root {
+  /* --- Base palette: Coral (primary signal) --- */
+  --coral: #FF7B7C;
+  --coral-bright: #FF9698;
+  --coral-hot: #FFB0B1;
+  --coral-deep: #E85F60;
+  --coral-blood: #C6484A;
+  --coral-ash: #7A3536;
+
+  /* --- Base palette: Maroon / Void (ground) --- */
+  --maroon: #270B0D;
+  --maroon-lift: #35141644;
+  --maroon-deep: #1B0708;
+  --void: #100405;
+  --void-pure: #0A0203;
+
+  /* --- Base palette: Cream / Bone (light) --- */
+  --cream: #FFEBD2;
+  --cream-dim: #E3CDB2;
+  --cream-mute: #B69C82;
+  --cream-faint: #6E5C4A;
+
+  /* --- Alpha ramps on coral (borders, grids, glows) --- */
+  --coral-a04: rgba(255, 123, 124, 0.04);
+  --coral-a08: rgba(255, 123, 124, 0.08);
+  --coral-a12: rgba(255, 123, 124, 0.12);
+  --coral-a20: rgba(255, 123, 124, 0.20);
+  --coral-a35: rgba(255, 123, 124, 0.35);
+  --coral-a60: rgba(255, 123, 124, 0.60);
+
+  /* --- Alpha ramps on cream (text on dark, subtle fills) --- */
+  --cream-a06: rgba(255, 235, 210, 0.06);
+  --cream-a10: rgba(255, 235, 210, 0.10);
+  --cream-a20: rgba(255, 235, 210, 0.20);
+  --cream-a40: rgba(255, 235, 210, 0.40);
+  --cream-a70: rgba(255, 235, 210, 0.70);
+
+  /* --- Status (kept muted & analog, never neon) --- */
+  --signal-live: #FF7B7C;   /* coral doubles as "active/live" */
+  --signal-warn: #E9A94F;   /* amber, warm */
+  --signal-ok:   #8FB08A;   /* desaturated moss */
+  --signal-dead: #6E5C4A;   /* bone-faint */
+
+  /* ============================================================
+     SEMANTIC ALIASES  (use these in components)
+     Default theme = dark ground.
+     ============================================================ */
+
+  /* Surfaces */
+  --surface-void: var(--void-pure);
+  --surface-ground: var(--maroon);
+  --surface-raised: #2E1214;
+  --surface-card: #230A0C;
+  --surface-inset: var(--void);
+  --surface-coral: var(--coral);
+
+  /* Text */
+  --text-primary: var(--cream);
+  --text-secondary: var(--cream-dim);
+  --text-muted: var(--cream-mute);
+  --text-faint: var(--cream-faint);
+  --text-accent: var(--coral);
+  --text-on-coral: var(--maroon-deep);
+
+  /* Lines & borders */
+  --line-hair: var(--coral-a12);
+  --line-soft: var(--coral-a20);
+  --line-strong: var(--coral-a35);
+  --line-cream: var(--cream-a10);
+  --grid-line: var(--coral-a08);
+
+  /* Accents / interactive */
+  --accent: var(--coral);
+  --accent-hover: var(--coral-bright);
+  --accent-press: var(--coral-deep);
+  --focus-ring: var(--coral-a60);
+  --glow: 0 0 24px rgba(255, 123, 124, 0.28);
+}

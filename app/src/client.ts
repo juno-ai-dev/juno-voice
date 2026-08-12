@@ -1,56 +1,291 @@
-import type { AppConfig } from './config';
-import { NATIVE_TOKEN } from './denom';
-import type { Attestation, BondTotals, ContractConfig, DetailData, Evidence, LedgerData, Page, RankedPage, Request, RequestAction, Status, StatusHistory } from './types';
-
+import type { AppConfig } from "./config";
+import { connectRpc, type Connect, type RpcClient } from "./rpc";
+import type {
+  Accounting,
+  Bounty,
+  BountyStatus,
+  ContractConfig,
+  Health,
+  LedgerData,
+  Limits,
+  PauseState,
+  RefundReason,
+  Terms,
+} from "./types";
 export const PAGE_LIMIT = 50;
-export const STATUS_CODES: Record<Status, number> = { open: 1, qualified: 2, not_prioritized: 3, duplicate: 4, spam: 5, building: 6, review: 7, blocked: 8, archived: 9, shipped: 10 };
 export const queries = {
-  config: () => ({ config: {} }), bondTotals: () => ({ bond_totals: {} }),
-  requests: (startAfter: number | null = null) => ({ requests: { status: null, category: null, author: null, start_after_id: startAfter, limit: PAGE_LIMIT } }),
-  rankedRequests: (status: number, cursor: string | null = null) => ({ ranked_requests: { status, category: null, cursor, limit: PAGE_LIMIT } }),
-  request: (id: number) => ({ request: { id } }),
-  evidence: (requestId: number, startAfter: number | null = null) => ({ evidence: { request_id: requestId, start_after_id: startAfter, limit: PAGE_LIMIT } }),
-  statusHistory: (requestId: number, startAfter: number | null = null) => ({ status_history: { request_id: requestId, start_after_id: startAfter, limit: PAGE_LIMIT } }),
-  requestActions: (requestId: number, startAfter: number | null = null) => ({ request_actions: { request_id: requestId, start_after_id: startAfter, limit: PAGE_LIMIT } }),
-  shipmentAttestation: (requestId: number) => ({ shipment_attestation: { request_id: requestId } }),
+  config: () => ({ config: {} }),
+  pause: () => ({ pause: {} }),
+  health: () => ({ health: {} }),
+  bounties: (startAfter: number | null = null) => ({
+    bounties: { start_after: startAfter, limit: PAGE_LIMIT },
+  }),
 } as const;
 
-interface RpcClient { queryContractSmart(address: string, query: object): Promise<unknown>; getChainId(): Promise<string>; getHeight(): Promise<number>; getContract(address: string): Promise<{ address: string; codeId: number }>; getCodeDetails(codeId: number): Promise<{ checksum: string }>; disconnect(): void }
-type Connect = (rpc: string) => Promise<RpcClient>;
-const connect: Connect = async (rpc) => { const { CosmWasmClient } = await import('@cosmjs/cosmwasm-stargate'); return CosmWasmClient.connect(rpc); };
-const statuses = new Set<Status>(Object.keys(STATUS_CODES) as Status[]);
-function record(value: unknown, context: string): Record<string, unknown> { if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error(`Malformed ${context} response from RPC.`); return value as Record<string, unknown>; }
-function text(value: unknown, context: string): string { if (typeof value !== 'string') throw new Error(`Malformed ${context} response from RPC.`); return value; }
-function integer(value: unknown, context: string): number { if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error(`Malformed ${context} response from RPC.`); return value; }
-function uint(value: unknown, context: string): string { const item = text(value, context); if (!/^\d+$/.test(item) || BigInt(item) > 18_446_744_073_709_551_615n) throw new Error(`Malformed ${context} response from RPC.`); return item; }
-function uint128(value: unknown, context: string): string { const item = text(value, context); if (!/^\d+$/.test(item) || BigInt(item) > 340_282_366_920_938_463_463_374_607_431_768_211_455n) throw new Error(`Malformed ${context} response from RPC.`); return item; }
-function nullableText(value: unknown, context: string): string | null { return value === null ? null : text(value, context); }
-function field(value: unknown, name: string, context: string): unknown { const item = record(value, context); if (!(name in item)) throw new Error(`Malformed ${context} response from RPC.`); return item[name]; }
-function rawPage(value: unknown, context: string): Page<unknown> { const item = record(value, context); if (!Array.isArray(item.items)) throw new Error(`Malformed ${context} response from RPC.`); const next = item.next_start_after; if (next !== null && (typeof next !== 'number' || !Number.isSafeInteger(next))) throw new Error(`Malformed ${context} cursor from RPC.`); return { items: item.items, next_start_after: next as number | null, query_height: integer(item.query_height, context) }; }
-function assertStatus(value: unknown, context: string): Status { const status = text(value, context) as Status; if (!statuses.has(status)) throw new Error(`Malformed ${context} response from RPC.`); return status; }
-function assertNumberArray(value: unknown, context: string): number[] { if (!Array.isArray(value)) throw new Error(`Malformed ${context} response from RPC.`); return value.map((item) => integer(item, context)); }
-function assertRequest(value: unknown): Request { const x = record(value, 'request'); const bond = record(x.bond, 'request bond');
-  integer(x.id,'request'); text(x.author,'request'); text(x.title,'request'); text(x.summary,'request'); text(x.acceptance_criteria,'request'); text(x.category,'request'); nullableText(x.detail_uri,'request'); nullableText(x.detail_digest,'request');
-  integer(x.snapshot_height,'request'); uint(x.total_power,'request'); integer(x.opened_height,'request'); integer(x.closes_height,'request'); integer(x.quorum_bps,'request'); integer(x.support_bps,'request'); integer(x.work_inactivity_blocks,'request'); integer(x.evidence_policy_version,'request');
-  assertStatus(x.status,'request'); uint(x.support_power,'request'); uint(x.oppose_power,'request'); integer(x.voter_count,'request'); uint(bond.amount,'request bond'); text(bond.state,'request bond'); integer(x.work_round,'request'); uint(x.created_at,'request'); uint(x.updated_at,'request');
-  return x as unknown as Request; }
-function assertLimits(value:unknown):ContractConfig['request_limits']{const x=record(value,'request limits');for(const name of ['max_title_bytes','max_summary_bytes','max_acceptance_criteria_bytes','max_category_bytes','max_uri_bytes','max_digest_bytes','max_evidence_note_bytes','max_evidence_items','max_review_evidence_refs','max_attestation_evidence_refs'])integer(x[name],'request limits');return x as unknown as ContractConfig['request_limits'];}
-function assertConfig(value: unknown): ContractConfig { const x=record(value,'config'); text(x.governor,'config'); nullableText(x.pending_governor,'config'); text(x.steward,'config'); text(x.verifier,'config'); text(x.native_denom,'config'); uint128(x.submission_bond,'config'); integer(x.voting_period_blocks,'config');integer(x.quorum_bps,'config');integer(x.support_bps,'config');integer(x.work_inactivity_blocks,'config');assertLimits(x.request_limits);integer(x.max_reason_bytes,'config');integer(x.default_query_limit,'config');integer(x.max_query_limit,'config');integer(x.evidence_policy_version,'config'); if(typeof x.submissions_paused!=='boolean') throw new Error('Malformed config response from RPC.'); return x as unknown as ContractConfig; }
-function assertBonds(value: unknown): BondTotals { const x=record(value,'bond totals'); uint(x.locked,'bond totals'); uint(x.refundable,'bond totals'); uint(x.forfeited,'bond totals'); return x as unknown as BondTotals; }
-function assertEvidence(value: unknown): Evidence { const x=record(value,'evidence'); integer(x.id,'evidence'); integer(x.request_id,'evidence'); text(x.submitter,'evidence'); text(x.kind,'evidence'); text(x.uri,'evidence'); text(x.digest,'evidence'); text(x.note,'evidence'); integer(x.work_round,'evidence'); uint(x.submitted_at,'evidence'); integer(x.submitted_height,'evidence'); return x as unknown as Evidence; }
-function assertHistory(value: unknown): StatusHistory { const x=record(value,'status history'); integer(x.id,'status history'); integer(x.request_id,'status history'); text(x.actor,'status history'); assertStatus(x.from,'status history'); assertStatus(x.to,'status history'); nullableText(x.reason,'status history'); assertNumberArray(x.evidence_ids,'status history'); integer(x.height,'status history'); uint(x.timestamp,'status history'); return x as unknown as StatusHistory; }
-function assertAction(value: unknown): RequestAction { const x=record(value,'request action'); integer(x.id,'request action'); integer(x.request_id,'request action'); text(x.actor,'request action'); if(typeof x.action!=='string') record(x.action,'request action'); nullableText(x.reason,'request action'); integer(x.height,'request action'); uint(x.timestamp,'request action'); return x as unknown as RequestAction; }
-function assertAttestation(value: unknown): Attestation | null { if(value===null) return null; const x=record(value,'shipment attestation'); text(x.verifier,'shipment attestation'); text(x.rationale,'shipment attestation'); assertNumberArray(x.evidence_ids,'shipment attestation'); integer(x.work_round,'shipment attestation'); uint(x.submitted_at,'shipment attestation'); integer(x.submitted_height,'shipment attestation'); return x as unknown as Attestation; }
-async function verifyDeployment(client: RpcClient, config: AppConfig): Promise<void> { const [chainId, contract] = await Promise.all([client.getChainId(), client.getContract(config.contract)]); if(chainId!==config.chainId) throw new Error(`Deployment mismatch: expected chain ${config.chainId}, observed ${chainId}.`); if(contract.address!==config.contract||contract.codeId!==config.codeId) throw new Error(`Deployment mismatch: expected contract ${config.contract} at Code ID ${config.codeId}.`); const code=await client.getCodeDetails(config.codeId); if(code.checksum.toLowerCase()!==config.codeChecksum) throw new Error('Deployment mismatch: contract code checksum is not the verified artifact.'); }
-async function collectIdPages<T>(query: (message: object)=>Promise<unknown>, build:(cursor:number|null)=>object, validate:(value:unknown)=>T, context:string):Promise<{items:T[];queryHeight:number}>{ const items:T[]=[]; let cursor:number|null=null; let height=Number.MAX_SAFE_INTEGER; const seen=new Set<number>(); for(let i=0;i<1000;i++){ const p=rawPage(await query(build(cursor)),context); height=Math.min(height,p.query_height); items.push(...p.items.map(validate)); if(p.next_start_after===null) return {items,queryHeight:height}; if(seen.has(p.next_start_after)) throw new Error(`Repeated ${context} cursor from RPC.`); seen.add(p.next_start_after); cursor=p.next_start_after; } throw new Error(`Too many ${context} pages from RPC.`); }
-async function collectRanked(query:(message:object)=>Promise<unknown>, status:Status):Promise<{items:Request[];queryHeight:number}>{ const items:Request[]=[]; let cursor:string|null=null; let height=Number.MAX_SAFE_INTEGER; const seen=new Set<string>(); for(let i=0;i<1000;i++){ const p=mapRankedResponse(await query(queries.rankedRequests(STATUS_CODES[status],cursor))); height=Math.min(height,p.query_height); items.push(...p.items); if(p.next_cursor===null) return {items,queryHeight:height}; if(seen.has(p.next_cursor)) throw new Error('Repeated ranked cursor from RPC.'); seen.add(p.next_cursor); cursor=p.next_cursor; } throw new Error('Too many ranked request pages from RPC.'); }
-async function verifyProtocolConfig(query:(message:object)=>Promise<unknown>):Promise<ContractConfig>{ const config=assertConfig(field(await query(queries.config()),'config','config')); if(config.native_denom!==NATIVE_TOKEN.minimalDenom||config.evidence_policy_version!==1) throw new Error('Deployment mismatch: unsupported contract configuration.'); return config; }
-export interface VoiceDataSource { loadLedger(): Promise<LedgerData>; loadDetail(id:number):Promise<DetailData>; loadContractConfig?():Promise<ContractConfig>; loadRequest?(id:number):Promise<Request> }
-export function createDataSource(config:AppConfig,connector:Connect=connect):VoiceDataSource { const queryWith=(client:RpcClient)=>(message:object)=>client.queryContractSmart(config.contract,message); const checked=async<T>(job:(query:(message:object)=>Promise<unknown>)=>Promise<T>)=>{const client=await connector(config.rpc);try{await verifyDeployment(client,config);return await job(queryWith(client));}finally{client.disconnect();}}; return {
-  async loadContractConfig(){return checked((query)=>verifyProtocolConfig(query));},
-  async loadRequest(id){if(!Number.isSafeInteger(id)||id<1)throw new Error('Invalid request ID.');return checked(async(query)=>{await verifyProtocolConfig(query);return assertRequest(field(await query(queries.request(id)),'request','request'));});},
-  async loadLedger(){ const client=await connector(config.rpc); try { await verifyDeployment(client,config); const query=queryWith(client); const statusList=Object.keys(STATUS_CODES) as Status[]; const [contractConfig,bondsRaw,all,rpcHeight,...rankedPages]=await Promise.all([verifyProtocolConfig(query),query(queries.bondTotals()),collectIdPages(query,queries.requests,assertRequest,'requests'),client.getHeight(),...statusList.map((status)=>collectRanked(query,status))]); const ranked=Object.fromEntries(statusList.map((status,index)=>[status,rankedPages[index].items])) as Record<Status,Request[]>; return {config:contractConfig,bonds:assertBonds(field(bondsRaw,'totals','bond totals')),requests:all.items,ranked,queryHeight:Math.min(rpcHeight,all.queryHeight,...rankedPages.map((p)=>p.queryHeight)),refreshedAt:new Date(),weakConsistency:true}; } finally {client.disconnect();} },
-  async loadDetail(id){ if(!Number.isSafeInteger(id)||id<1) throw new Error('Invalid request ID.'); const client=await connector(config.rpc); try { await verifyDeployment(client,config); const query=queryWith(client); await verifyProtocolConfig(query); const [requestRaw,rpcHeight]=await Promise.all([query(queries.request(id)),client.getHeight()]); const request=assertRequest(field(requestRaw,'request','request')); if(request.evidence_policy_version!==1) throw new Error('Deployment mismatch: request evidence policy is unsupported.'); const jobs=[collectIdPages(query,(c)=>queries.evidence(id,c),assertEvidence,'evidence'),collectIdPages(query,(c)=>queries.statusHistory(id,c),assertHistory,'status history'),collectIdPages(query,(c)=>queries.requestActions(id,c),assertAction,'request actions'),query(queries.shipmentAttestation(id))] as const; const [er,hr,ar,tr]=await Promise.allSettled(jobs); const sectionErrors:NonNullable<DetailData['sectionErrors']>={}; const message=(r:unknown)=>r instanceof Error?r.message:'RPC query failed.'; const child=<T>(r:PromiseSettledResult<{items:T[];queryHeight:number}>,key:keyof typeof sectionErrors)=>{if(r.status==='fulfilled')return r.value;sectionErrors[key]=message(r.reason);return {items:[],queryHeight:rpcHeight};}; const evidence=child(er,'evidence'),history=child(hr,'history'),actions=child(ar,'actions'); let attestation:Attestation|null=null; if(tr.status==='fulfilled'){try{attestation=assertAttestation(field(tr.value,'attestation','shipment attestation'));}catch(error){sectionErrors.attestation=message(error);}}else sectionErrors.attestation=message(tr.reason); return {request,evidence:evidence.items,history:history.items,actions:actions.items,attestation,queryHeight:Math.min(rpcHeight,evidence.queryHeight,history.queryHeight,actions.queryHeight),sectionErrors}; } finally {client.disconnect();} }
-}; }
-export function mapRequestResponse(value: unknown): Request { return assertRequest(field(value, 'request', 'request')); }
-export function mapRankedResponse(value:unknown):RankedPage { const x=record(value,'ranked requests'); if(!Array.isArray(x.items)||typeof x.query_height!=='number') throw new Error('Malformed ranked requests response from RPC.'); const cursor=x.next_cursor; if(cursor!==null&&typeof cursor!=='string') throw new Error('Malformed ranked cursor from RPC.'); return {items:x.items.map(assertRequest),next_cursor:cursor as string|null,query_height:integer(x.query_height,'ranked requests')}; }
+const bad = (c: string): never => {
+  throw new Error(`Malformed ${c} response from RPC.`);
+};
+const rec = (v: unknown, c: string): Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : bad(c);
+const str = (v: unknown, c: string) => (typeof v === "string" ? v : bad(c));
+const bool = (v: unknown, c: string) => (typeof v === "boolean" ? v : bad(c));
+const int = (v: unknown, c: string) =>
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : bad(c);
+const uint = (
+  v: unknown,
+  c: string,
+  max = 340282366920938463463374607431768211455n,
+) => {
+  const s = str(v, c);
+  if (!/^\d+$/.test(s) || BigInt(s) > max) bad(c);
+  return s;
+};
+const nullable = <T>(v: unknown, fn: (x: unknown) => T) =>
+  v === null ? null : fn(v);
+function limits(v: unknown): Limits {
+  const x = rec(v, "config limits");
+  return {
+    max_title_bytes: int(x.max_title_bytes, "config limits"),
+    max_summary_bytes: int(x.max_summary_bytes, "config limits"),
+    max_acceptance_criteria_bytes: int(
+      x.max_acceptance_criteria_bytes,
+      "config limits",
+    ),
+    max_uri_bytes: int(x.max_uri_bytes, "config limits"),
+    max_rationale_bytes: int(x.max_rationale_bytes, "config limits"),
+    max_reason_bytes: int(x.max_reason_bytes, "config limits"),
+    max_page_limit: int(x.max_page_limit, "config limits"),
+  };
+}
+export function mapConfig(v: unknown): ContractConfig {
+  const x = rec(v, "config");
+  return {
+    native_denom: str(x.native_denom, "config"),
+    governor: str(x.governor, "config"),
+    agent: str(x.agent, "config"),
+    registry: str(x.registry, "config"),
+    ratification_seconds: int(x.ratification_seconds, "config"),
+    min_contribution: uint(x.min_contribution, "config"),
+    max_bounty_total: uint(x.max_bounty_total, "config"),
+    min_lifetime_seconds: int(x.min_lifetime_seconds, "config"),
+    max_lifetime_seconds: int(x.max_lifetime_seconds, "config"),
+    max_contributors: int(x.max_contributors, "config"),
+    max_rounds: int(x.max_rounds, "config"),
+    limits: limits(x.limits),
+    version: int(x.version, "config"),
+  };
+}
+function accounting(v: unknown): Accounting {
+  const x = rec(v, "accounting");
+  return {
+    active_escrow: uint(x.active_escrow, "accounting"),
+    outstanding_refunds: uint(x.outstanding_refunds, "accounting"),
+    pending_payout_liabilities: uint(
+      x.pending_payout_liabilities,
+      "accounting",
+    ),
+    lifetime_received: uint(x.lifetime_received, "accounting"),
+    lifetime_paid: uint(x.lifetime_paid, "accounting"),
+    lifetime_refunded: uint(x.lifetime_refunded, "accounting"),
+  };
+}
+function pause(v: unknown): PauseState {
+  const x = rec(v, "pause");
+  return {
+    paused: bool(x.paused, "pause"),
+    reason: nullable(x.reason, (y) => str(y, "pause")),
+    actor: nullable(x.actor, (y) => str(y, "pause")),
+    changed_at: nullable(x.changed_at, (y) =>
+      uint(y, "pause", 18446744073709551615n),
+    ),
+  };
+}
+function health(v: unknown): Health {
+  const x = rec(v, "health");
+  return {
+    accounting: accounting(x.accounting),
+    actual_native_balance: uint(x.actual_native_balance, "health"),
+    liabilities: uint(x.liabilities, "health"),
+    fully_backed: bool(x.fully_backed, "health"),
+  };
+}
+const statuses = new Set<BountyStatus>([
+  "open",
+  "single_confirmation",
+  "ratifying",
+  "refunding",
+  "refunded",
+  "paid",
+]);
+function terms(v: unknown): Terms {
+  const x = rec(v, "bounty terms");
+  return {
+    title: str(x.title, "bounty terms"),
+    summary: str(x.summary, "bounty terms"),
+    acceptance_criteria: str(x.acceptance_criteria, "bounty terms"),
+    content_uri: nullable(x.content_uri, (y) => str(y, "bounty terms")),
+    content_digest: nullable(x.content_digest, (y) => str(y, "bounty terms")),
+    config_version: int(x.config_version, "bounty terms"),
+    ratification_seconds: int(x.ratification_seconds, "bounty terms"),
+    max_bounty_total: uint(x.max_bounty_total, "bounty terms"),
+    max_contributors: int(x.max_contributors, "bounty terms"),
+    max_rounds: int(x.max_rounds, "bounty terms"),
+    max_evidence_uri_bytes: int(x.max_evidence_uri_bytes, "bounty terms"),
+    max_rationale_bytes: int(x.max_rationale_bytes, "bounty terms"),
+    max_reason_bytes: int(x.max_reason_bytes, "bounty terms"),
+  };
+}
+function refundReason(v: unknown): RefundReason | null {
+  if (v === null) return null;
+  if (
+    v === "expired" ||
+    v === "sole_confirmation_timeout" ||
+    v === "round_limit"
+  )
+    return v;
+  const x = rec(v, "refund reason");
+  if ("cancelled" in x) {
+    const y = rec(x.cancelled, "refund reason");
+    return { cancelled: { reason: str(y.reason, "refund reason") } };
+  }
+  if ("moderated" in x) {
+    const y = rec(x.moderated, "refund reason"),
+      outcome = str(y.outcome, "refund reason");
+    if (!["spam", "duplicate", "policy_violation"].includes(outcome))
+      bad("refund reason");
+    return {
+      moderated: {
+        outcome: outcome as "spam" | "duplicate" | "policy_violation",
+        reason: str(y.reason, "refund reason"),
+      },
+    };
+  }
+  return bad("refund reason");
+}
+export function mapBounty(v: unknown): Bounty {
+  const x = rec(v, "bounty"),
+    status = str(x.status, "bounty") as BountyStatus;
+  if (!statuses.has(status)) bad("bounty");
+  const candidate = nullable(x.project_candidate, (y) => {
+    const z = rec(y, "project candidate");
+    return {
+      project_id: str(z.project_id, "project candidate"),
+      metadata_uri: str(z.metadata_uri, "project candidate"),
+      metadata_digest: str(z.metadata_digest, "project candidate"),
+    };
+  });
+  return {
+    id: int(x.id, "bounty"),
+    creator: str(x.creator, "bounty"),
+    terms: terms(x.terms),
+    project_candidate: candidate,
+    status,
+    refund_reason: refundReason(x.refund_reason),
+    total_contribution: uint(x.total_contribution, "bounty"),
+    contributor_count: int(x.contributor_count, "bounty"),
+    next_round: int(x.next_round, "bounty"),
+    active_round: nullable(x.active_round, (y) => int(y, "bounty")),
+    paid_recipient: nullable(x.paid_recipient, (y) => str(y, "bounty")),
+    paid_amount: uint(x.paid_amount, "bounty"),
+    refunded_amount: uint(x.refunded_amount, "bounty"),
+    paid_at: nullable(x.paid_at, (y) =>
+      uint(y, "bounty", 18446744073709551615n),
+    ),
+    graduated_at: nullable(x.graduated_at, (y) =>
+      uint(y, "bounty", 18446744073709551615n),
+    ),
+    created_at: uint(x.created_at, "bounty", 18446744073709551615n),
+    expires_at: uint(x.expires_at, "bounty", 18446744073709551615n),
+    history_count: int(x.history_count, "bounty"),
+  };
+}
+async function provenance(c: RpcClient, cfg: AppConfig) {
+  const [chain, contract] = await Promise.all([
+    c.getChainId(),
+    c.getContract(cfg.contract),
+  ]);
+  if (chain !== cfg.chainId)
+    throw new Error(
+      `Deployment mismatch: expected chain ${cfg.chainId}, observed ${chain}.`,
+    );
+  if (contract.address !== cfg.contract || contract.codeId !== cfg.codeId)
+    throw new Error(
+      `Deployment mismatch: expected contract ${cfg.contract} at Code ID ${cfg.codeId}.`,
+    );
+  const code = await c.getCodeDetails(cfg.codeId);
+  if (code.checksum.toLowerCase() !== cfg.codeChecksum)
+    throw new Error(
+      "Deployment mismatch: contract code checksum is not the verified artifact.",
+    );
+}
+async function pages(
+  query: (q: object) => Promise<unknown>,
+  first: unknown,
+): Promise<Bounty[]> {
+  const out: Bounty[] = [];
+  let raw = first,
+    cursor: number | null = null,
+    last = 0;
+  for (let n = 0; n < 1000; n++) {
+    const x = rec(raw, "bounties");
+    const candidate = x.bounties;
+    if (!Array.isArray(candidate)) bad("bounties");
+    const values = candidate as unknown[];
+    const page = values.map(mapBounty);
+    for (const item of page) {
+      if (item.id <= last)
+        throw new Error("Non-increasing bounty IDs from RPC.");
+      last = item.id;
+      out.push(item);
+    }
+    if (page.length < PAGE_LIMIT) return out;
+    cursor = last;
+    raw = await query(queries.bounties(cursor));
+  }
+  throw new Error("Too many bounty pages from RPC.");
+}
+export interface VoiceDataSource {
+  loadLedger(): Promise<LedgerData>;
+}
+export function createDataSource(
+  cfg: AppConfig,
+  connector: Connect = connectRpc,
+): VoiceDataSource {
+  return {
+    async loadLedger() {
+      const c = await connector(cfg.rpc);
+      try {
+        await provenance(c, cfg);
+        const query = (q: object) => c.queryContractSmart(cfg.contract, q);
+        const [cr, pr, hr, br, height] = await Promise.all([
+          query(queries.config()),
+          query(queries.pause()),
+          query(queries.health()),
+          query(queries.bounties()),
+          c.getHeight(),
+        ]);
+        const config = mapConfig(cr);
+        if (
+          config.native_denom !== "ujuno" ||
+          config.limits.max_page_limit < PAGE_LIMIT
+        )
+          throw new Error(
+            "Deployment mismatch: unsupported contract configuration.",
+          );
+        return {
+          config,
+          pause: pause(pr),
+          health: health(hr),
+          bounties: await pages(query, br),
+          observationHeight: int(height, "height"),
+          refreshedAt: new Date(),
+          weakConsistency: true,
+        };
+      } finally {
+        c.disconnect();
+      }
+    },
+  };
+}

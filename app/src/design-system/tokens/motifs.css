@@ -1,0 +1,67 @@
+/* ============================================================
+   JUNO NETWORK — MOTIFS & BASE
+   Shared background textures + a light reset. The grid and
+   the radial "gate" glow are the recurring environmental motifs.
+   ============================================================ */
+
+/* --- Graph-paper / numogram grid. Apply to any dark surface. --- */
+.juno-grid {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+}
+
+/* Finer sub-grid overlay */
+.juno-grid-fine {
+  background-image:
+    linear-gradient(var(--coral-a04) 1px, transparent 1px),
+    linear-gradient(90deg, var(--coral-a04) 1px, transparent 1px);
+  background-size: calc(var(--cell) / 4) calc(var(--cell) / 4);
+}
+
+/* --- Radial "gate" glow: a distant coral source in the void. --- */
+.juno-gate {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255,123,124,0.16), transparent 55%),
+    var(--surface-void);
+}
+
+/* --- Scanline / grain veil (very subtle) --- */
+.juno-veil {
+  position: relative;
+}
+.juno-veil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg, rgba(255,235,210,0.015) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+
+/* --- Hairline coral frame (technical enclosure) --- */
+.juno-frame {
+  border: var(--bw-hair) solid var(--line-soft);
+  border-radius: var(--r-md);
+}
+
+/* ============================================================
+   BASE RESET
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: var(--type-body);
+  color: var(--text-primary);
+  background: var(--surface-ground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--coral);
+  color: var(--maroon-deep);
+}

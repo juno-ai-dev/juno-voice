@@ -1,0 +1,74 @@
+{
+  "provenance": {
+    "chain_id": "juno-1",
+    "contract_address": "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw",
+    "code_id": 5150,
+    "checksum": "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1",
+    "observation_height": 40681635,
+    "purpose": "test-only live juno-1 capture; never runtime or fallback data"
+  },
+  "queries": {
+    "config": {
+      "config": {}
+    },
+    "pause": {
+      "pause": {}
+    },
+    "health": {
+      "health": {}
+    },
+    "bounties": {
+      "bounties": {
+        "start_after": null,
+        "limit": 50
+      }
+    }
+  },
+  "responses": {
+    "config": {
+      "native_denom": "ujuno",
+      "governor": "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg",
+      "agent": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
+      "registry": "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n",
+      "ratification_seconds": 259200,
+      "min_contribution": "1000000",
+      "max_bounty_total": "100000000000",
+      "min_lifetime_seconds": 604800,
+      "max_lifetime_seconds": 7776000,
+      "max_contributors": 500,
+      "max_rounds": 20,
+      "limits": {
+        "max_title_bytes": 128,
+        "max_summary_bytes": 2048,
+        "max_acceptance_criteria_bytes": 4096,
+        "max_uri_bytes": 512,
+        "max_rationale_bytes": 2048,
+        "max_reason_bytes": 2048,
+        "max_page_limit": 100
+      },
+      "version": 1
+    },
+    "pause": {
+      "paused": false,
+      "reason": null,
+      "actor": null,
+      "changed_at": "1786489623553137306"
+    },
+    "health": {
+      "accounting": {
+        "active_escrow": "0",
+        "outstanding_refunds": "0",
+        "pending_payout_liabilities": "0",
+        "lifetime_received": "0",
+        "lifetime_paid": "0",
+        "lifetime_refunded": "0"
+      },
+      "actual_native_balance": "0",
+      "liabilities": "0",
+      "fully_backed": true
+    },
+    "bounties": {
+      "bounties": []
+    }
+  }
+}

@@ -2,7 +2,8 @@
 
 **Freeze baseline:** repository commit `3ad9998b69e2588e5092b26f0da6ca246e26fecd`; `deps/dao-contracts` commit `8f26e510dc89e56576e2dbbd35c96edb45d4b778`
 
-**Status:** implemented locally; **not deployed and not release-approved**
+**Status:** v1 contracts deployed and verified on `juno-1`; the first production
+read-only bounty-ledger profile is defined in section 11.
 
 **Audience:** wallet, frontend, explorer, and indexer implementers
 
@@ -33,7 +34,10 @@ Clients must still read live `config`, `pause`, and object snapshots: configured
 
 ## 3. Social request prototype (`contracts/juno-voice`)
 
-This is the backend consumed by the current `app/`, not the v1 bounty backend. It uses historical Juno voting power, block-height windows, an anti-spam submission bond, and work-request states. It has no bounty contributions, payout nomination, contributor ratification, project registry, or gauge epochs.
+This is a retained legacy backend and is no longer consumed by the production
+`app/`. It uses historical Juno voting power, block-height windows, an anti-spam
+submission bond, and work-request states. It has no bounty contributions, payout
+nomination, contributor ratification, project registry, or gauge epochs.
 
 ### 3.1 Execute inventory
 
@@ -233,13 +237,17 @@ All transaction UX must show exact message, sender, contract, and funds before s
 
 ## 9. Prototype assumptions reconciled with backend reality
 
-- `app/` reads only the social request schema and its pinned pre-release `uni-7` contract. Its request ledger/ranking, support/oppose voting, builder/verifier evidence, and request bond refund are **not** the v1 bounty UX.
+- `app/` reads only the deployed v1 bounty contract through the production
+  read-only profile in section 11. The removed request ledger/ranking,
+  support/oppose voting, builder/verifier evidence, and request-bond UI are
+  **not** the v1 bounty UX.
 - The prototype’s `Submit a request` sends `submission_bond`; v1 `create_bounty` sends an initial **contribution** governed by bounty min/max and expiry. Do not rename one payload into the other.
 - Prototype status codes 1–10 and opaque rank cursors do not apply to bounty/project/epoch lists. V1 bounty state has six explicit variants; “cancelled/reset/stopped” require the canonical companion fields described above.
 - Prototype voting is immutable historical-power support/oppose and is safety-disabled in the current UI. Bounty votes are revisable yes/no, weighted by snapshotted contributions. Gauge votes are revisable weighted option allocations using historical Juno power. These are three distinct ballots.
 - The v1 backend has no single aggregate query and owned v1 lists generally have no `query_height` or returned cursor. UX must compose queries, follow each contract’s cursor semantics, and refresh after writes.
 - Product prose previously listed aspirational display states (`cancelled`, `stopped`, `failed/expired`) that are not wire enum variants. Render them as labels only when derived from canonical pause/refund/round/epoch fields; never send or decode them as states.
-- No address, code ID, checksum, gauge ID, denom, amount, or authority in the prototype is a production deployment fact. These remain release configuration.
+- Prototype addresses and authorities are not production facts. The verified
+  bounty address, Code ID, and checksum in section 11 are the release binding.
 
 ## 10. Genuine interface decisions still open
 
@@ -251,3 +259,11 @@ These do not block implementing the frozen wire messages, but require a product/
 4. **Gauge adapter direct-query shape is snapshot-specific.** The owned adapter requires concrete `epoch_budget`, `available_balance`, and `denom`, and returns extra `emitted_value`/`retained_value`; the generic pinned interface models those request fields as optional and only requires `execute` in its response. This is compatible with the snapshot gauge path (extra response fields are ignored), but generic hook-mode callers are not a supported UX path. Confirm that snapshot-only deployment remains mandatory.
 
 Until any decision produces new checked-in schemas, this commit—not aspirational prose—is the UX integration baseline.
+
+## 11. Production read-only bounty ledger profile
+
+The first production UI slice is strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`.
+
+After verifying chain ID, contract address, Code ID, and wasm checksum, clients query `config {}`, `pause {}`, `health {}`, the first `bounties { start_after: null, limit: 50 }` page, and an independent observation height concurrently. Bounty pages are ascending by numeric `id`; a full page requires another query with `start_after` equal to the last ID, including an extra empty query for an exactly full final page. Repeated or non-increasing IDs are invalid. Contract pages have no observation height and are weakly consistent. Amounts and CosmWasm timestamps remain decimal strings and clients must parse them with arbitrary-precision integers.
+
+The production slice contains no wallet, signing, execute, admin, registry, gauge, sample, or fallback-data path.
