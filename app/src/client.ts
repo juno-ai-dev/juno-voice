@@ -7,6 +7,7 @@ import type {
   ContractConfig,
   Health,
   LedgerData,
+  BountyDetail,
   Limits,
   PauseState,
   RefundReason,
@@ -20,6 +21,10 @@ export const queries = {
   bounties: (startAfter: number | null = null) => ({
     bounties: { start_after: startAfter, limit: PAGE_LIMIT },
   }),
+  bounty: (bountyId: number) => ({ bounty: { bounty_id: bountyId } }),
+  contributions: (bountyId: number) => ({ contributions: { bounty_id: bountyId, start_after: null, limit: PAGE_LIMIT } }),
+  claims: (bountyId: number) => ({ claims: { bounty_id: bountyId, start_after: null, limit: PAGE_LIMIT } }),
+  history: (bountyId: number) => ({ history: { bounty_id: bountyId, start_after: null, limit: PAGE_LIMIT } }),
 } as const;
 
 const bad = (c: string): never => {
@@ -248,6 +253,7 @@ async function pages(
 }
 export interface VoiceDataSource {
   loadLedger(): Promise<LedgerData>;
+  loadBountyDetail?(bountyId: number): Promise<BountyDetail>;
 }
 export function createDataSource(
   cfg: AppConfig,
@@ -259,12 +265,13 @@ export function createDataSource(
       try {
         await provenance(c, cfg);
         const query = (q: object) => c.queryContractSmart(cfg.contract, q);
-        const [cr, pr, hr, br, height] = await Promise.all([
+        const [cr, pr, hr, br, height, chainTimeNanos] = await Promise.all([
           query(queries.config()),
           query(queries.pause()),
           query(queries.health()),
           query(queries.bounties()),
           c.getHeight(),
+          c.getChainTimeNanos(),
         ]);
         const config = mapConfig(cr);
         if (
@@ -280,12 +287,44 @@ export function createDataSource(
           health: health(hr),
           bounties: await pages(query, br),
           observationHeight: int(height, "height"),
+          chainTimeNanos,
           refreshedAt: new Date(),
           weakConsistency: true,
         };
       } finally {
         c.disconnect();
       }
+    },
+    async loadBountyDetail(bountyId) {
+      const c = await connector(cfg.rpc);
+      try {
+        await provenance(c, cfg);
+        const query = (q: object) => c.queryContractSmart(cfg.contract, q);
+        const [detailRaw, contributionsRaw, claimsRaw, historyRaw, height, chainTimeNanos] = await Promise.all([
+          query(queries.bounty(bountyId)), query(queries.contributions(bountyId)), query(queries.claims(bountyId)),
+          query(queries.history(bountyId)), c.getHeight(), c.getChainTimeNanos(),
+        ]);
+        const detail = rec(detailRaw, "bounty detail"), contributions = rec(contributionsRaw, "contributions").contributions,
+          claims = rec(claimsRaw, "claims").claims, history = rec(historyRaw, "history").entries;
+        if (!Array.isArray(contributions) || !Array.isArray(claims) || !Array.isArray(history)) bad("bounty detail");
+        const contributionItems = contributions as unknown[], claimItems = claims as unknown[], historyItems = history as unknown[];
+        const bounty = mapBounty(detail.bounty);
+        const mappedContributions = contributionItems.map((item) => { const x = rec(item, "contribution"); return {
+          bounty_id: int(x.bounty_id, "contribution"), contributor: str(x.contributor, "contribution"),
+          contributor_index: int(x.contributor_index, "contribution"), current_amount: uint(x.current_amount, "contribution"),
+          weight_at_round: nullable(x.weight_at_round, (y) => uint(y, "contribution")), }; });
+        const mappedClaims = claimItems.map((item) => { const x = rec(item, "claim"); return { bounty_id: int(x.bounty_id, "claim"),
+          contributor: str(x.contributor, "claim"), amount: uint(x.amount, "claim"), claimed_at: uint(x.claimed_at, "claim", 18446744073709551615n) }; });
+        const mappedHistory = historyItems.map((item) => { const x = rec(item, "history"), action = x.action;
+          if (typeof action !== "string" && (typeof action !== "object" || action === null || Array.isArray(action))) bad("history");
+          return { bounty_id: int(x.bounty_id, "history"), sequence: int(x.sequence, "history"), actor: str(x.actor, "history"),
+            at: uint(x.at, "history", 18446744073709551615n), action: action as string | Record<string, unknown> }; });
+        const fingerprint = JSON.stringify({ bounty, chainTimeNanos, height });
+        return { bounty, activeRound: nullable(detail.active_round, (x) => rec(x, "active round")),
+          moderation: nullable(detail.moderation, (x) => rec(x, "moderation")), graduation: nullable(detail.graduation, (x) => rec(x, "graduation")),
+          contributions: mappedContributions, claims: mappedClaims, history: mappedHistory,
+          observationHeight: int(height, "height"), chainTimeNanos, fingerprint };
+      } finally { c.disconnect(); }
     },
   };
 }

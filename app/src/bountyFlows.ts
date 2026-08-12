@@ -1,0 +1,96 @@
+import type { Bounty, ContractConfig, PauseState } from "./types";
+import type { TransactionIntent } from "./transactions";
+import { DEFAULT_BOUNTY_CONTRACT } from "./config";
+
+const U128_MAX = 340282366920938463463374607431768211455n;
+const U64_MAX = 18446744073709551615n;
+const utf8 = (value: string) => new TextEncoder().encode(value).length;
+const amount = (value: string, label: string): bigint => {
+  if (!/^[1-9]\d*$/.test(value)) throw new Error(`${label} must be a positive whole ujuno amount.`);
+  const parsed = BigInt(value);
+  if (parsed > U128_MAX) throw new Error(`${label} exceeds the Uint128 range.`);
+  return parsed;
+};
+const required = (value: string, max: number, label: string) => {
+  if (!value.trim()) throw new Error(`${label} is required.`);
+  if (utf8(value) > max) throw new Error(`${label} exceeds the live ${max}-byte limit.`);
+  return value;
+};
+const optionalPair = (uri: string, digest: string, max: number, label: string) => {
+  const u = uri.trim(), d = digest.trim();
+  if (Boolean(u) !== Boolean(d)) throw new Error(`${label} URI and SHA-256 digest must be supplied together.`);
+  if (!u) return { uri: null, digest: null };
+  if (utf8(u) > max || !/^(https:\/\/|ipfs:\/\/)[^\s]+$/.test(u))
+    throw new Error(`${label} URI must be a bounded HTTPS or IPFS URI.`);
+  if (!/^[0-9a-f]{64}$/.test(d)) throw new Error(`${label} digest must be 64 lowercase SHA-256 hex characters.`);
+  return { uri: u, digest: d };
+};
+export interface CreateBountyInput {
+  title: string; summary: string; acceptanceCriteria: string;
+  contentUri: string; contentDigest: string; expiresAtNanos: string; initialUjuno: string;
+  projectCandidate?: { projectId: string; metadataUri: string; metadataDigest: string };
+}
+export interface EligibilityState {
+  config: ContractConfig; pause: PauseState; chainTimeNanos: string; fingerprint: string;
+}
+function assertConfig(state: EligibilityState) {
+  if (state.pause.paused) throw new Error("New bounty activity is paused on chain.");
+  if (state.config.native_denom !== "ujuno") throw new Error("Unsupported live native denomination.");
+  if (!/^\d+$/.test(state.chainTimeNanos) || BigInt(state.chainTimeNanos) > U64_MAX)
+    throw new Error("Canonical chain time is unavailable.");
+}
+export function createBountyIntent(input: CreateBountyInput, state: EligibilityState): TransactionIntent {
+  assertConfig(state);
+  const initial = amount(input.initialUjuno, "Initial contribution");
+  if (initial < BigInt(state.config.min_contribution) || initial > BigInt(state.config.max_bounty_total))
+    throw new Error("Initial contribution is outside the live contract limits.");
+  if (!/^\d+$/.test(input.expiresAtNanos)) throw new Error("Expiration must be an exact nanosecond timestamp.");
+  const now = BigInt(state.chainTimeNanos), expiry = BigInt(input.expiresAtNanos);
+  const min = now + BigInt(state.config.min_lifetime_seconds) * 1_000_000_000n;
+  const max = now + BigInt(state.config.max_lifetime_seconds) * 1_000_000_000n;
+  if (expiry < min || expiry > max || expiry > U64_MAX) throw new Error("Expiration is outside the lifetime range measured from chain time.");
+  const content = optionalPair(input.contentUri, input.contentDigest, state.config.limits.max_uri_bytes, "Content");
+  let project_candidate = null;
+  if (input.projectCandidate) {
+    const metadata = optionalPair(input.projectCandidate.metadataUri, input.projectCandidate.metadataDigest,
+      state.config.limits.max_uri_bytes, "Project metadata");
+    project_candidate = {
+      project_id: required(input.projectCandidate.projectId, state.config.limits.max_title_bytes, "Project ID"),
+      metadata_uri: metadata.uri as string, metadata_digest: metadata.digest as string,
+    };
+  }
+  return {
+    chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
+    executeMessage: { create_bounty: {
+      title: required(input.title, state.config.limits.max_title_bytes, "Title"),
+      summary: required(input.summary, state.config.limits.max_summary_bytes, "Summary"),
+      acceptance_criteria: required(input.acceptanceCriteria, state.config.limits.max_acceptance_criteria_bytes, "Acceptance criteria"),
+      content_uri: content.uri, content_digest: content.digest,
+      expires_at: input.expiresAtNanos, project_candidate,
+    } },
+    funds: [{ denom: "ujuno", amount: input.initialUjuno }],
+    consequences: [`Create a bounty and escrow exactly ${input.initialUjuno} ujuno.`,
+      `Terms and limits are snapshotted at config version ${state.config.version}.`,
+      project_candidate ? "This is only a project candidate; graduation is a later authorized action." : "No project candidate is attached."],
+    expectedStateFingerprint: state.fingerprint,
+  };
+}
+export function contributeIntent(bounty: Bounty, ujuno: string, contributor: string | null, state: EligibilityState): TransactionIntent {
+  assertConfig(state);
+  const value = amount(ujuno, "Contribution");
+  if (value < BigInt(state.config.min_contribution)) throw new Error("Contribution is below the live minimum.");
+  if (bounty.status !== "open") throw new Error("This bounty is not open for contributions.");
+  if (BigInt(state.chainTimeNanos) >= BigInt(bounty.expires_at)) throw new Error("This bounty has expired according to chain time.");
+  if (BigInt(bounty.total_contribution) + value > BigInt(bounty.terms.max_bounty_total))
+    throw new Error("Contribution exceeds this bounty's snapshotted total cap.");
+  const existing = contributor === bounty.creator;
+  if (!existing && bounty.contributor_count >= bounty.terms.max_contributors)
+    throw new Error("This bounty has reached its snapshotted contributor cap.");
+  return {
+    chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
+    executeMessage: { contribute: { bounty_id: bounty.id } }, funds: [{ denom: "ujuno", amount: ujuno }],
+    consequences: [`Add exactly ${ujuno} ujuno to bounty #${bounty.id}; escrowed funds may only leave through contract rules.`,
+      `Eligibility uses canonical chain time and the bounty's snapshotted caps.`],
+    expectedStateFingerprint: state.fingerprint,
+  };
+}

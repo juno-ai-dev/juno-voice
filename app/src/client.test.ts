@@ -6,6 +6,7 @@ const base = () => ({
   queryContractSmart: vi.fn(),
   getChainId: vi.fn().mockResolvedValue("juno-1"),
   getHeight: vi.fn().mockResolvedValue(900),
+  getChainTimeNanos: vi.fn().mockResolvedValue("1700000000000000000"),
   getContract: vi
     .fn()
     .mockResolvedValue({ address: config.contract, codeId: 5150 }),

@@ -149,9 +149,16 @@ function objectWithExactKeys(value: unknown, keys: readonly string[]): value is 
   return exactDataObject(value, keys);
 }
 const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 && !Object.is(value, -0);
-// Issue #32 currently approves only the contribution flow. Expanding this map
-// is a security-policy change and requires an exact schema plus dedicated UX.
+const nullableString = (value: unknown) => value === null || typeof value === "string";
+const projectCandidate = (value: unknown) => value === null ||
+  (objectWithExactKeys(value, ["project_id", "metadata_uri", "metadata_digest"]) &&
+    typeof value.project_id === "string" && typeof value.metadata_uri === "string" && typeof value.metadata_digest === "string");
 const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Object.freeze({
+  create_bounty: (body) => objectWithExactKeys(body, ["title", "summary", "acceptance_criteria", "content_uri",
+    "content_digest", "expires_at", "project_candidate"]) &&
+    typeof body.title === "string" && typeof body.summary === "string" && typeof body.acceptance_criteria === "string" &&
+    nullableString(body.content_uri) && nullableString(body.content_digest) && validAmount(body.expires_at, true) &&
+    BigInt(body.expires_at as string) <= 18446744073709551615n && projectCandidate(body.project_candidate),
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
 });
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
