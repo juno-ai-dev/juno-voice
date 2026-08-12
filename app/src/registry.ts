@@ -25,7 +25,7 @@ export type ProjectStatus = "pending" | "active" | "suspended" | "rejected" | "r
 export type BondState = "deposited" | "refunded" | "forfeited" | "claimable" | "claimed";
 export interface RegistryConfig {
   native_denom: string; registration_bond: string; max_active_projects: number; max_metadata_uri_bytes: number;
-  max_page_limit: number; max_reason_bytes: number; payout_address_delay_seconds: number; curator: string; governor: string; version: string;
+  max_page_limit: number; max_reason_bytes: number; payout_address_delay_seconds: number; curator: string; governor: string; version: number;
 }
 export interface RegistryPause { admissions_stopped: boolean; adapter_stopped: boolean; reason: string | null; actor: string | null; changed_at: string | null }
 export interface RegistryAccounting { active_projects: number; pending_applications: number; bond_liability: string; lifetime_bonds_received: string; lifetime_bonds_refunded: string; lifetime_bonds_forfeited: string }
@@ -67,7 +67,7 @@ export function mapProject(value: unknown): Project {
 }
 export function mapRegistryConfig(value: unknown): RegistryConfig {
   const x = record(value, "config");
-  const config = { native_denom: string(x.native_denom, "config"), registration_bond: uint(x.registration_bond, "config"), max_active_projects: integer(x.max_active_projects, "config"), max_metadata_uri_bytes: integer(x.max_metadata_uri_bytes, "config"), max_page_limit: integer(x.max_page_limit, "config"), max_reason_bytes: integer(x.max_reason_bytes, "config"), payout_address_delay_seconds: integer(x.payout_address_delay_seconds, "config"), curator: string(x.curator, "config"), governor: string(x.governor, "config"), version: uint(x.version, "config", U64_MAX) };
+  const config = { native_denom: string(x.native_denom, "config"), registration_bond: uint(x.registration_bond, "config"), max_active_projects: integer(x.max_active_projects, "config"), max_metadata_uri_bytes: integer(x.max_metadata_uri_bytes, "config"), max_page_limit: integer(x.max_page_limit, "config"), max_reason_bytes: integer(x.max_reason_bytes, "config"), payout_address_delay_seconds: integer(x.payout_address_delay_seconds, "config"), curator: string(x.curator, "config"), governor: string(x.governor, "config"), version: integer(x.version, "config") };
   if (config.native_denom !== "ujuno" || config.registration_bond === "0" || config.max_active_projects !== 99 || config.max_metadata_uri_bytes < 1 || config.max_metadata_uri_bytes > 2_048 || config.max_page_limit < 1 || config.max_page_limit > 100 || config.max_reason_bytes < 1 || config.max_reason_bytes > 2_048 || config.payout_address_delay_seconds < 1 || config.payout_address_delay_seconds > 7_776_000) bad("config");
   return config;
 }

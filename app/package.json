@@ -23,7 +23,10 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run audit:all && npm run audit:production && npm run build && npm run check:production"
   },
   "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "0.37.0",
     "@cosmjs/encoding": "0.37.0",
+    "@cosmjs/proto-signing": "0.37.1",
+    "@cosmjs/stargate": "0.37.1",
     "cosmjs-types": "0.10.1",
     "react": "19.1.1",
     "react-dom": "19.1.1"

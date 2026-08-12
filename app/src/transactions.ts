@@ -30,7 +30,7 @@ export type BroadcastResponse =
   | { readonly status: "unknown"; readonly txHash?: string };
 export type TransactionOutcome =
   | (Extract<BroadcastResponse, { status: "confirmed" }> & { readonly confirmationStatus: "confirmed"; readonly refreshStatus: "refreshed" | "failed"; readonly explorerUrl: string })
-  | Exclude<BroadcastResponse, { status: "confirmed" }>
+  | (Exclude<BroadcastResponse, { status: "confirmed" }> & { readonly explorerUrl?: string })
   | { readonly status: "rejected"; readonly reason: string };
 export interface TransactionDependencies {
   readonly wallet: WalletSession;
@@ -146,16 +146,25 @@ function validJunoAddress(address: string, lengths: readonly number[]): boolean 
   } catch { return false; }
 }
 const projectId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9-]{3,64}$/.test(value) && value !== "do-not-distribute";
-const digest = (value: unknown): value is string => typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
 const metadataUri = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && new TextEncoder().encode(value).length <= 2_048;
 const account = (value: unknown): value is string => typeof value === "string" && validJunoAddress(value, [20]);
 function objectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return exactDataObject(value, keys);
 }
 const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 && !Object.is(value, -0);
-// Issue #32 currently approves only the contribution flow. Expanding this map
-// is a security-policy change and requires an exact schema plus dedicated UX.
+const digest = (value: unknown) => typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+const projectCandidate = (value: unknown) => value === null ||
+  (objectWithExactKeys(value, ["project_id", "metadata_uri", "metadata_digest"]) &&
+    typeof value.project_id === "string" && /^[a-z0-9-]{3,64}$/.test(value.project_id) &&
+    typeof value.metadata_uri === "string" && value.metadata_uri.length > 0 && digest(value.metadata_digest));
 const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Object.freeze({
+  create_bounty: (body) => objectWithExactKeys(body, ["title", "summary", "acceptance_criteria", "content_uri",
+    "content_digest", "expires_at", "project_candidate"]) &&
+    typeof body.title === "string" && typeof body.summary === "string" && typeof body.acceptance_criteria === "string" &&
+    ((body.content_uri === null && body.content_digest === null) ||
+      (typeof body.content_uri === "string" && body.content_uri.length > 0 && digest(body.content_digest))) &&
+    validAmount(body.expires_at, true) &&
+    BigInt(body.expires_at as string) <= 18446744073709551615n && projectCandidate(body.project_candidate),
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   register_project: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest", "payout_address"]) &&
     projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
@@ -181,8 +190,9 @@ function validateIntent(intent: TransactionIntent, authorization: WalletAuthoriz
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
-  const requiresFunds = action === "contribute" || action === "register_project";
-  if (intent.contract === DEFAULT_BOUNTY_CONTRACT ? action !== "contribute" : action === "contribute")
+  const requiresFunds = action === "create_bounty" || action === "contribute" || action === "register_project";
+  const bountyActions = action === "create_bounty" || action === "contribute";
+  if (intent.contract === DEFAULT_BOUNTY_CONTRACT ? !bountyActions : bountyActions)
     throw new TransactionSafetyError("message_forbidden", "Execute action is not permitted for this contract.");
   if (requiresFunds ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]) : intent.funds.length !== 0)
     throw new TransactionSafetyError("invalid_transaction", "Invalid funds for this execute action.");
@@ -230,6 +240,10 @@ export class TransactionReviewRegistry {
 const applicationReviewRegistry = new TransactionReviewRegistry();
 
 export function createTransactionFlow(dependencies: TransactionDependencies) {
+  const withExplorer = <T extends Exclude<BroadcastResponse, { status: "confirmed" }>>(outcome: T): T & { explorerUrl?: string } =>
+    "txHash" in outcome && outcome.txHash
+      ? { ...outcome, explorerUrl: `${dependencies.explorerBaseUrl.replace(/\/$/, "")}/tx/${encodeURIComponent(outcome.txHash)}` }
+      : outcome;
   const flowBinding = crypto.randomUUID();
   const registry = dependencies.reviewRegistry ?? applicationReviewRegistry;
   const assertExact = (review: TransactionReview, authorization: WalletAuthorization): void => {
@@ -281,13 +295,13 @@ export function createTransactionFlow(dependencies: TransactionDependencies) {
       catch (error) {
         if (error instanceof BroadcastDependencyError) {
           if (error.kind === "rejected") return { status: "rejected", reason: error.message };
-          return { status: "unknown", ...(error.txHash ? { txHash: error.txHash } : {}) };
+          return withExplorer({ status: "unknown", ...(error.txHash ? { txHash: error.txHash } : {}) });
         }
         return { status: "unknown" };
       }
       const validatedOutcome = validateBroadcastResponse(outcome);
       if (!validatedOutcome) return { status: "unknown" };
-      if (validatedOutcome.status !== "confirmed") return validatedOutcome;
+      if (validatedOutcome.status !== "confirmed") return withExplorer(validatedOutcome);
       let refreshStatus: "refreshed" | "failed" = "refreshed";
       try { await dependencies.refreshCanonical(); } catch { refreshStatus = "failed"; }
       return { ...validatedOutcome, confirmationStatus: "confirmed", refreshStatus,

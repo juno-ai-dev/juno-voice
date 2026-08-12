@@ -52,7 +52,7 @@ describe("read-only bounty ledger states", () => {
     expect(screen.getByText("5150")).toBeInTheDocument();
     expect(screen.getByText("Fully backed")).toBeInTheDocument();
     expect(screen.getAllByText("1 JUNO").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /connect|sign|contribute/i })).not.toBeInTheDocument();
     expect(document.querySelector("time")).toHaveAttribute(
       "datetime",
       "2027-01-15T08:00:00.000Z",
@@ -107,7 +107,7 @@ describe("read-only bounty ledger states", () => {
               project_candidate: {
                 project_id: "voice-ui",
                 metadata_uri: "https://example.invalid/voice-ui.json",
-                metadata_digest: "ab".repeat(32),
+                metadata_digest: `sha256:${"ab".repeat(32)}`,
               },
               refund_reason: { cancelled: { reason: "scope changed" } },
             },

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { VoiceDataSource } from "./client";
 import type { AppConfig } from "./config";
-import type { Bounty, BountyStatus } from "./types";
+import type { Bounty, BountyDetail, BountyStatus } from "./types";
 import { useAsync } from "./useAsync";
+import { BountyActions, type BountyTransactionAccess } from "./BountyActions";
 const labels: Record<BountyStatus, string> = {
   open: "Open",
   single_confirmation: "Awaiting confirmation",
@@ -26,14 +27,17 @@ const timestampDate = (nanoseconds: string) =>
 export function Ledger({
   source,
   config,
+  transactions,
 }: {
   source: VoiceDataSource;
   config: AppConfig;
+  transactions?: BountyTransactionAccess;
 }) {
   const load = useMemo(() => () => source.loadLedger(), [source]);
   const [state, retry] = useAsync(load, "bounties");
   const [status, setStatus] = useState<"all" | BountyStatus>("all");
   const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState<{ kind: "closed" | "loading" | "error" | "ready"; data?: BountyDetail; message?: string }>({ kind: "closed" });
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
     if (state.kind !== "ready") return;
@@ -79,9 +83,9 @@ export function Ledger({
           <p className="eyebrow">JUNO VOICE · JUNO-1 MAINNET</p>
           <h1 id="page-title">Public bounty ledger</h1>
           <p>
-            Authoritative, read-only bounty state queried directly from the
-            verified Juno Voice contract. This interface cannot connect a
-            wallet, sign, or execute transactions.
+            Authoritative bounty state queried directly from the verified Juno
+            Voice contract. Read-only access is always available; wallet actions
+            use an exact pre-sign review when transaction support is present.
           </p>
         </div>
         <aside className="hero-summary" aria-label="Protocol summary">
@@ -108,6 +112,7 @@ export function Ledger({
           verified backing.
         </section>
       )}
+      <BountyActions access={transactions} stale={stale} canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
       <section aria-labelledby="ledger-title">
         <div className="toolbar">
           <div>
@@ -158,12 +163,18 @@ export function Ledger({
           ) : (
             <div className="bounty-list">
               {rows.map((b) => (
-                <BountyRow key={b.id} bounty={b} />
+                <BountyRow key={b.id} bounty={b} onOpen={async () => {
+                  if (!source.loadBountyDetail) return;
+                  setDetail({ kind: "loading" });
+                  try { setDetail({ kind: "ready", data: await source.loadBountyDetail(b.id) }); }
+                  catch (error) { setDetail({ kind: "error", message: error instanceof Error ? error.message : "Detail unavailable" }); }
+                }} />
               ))}
             </div>
           )}
         </div>
       </section>
+      {detail.kind !== "closed" && <BountyDetailPanel state={detail} transactions={transactions} onClose={() => setDetail({ kind: "closed" })} />}
       <section className="facts-panel" aria-labelledby="economics">
         <h2 id="economics">Protocol economics</h2>
         <div className="network-grid">
@@ -245,12 +256,12 @@ export function Ledger({
     </main>
   );
 }
-function BountyRow({ bounty: b }: { bounty: Bounty }) {
+function BountyRow({ bounty: b, onOpen }: { bounty: Bounty; onOpen: () => void }) {
   return (
     <article className="bounty-row">
       <span className="rank">#{b.id}</span>
       <div>
-        <h3>{b.terms.title}</h3>
+        <h3><button className="detail-link" onClick={onOpen}>{b.terms.title}</button></h3>
         <p>{b.terms.summary}</p>
         <small>Creator {compact(b.creator)}</small>
         {b.project_candidate && (
@@ -278,6 +289,48 @@ function BountyRow({ bounty: b }: { bounty: Bounty }) {
       </div>
     </article>
   );
+}
+function BountyDetailPanel({ state, onClose, transactions }: {
+  state: { kind: string; data?: BountyDetail; message?: string }; onClose: () => void; transactions?: BountyTransactionAccess;
+}) {
+  const d = state.data;
+  const action = (value: string | Record<string, unknown>) =>
+    typeof value === "string" ? value : Object.keys(value)[0]?.replaceAll("_", " ") ?? "event";
+  return <section className="detail-panel" aria-labelledby="detail-title">
+    <button className="button close" onClick={onClose}>Close detail</button>
+    {state.kind === "loading" && <State title="Loading canonical bounty detail…" detail="Querying all detail records directly from the contract." />}
+    {state.kind === "error" && <State title="Bounty detail unavailable" detail={state.message ?? "Query failed."} />}
+    {d && <>
+      <p className="eyebrow">CANONICAL BOUNTY #{d.bounty.id} · HEIGHT {d.observationHeight}</p>
+      <h2 id="detail-title">{d.bounty.terms.title}</h2><p>{d.bounty.terms.summary}</p>
+      <div className="detail-grid">
+        <section><h3>Terms</h3><p><strong>Acceptance criteria</strong><br />{d.bounty.terms.acceptance_criteria}</p>
+          <Fact label="Creator" value={compact(d.bounty.creator)} title={d.bounty.creator} />
+          <Fact label="Expires" value={timestampDate(d.bounty.expires_at).toISOString()} />
+          <Fact label="Total / cap" value={`${fmt(d.bounty.total_contribution)} / ${fmt(d.bounty.terms.max_bounty_total)}`} />
+          <Fact label="Config snapshot" value={String(d.bounty.terms.config_version)} />
+          {d.bounty.terms.content_uri && <p>Metadata <SafeUri uri={d.bounty.terms.content_uri} /> <code>{d.bounty.terms.content_digest}</code></p>}
+        </section>
+        <section><h3>Project candidate</h3>{d.bounty.project_candidate ? <><p>{d.bounty.project_candidate.project_id}</p>
+          <p><SafeUri uri={d.bounty.project_candidate.metadata_uri} /> <code>{d.bounty.project_candidate.metadata_digest}</code></p>
+          <small>Candidate only; this is not a registry listing until a separate authorized graduation.</small></> : <p>None attached.</p>}
+          <h3>Active round</h3><pre>{d.activeRound ? JSON.stringify(d.activeRound, null, 2) : "No active round"}</pre>
+          <h3>Moderation / graduation</h3><pre>{JSON.stringify({ moderation: d.moderation, graduation: d.graduation }, null, 2)}</pre></section>
+        <section><h3>Contributions ({d.contributions.length})</h3>{d.contributions.map((x) => <p key={x.contributor_index}>{compact(x.contributor)} · {fmt(x.current_amount)}</p>)}</section>
+        <section><h3>Claims ({d.claims.length})</h3>{d.claims.length ? d.claims.map((x) => <p key={x.contributor}>{compact(x.contributor)} · {fmt(x.amount)}</p>) : <p>No completed claims.</p>}</section>
+      </div>
+      <h3>History ({d.history.length} of {d.bounty.history_count})</h3><ol className="history">{d.history.map((x) => <li key={x.sequence}><strong>{action(x.action)}</strong> · {compact(x.actor)} · <time dateTime={timestampDate(x.at).toISOString()}>{timestampDate(x.at).toLocaleString()}</time></li>)}</ol>
+      <p className="chain-time">Eligibility reference: canonical chain time {d.chainTimeNanos} ns. Browser time is display-only.</p>
+      <BountyActions bounty={d.bounty} contributions={d.contributions} access={transactions} stale={false}
+        canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
+    </>}
+  </section>;
+}
+function SafeUri({ uri }: { uri: string }) {
+  const safe = /^(https:\/\/|ipfs:\/\/)[^\s]+$/.test(uri);
+  if (!safe) return <code title={uri}>Unsafe URI withheld</code>;
+  const href = uri.startsWith("ipfs://") ? `https://ipfs.io/ipfs/${encodeURIComponent(uri.slice(7))}` : uri;
+  return <a href={href} target="_blank" rel="noopener noreferrer">Open metadata</a>;
 }
 function refundLabel(reason: Bounty["refund_reason"]) {
   if (reason === null) return "";

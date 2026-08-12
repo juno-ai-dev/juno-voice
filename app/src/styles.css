@@ -284,3 +284,24 @@ dd { margin: 0; }
   .brand span { display: none; }
   .project-card { align-items: stretch; flex-direction: column; }
 }
+.detail-link { border: 0; padding: 0; color: inherit; background: transparent; font: inherit; font-weight: 700; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: #a65a5c; }
+.detail-panel { position: fixed; inset: 76px max(20px, calc((100vw - 1120px) / 2)) 20px; z-index: 5; overflow: auto; padding: 32px; border: 1px solid #ff9a9b; background: #160608; box-shadow: 0 20px 80px #000; }
+.detail-panel .close { float: right; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+.detail-panel section { border-top: 1px solid #6f3e40; }
+.detail-panel code, .detail-panel pre { overflow-wrap: anywhere; white-space: pre-wrap; color: #d7bda1; }
+.history { padding-left: 24px; }
+.chain-time { color: #ffc16b; font-family: monospace; }
+.action-panel { margin: 32px 0; padding: 24px; border: 1px solid #a65a5c; background: #160608; }
+.action-panel label { display: block; color: #ead3b8; font-size: 12px; }
+.action-panel input, .action-panel textarea { display: block; width: 100%; min-height: 44px; margin-top: 5px; padding: 10px; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; }
+.action-panel textarea { min-height: 80px; resize: vertical; }
+.action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+.action-grid .wide { grid-column: 1 / -1; }
+.action-grid fieldset { padding: 16px; border: 1px solid #6e4541; }
+.action-grid fieldset label + label { margin-top: 12px; }
+.review { position: fixed; inset: 10vh max(20px, calc((100vw - 760px) / 2)); z-index: 10; max-height: 80vh; overflow: auto; padding: 28px; border: 2px solid #ff9a9b; background: #100405; box-shadow: 0 20px 100px #000; }
+.review dl { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 8px 16px; }
+.review dt { color: #d7bda1; }.review dd { margin: 0; overflow-wrap: anywhere; }.secondary { background: transparent; color: #ffebd2; }
+@media (max-width: 800px) { .detail-panel { inset: 66px 0 0; padding: 20px; } .detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .action-grid { grid-template-columns: 1fr; } .action-grid .wide { grid-column: auto; } .review { inset: 20px; } .review dl { grid-template-columns: 1fr; } }

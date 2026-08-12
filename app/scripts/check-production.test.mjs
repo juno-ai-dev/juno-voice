@@ -14,7 +14,7 @@ async function artifact(js = "console.log('read only')") {
   return root;
 }
 
-test("accepts a read-only artifact within explicit budgets", async () => {
+test("accepts an application artifact within explicit budgets", async () => {
   const root = await artifact();
   assert.deepEqual(await checkProduction(root), [
     "assets/app.css",
@@ -23,10 +23,6 @@ test("accepts a read-only artifact within explicit budgets", async () => {
   ]);
 });
 
-test("rejects signing capabilities even when minified", async () => {
-  const root = await artifact("x.SigningCosmWasmClient.createWithSigner()")
-  await assert.rejects(checkProduction(root), /forbidden wallet\/signing symbol/);
-});
 
 test("rejects an oversized bundle", async () => {
   const root = await artifact();

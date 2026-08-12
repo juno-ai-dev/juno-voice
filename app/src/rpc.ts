@@ -90,10 +90,21 @@ export const connectRpc: Connect = async (rpc) => {
       return height;
     },
     async getChainTimeNanos() {
-      const milliseconds = Date.parse((await status()).time);
-      if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
-        throw new Error("Malformed chain time response from RPC.");
-      return (BigInt(milliseconds) * 1_000_000n).toString();
+      const body = (await fetchJson("/block")) as {
+        result?: { block?: { header?: { time?: unknown } } };
+      };
+      const value = body.result?.block?.header?.time;
+      if (typeof value !== "string")
+        throw new Error("Malformed block time response from RPC.");
+      const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z$/.exec(value);
+      if (!match) throw new Error("Malformed block time response from RPC.");
+      const milliseconds = Date.parse(`${match[1]}Z`);
+      if (!Number.isSafeInteger(milliseconds))
+        throw new Error("Malformed block time response from RPC.");
+      return (
+        BigInt(milliseconds) * 1_000_000n +
+        BigInt((match[2] ?? "").padEnd(9, "0"))
+      ).toString();
     },
     async getContract(address) {
       const request = QueryContractInfoRequest.encode({ address }).finish();
