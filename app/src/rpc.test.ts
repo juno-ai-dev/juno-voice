@@ -34,9 +34,11 @@ describe("credential-free RPC adapter", () => {
           return jsonResponse({
             result: {
               node_info: { network: "juno-1" },
-              sync_info: { latest_block_height: "40682089" },
+              sync_info: { latest_block_height: "40682089", latest_block_time: "2026-08-12T06:00:00.123456789Z" },
             },
           });
+        if (url.pathname.endsWith("/block"))
+          return jsonResponse({ result: { block: { header: { time: "2026-08-12T06:00:00.123456789Z" } } } });
         const path = url.searchParams.get("path");
         if (path === '"/cosmwasm.wasm.v1.Query/ContractInfo"')
           return jsonResponse(
@@ -72,6 +74,7 @@ describe("credential-free RPC adapter", () => {
     const client = await connectRpc("https://rpc.example/juno");
     expect(await client.getChainId()).toBe("juno-1");
     expect(await client.getHeight()).toBe(40682089);
+    expect(await client.getChainTimeNanos()).toBe("1786514400123456789");
     expect(await client.getContract("juno1contract")).toEqual({
       address: "juno1contract",
       codeId: 5150,

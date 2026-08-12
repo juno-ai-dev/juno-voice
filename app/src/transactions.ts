@@ -1,5 +1,5 @@
 import { fromBech32 } from "@cosmjs/encoding";
-import { DEFAULT_BOUNTY_CONTRACT } from "./config";
+import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
 import type { WalletAuthorization, WalletSession } from "./wallet";
 
 export interface Coin { readonly denom: string; readonly amount: string }
@@ -145,6 +145,9 @@ function validJunoAddress(address: string, lengths: readonly number[]): boolean 
     return decoded.prefix === "juno" && lengths.includes(decoded.data.length);
   } catch { return false; }
 }
+const projectId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9-]{3,64}$/.test(value) && value !== "do-not-distribute";
+const metadataUri = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && new TextEncoder().encode(value).length <= 2_048;
+const account = (value: unknown): value is string => typeof value === "string" && validJunoAddress(value, [20]);
 function objectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return exactDataObject(value, keys);
 }
@@ -163,19 +166,36 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
     validAmount(body.expires_at, true) &&
     BigInt(body.expires_at as string) <= 18446744073709551615n && projectCandidate(body.project_candidate),
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
+  register_project: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest", "payout_address"]) &&
+    projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
+  update_pending_metadata: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest"]) &&
+    projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest),
+  propose_payout_address: (body) => objectWithExactKeys(body, ["project_id", "address"]) && projectId(body.project_id) && account(body.address),
+  cancel_payout_address_change: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
+  accept_payout_address: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
+  claim_registration_bond: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
+  retire: (body) => {
+    if (!objectWithExactKeys(body, ["project_id", "reason"]) || !projectId(body.project_id) || !objectWithExactKeys(body.reason, ["code", "note"])) return false;
+    return body.reason.code === "voluntary_retirement" && typeof body.reason.note === "string" && body.reason.note.trim().length > 0 && new TextEncoder().encode(body.reason.note).length <= 2_048;
+  },
 });
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
   safeCanonical(intent);
   if (intent.chainId !== "juno-1" || authorization.chainId !== intent.chainId)
     throw new TransactionSafetyError("wrong_chain", "Transaction and wallet must both target juno-1.");
   if (!validJunoAddress(authorization.address, [20]) || !validJunoAddress(intent.contract, [32]) ||
-    intent.contract !== DEFAULT_BOUNTY_CONTRACT || !Array.isArray(intent.funds) ||
-    intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]))
+    ![DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT].includes(intent.contract as never) || !Array.isArray(intent.funds))
     throw new TransactionSafetyError("invalid_transaction", "Invalid or unapproved contract or funds.");
   const keys = Object.keys(intent.executeMessage);
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
+  const requiresFunds = action === "create_bounty" || action === "contribute" || action === "register_project";
+  const bountyActions = action === "create_bounty" || action === "contribute";
+  if (intent.contract === DEFAULT_BOUNTY_CONTRACT ? !bountyActions : bountyActions)
+    throw new TransactionSafetyError("message_forbidden", "Execute action is not permitted for this contract.");
+  if (requiresFunds ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]) : intent.funds.length !== 0)
+    throw new TransactionSafetyError("invalid_transaction", "Invalid funds for this execute action.");
   if (!intent.expectedStateFingerprint || !Array.isArray(intent.consequences) || intent.consequences.length === 0 ||
     intent.consequences.some((item) => typeof item !== "string" || !item.trim()))
     throw new TransactionSafetyError("invalid_transaction", "Canonical state and explicit consequences are required.");

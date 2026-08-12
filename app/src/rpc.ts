@@ -39,14 +39,15 @@ export const connectRpc: Connect = async (rpc) => {
     const body = (await fetchJson("/status")) as {
       result?: {
         node_info?: { network?: unknown };
-        sync_info?: { latest_block_height?: unknown };
+        sync_info?: { latest_block_height?: unknown; latest_block_time?: unknown };
       };
     };
     const network = body.result?.node_info?.network;
     const height = body.result?.sync_info?.latest_block_height;
-    if (typeof network !== "string" || typeof height !== "string")
+    const time = body.result?.sync_info?.latest_block_time;
+    if (typeof network !== "string" || typeof height !== "string" || typeof time !== "string")
       throw new Error("Malformed status response from RPC.");
-    return { network, height };
+    return { network, height, time };
   };
   const abci = async (path: string, request: Uint8Array) => {
     const url = endpoint("/abci_query");
