@@ -6,12 +6,17 @@ import type { AppConfig } from "./config";
 import { Ledger } from "./Ledger";
 import { createRegistryDataSource, type RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
+import { createGaugeDataSource, type GaugeDataSource } from "./gauge";
+import type { GaugeTransactionFlow } from "./gaugeActions";
 
 const Registry = lazy(() =>
   import("./Registry").then((module) => ({ default: module.Registry })),
 );
+const GaugeVoting = lazy(() =>
+  import("./GaugeVoting").then((module) => ({ default: module.GaugeVoting })),
+);
 
-type TransactionAccess = BountyTransactionAccess & RegistryTransactionFlow;
+type TransactionAccess = BountyTransactionAccess & RegistryTransactionFlow & GaugeTransactionFlow;
 
 export function App({
   source: supplied,
@@ -19,6 +24,8 @@ export function App({
   config,
   transactions,
   registryTransactionFlow,
+  gaugeSource: suppliedGauge,
+  gaugeTransactionFlow,
   walletAddress,
 }: {
   source?: VoiceDataSource;
@@ -26,6 +33,8 @@ export function App({
   config: AppConfig;
   transactions?: BountyTransactionAccess;
   registryTransactionFlow?: RegistryTransactionFlow;
+  gaugeSource?: GaugeDataSource;
+  gaugeTransactionFlow?: GaugeTransactionFlow;
   walletAddress?: string;
 }) {
   const base = import.meta.env.BASE_URL;
@@ -37,20 +46,25 @@ export function App({
     () => suppliedRegistry ?? createRegistryDataSource(config),
     [suppliedRegistry, config],
   );
+  const gaugeSource = useMemo(
+    () => suppliedGauge ?? createGaugeDataSource(config),
+    [suppliedGauge, config],
+  );
   const productionTransactions = useMemo<TransactionAccess | undefined>(() => {
-    if (transactions && registryTransactionFlow) return undefined;
+    if (transactions && registryTransactionFlow && gaugeTransactionFlow) return undefined;
     const browser = window as Window & { keplr?: unknown; leap?: unknown };
     const kind = browser.keplr ? "keplr" : browser.leap ? "leap" : null;
     if (!kind) return undefined;
     try {
-      return createBrowserTransactionAccess(config, source, kind, registrySource);
+      return createBrowserTransactionAccess(config, source, kind, registrySource, gaugeSource);
     } catch {
       return undefined;
     }
-  }, [transactions, registryTransactionFlow, config, source, registrySource]);
+  }, [transactions, registryTransactionFlow, gaugeTransactionFlow, config, source, registrySource, gaugeSource]);
   const bountyAccess = transactions ?? productionTransactions;
   const registryAccess = registryTransactionFlow ?? productionTransactions;
-  const [view, setView] = useState<"bounties" | "projects">("bounties");
+  const gaugeAccess = gaugeTransactionFlow ?? productionTransactions;
+  const [view, setView] = useState<"bounties" | "projects" | "gauge">("bounties");
 
   return (
     <div className="shell juno-grid">
@@ -62,13 +76,18 @@ export function App({
             <span>VOICE</span>
           </a>
           <nav aria-label="Primary">
+            <button className={view === "gauge" ? "nav-active" : ""} onClick={() => setView("gauge")}>Gauge</button>
             <button className={view === "projects" ? "nav-active" : ""} onClick={() => setView("projects")}>Projects</button>
             <button className={view === "bounties" ? "nav-active" : ""} onClick={() => setView("bounties")}>Bounties</button>
           </nav>
           <span className="mainnet">JUNO-1 · PUBLIC LEDGER</span>
         </div>
       </header>
-      {view === "projects" ? (
+      {view === "gauge" ? (
+        <Suspense fallback={<main><p>Loading gauge…</p></main>}>
+          <GaugeVoting source={gaugeSource} config={config} transactionFlow={gaugeAccess} sender={walletAddress} />
+        </Suspense>
+      ) : view === "projects" ? (
         <Suspense fallback={<main><p>Loading project registry…</p></main>}>
           <Registry source={registrySource} config={config} transactionFlow={registryAccess} sender={walletAddress} />
         </Suspense>

@@ -1,18 +1,6 @@
-import type { AppConfig } from "../config";
+import { loadConfig, type AppConfig } from "../config";
 import type { Bounty, LedgerData } from "../types";
-export const config: AppConfig = {
-  chainId: "juno-1",
-  contract: "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw",
-  rpc: "https://rpc.example",
-  explorer: "https://www.mintscan.io/juno",
-  codeId: 5150,
-  codeChecksum:
-    "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1",
-  registryContract: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n",
-  registryCodeId: 5151,
-  registryCodeChecksum: "1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf",
-  releaseCommit: "local-uncommitted",
-};
+export const config: AppConfig = loadConfig({ VITE_RPC_URL: "https://rpc.example" });
 export const bounty: Bounty = {
   id: 1,
   creator: "juno1creatorxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",

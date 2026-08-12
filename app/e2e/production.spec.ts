@@ -1,10 +1,13 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
+  QueryCodeRequest,
   QueryCodeResponse,
+  QueryContractInfoRequest,
   QueryContractInfoResponse,
   QuerySmartContractStateRequest,
   QuerySmartContractStateResponse,
 } from "cosmjs-types/cosmwasm/wasm/v1/query.js";
+import { QueryBalanceResponse } from "cosmjs-types/cosmos/bank/v1beta1/query.js";
 import fixture from "../src/test/live-mainnet-empty.json" with { type: "json" };
 
 const rpc = "https://rpc.cosmos.directory/juno";
@@ -12,6 +15,13 @@ const projectPath = "/juno-voice/";
 const releaseCommit = process.env.PLAYWRIGHT_RELEASE_COMMIT;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const deployments = {
+  "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw": [5150, "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1"],
+  "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n": [5151, "1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf"],
+  "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg": [5152, "bc8b049a03496d3383376a469ccb581996238003532083895f68d4a02990a2da"],
+  "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2": [5153, "2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64"],
+  "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn": [5154, "524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f"],
+} as const;
 
 async function gotoDeployableArtifact(page: Page) {
   const criticalTypes = ["script", "stylesheet", "image"];
@@ -76,34 +86,53 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
     }
     const path = url.searchParams.get("path") ?? "";
     if (path.includes("ContractInfo")) {
+      const hex = (url.searchParams.get("data") ?? "0x").replace(/^0x/, "");
+      const request = QueryContractInfoRequest.decode(Buffer.from(hex, "hex"));
+      const deployment = deployments[request.address as keyof typeof deployments] ?? [fixture.provenance.code_id, fixture.provenance.checksum];
       const bytes = QueryContractInfoResponse.encode(
         QueryContractInfoResponse.fromPartial({
-          address: fixture.provenance.contract_address,
-          contractInfo: { codeId: BigInt(fixture.provenance.code_id) },
+          address: request.address,
+          contractInfo: { codeId: BigInt(deployment[0]) },
         }),
       ).finish();
       await fulfill(route, result(bytes));
       return;
     }
     if (path.endsWith("/Code\"")) {
+      const hex = (url.searchParams.get("data") ?? "0x").replace(/^0x/, "");
+      const request = QueryCodeRequest.decode(Buffer.from(hex, "hex"));
+      const checksum = Object.values(deployments).find(([id]) => BigInt(id) === request.codeId)?.[1] ?? fixture.provenance.checksum;
       const bytes = QueryCodeResponse.encode(
         QueryCodeResponse.fromPartial({
           codeInfo: {
-            codeId: BigInt(fixture.provenance.code_id),
-            dataHash: Buffer.from(fixture.provenance.checksum, "hex"),
+            codeId: request.codeId,
+            dataHash: Buffer.from(checksum, "hex"),
           },
         }),
       ).finish();
       await fulfill(route, result(bytes));
       return;
     }
+    if (path.includes("cosmos.bank.v1beta1.Query/Balance")) {
+      const bytes = QueryBalanceResponse.encode({ balance: { denom: "ujuno", amount: "0" } }).finish();
+      await fulfill(route, result(bytes)); return;
+    }
     if (path.includes("SmartContractState")) {
       const hex = (url.searchParams.get("data") ?? "0x").replace(/^0x/, "");
       const request = QuerySmartContractStateRequest.decode(Buffer.from(hex, "hex"));
       const query = JSON.parse(decoder.decode(request.queryData)) as Record<string, unknown>;
-      const key = Object.keys(query)[0] as keyof typeof fixture.responses;
+      const key = Object.keys(query)[0];
+      let response: unknown = key in fixture.responses ? fixture.responses[key as keyof typeof fixture.responses] : undefined;
+      if (request.address === "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg") response = key === "voting_module" ? "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2" : [{ address: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", prefix: "A", status: "enabled" }];
+      if (request.address === "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2") response = "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg";
+      if (request.address === "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n") response = key === "pause" ? { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null } : { options: ["do-not-distribute"] };
+      if (request.address === "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn") {
+        if (key === "config") response = { owner: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", dao_core: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", voting_powers: "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2", hook_caller: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", power_source: { epoch_snapshot: { guardian: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } } };
+        if (key === "gauge") response = { id: 0, title: "Hack Juno", adapter: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n", epoch_size: 604800, min_percent_selected: "0.01", max_options_selected: 20, max_available_percentage: "0.2", is_stopped: false, next_epoch: 0, reset: null, snapshot_policy: { min_turnout_bps: 1000, epoch_budget: "100000000", denom: "ujuno" }, current_epoch: null };
+        if (key === "list_epochs") response = { epochs: [] };
+      }
       const bytes = QuerySmartContractStateResponse.encode({
-        data: encoder.encode(JSON.stringify(fixture.responses[key])),
+        data: encoder.encode(JSON.stringify(response)),
       }).finish();
       await fulfill(route, result(bytes));
       return;
@@ -157,4 +186,14 @@ test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
   await page.reload();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   expect(observed.requests()).toBeGreaterThan(first);
+});
+
+test("gauge route verifies the full deployment and renders live-empty safety semantics", async ({ page }) => {
+  await mockMainnet(page);
+  await gotoDeployableArtifact(page);
+  await page.getByRole("button", { name: "Gauge" }).click();
+  await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
+  await expect(page.getByText("No epoch has opened")).toBeVisible();
+  await expect(page.getByText(/Nothing shown here implies automatic rollover/)).toBeVisible();
+  await expect(page.getByText("No public gauge action is eligible at the observed canonical block time and state.")).toBeVisible();
 });

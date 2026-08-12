@@ -7,6 +7,7 @@ import {
   QuerySmartContractStateRequest,
   QuerySmartContractStateResponse,
 } from "cosmjs-types/cosmwasm/wasm/v1/query";
+import { QueryBalanceRequest, QueryBalanceResponse } from "cosmjs-types/cosmos/bank/v1beta1/query";
 
 export interface RpcClient {
   queryContractSmart(address: string, query: object): Promise<unknown>;
@@ -15,6 +16,7 @@ export interface RpcClient {
   getChainTimeNanos(): Promise<string>;
   getContract(address: string): Promise<{ address: string; codeId: number }>;
   getCodeDetails(codeId: number): Promise<{ checksum: string }>;
+  getBalance?(address: string, denom: string): Promise<string>;
   disconnect(): void;
 }
 
@@ -126,6 +128,16 @@ export const connectRpc: Connect = async (rpc) => {
       if (!response.codeInfo)
         throw new Error("Malformed code response from RPC.");
       return { checksum: toHex(response.codeInfo.dataHash) };
+    },
+    async getBalance(address, denom) {
+      const request = QueryBalanceRequest.encode({ address, denom }).finish();
+      const response = QueryBalanceResponse.decode(
+        await abci("/cosmos.bank.v1beta1.Query/Balance", request),
+      );
+      const amount = response.balance?.amount;
+      if (response.balance?.denom !== denom || typeof amount !== "string" || !/^(0|[1-9]\d*)$/.test(amount))
+        throw new Error("Malformed bank balance response from RPC.");
+      return amount;
     },
     disconnect() {},
   };

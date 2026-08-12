@@ -8,7 +8,7 @@ import {
   type TransactionDependencies,
   type TransactionIntent,
 } from "./transactions";
-import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
+import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_GAUGE_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
 import { WalletSession, type WalletConnector } from "./wallet";
 
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
@@ -116,6 +116,25 @@ describe("exact pre-sign transaction review", () => {
 });
 
 describe("address and centrally-owned execute policy", () => {
+  it.each([
+    ["open_epoch", { gauge: 0 }],
+    ["place_votes", { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }] }],
+    ["place_votes", { gauge: 0, votes: null }],
+    ["execute", { gauge: 0 }],
+  ])("allows exact gauge action %s only on the pinned gauge", async (action, body) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: DEFAULT_GAUGE_CONTRACT, executeMessage: { [action]: body }, funds: [] })).resolves.toMatchObject({ contract: DEFAULT_GAUGE_CONTRACT, funds: [] });
+  });
+  it.each([
+    ["wrong gauge", { place_votes: { gauge: 1, votes: [{ option: "alpha", weight: "1" }] } }],
+    ["duplicate option", { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }, { option: "alpha", weight: "0.5" }] } }],
+    ["precision", { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.0000000000000000001" }] } }],
+    ["total", { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.6" }, { option: "beta", weight: "0.5" }] } }],
+    ["empty ballot", { place_votes: { gauge: 0, votes: [] } }],
+  ])("rejects malformed gauge schema: %s", async (_, executeMessage) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: DEFAULT_GAUGE_CONTRACT, executeMessage, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
+  });
   it.each([
     ["register_project", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender }, [{ denom: "ujuno", amount: "1000000" }]],
     ["update_pending_metadata", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}` }, []],
