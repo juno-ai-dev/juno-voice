@@ -74,7 +74,7 @@ specified in:
 - [Product behavior](docs/design/PRODUCT_DESIGN.md)
 - [Architecture decisions](docs/architecture/decisions/)
 
-The checked-in web application and `contracts/juno-voice` are pre-release prototypes. They are not the v1 protocol specification and are not migration inputs.
+`contracts/juno-voice` is a pre-release prototype and is not the v1 protocol specification or a migration input. The checked-in `app/` is the read-only interface for the verified mainnet bounty deployment described below.
 
 ## Backend composition
 
@@ -121,7 +121,7 @@ git submodule update --init --recursive
 ## Repository shape
 
 ```text
-app/                    pre-release interface prototype
+app/                    read-only verified mainnet bounty ledger
 contracts/              Juno Voice-owned CosmWasm contracts
 deps/dao-contracts/     exact upstream DAO DAO source pin (submodule)
 schema/                 canonical v1 prototype-contract schema set
@@ -135,25 +135,29 @@ release/                release evidence, readiness, and decision gates
 contracts/*/schema/     canonical v1 owned-contract schemas
 ```
 
-## Prototype application
+## Read-only mainnet application
 
-The current `app/` reads a pre-release `uni-7` prototype contract directly and has no sample-data fallback. It is retained as implementation reference while the v1 backend is built. Node.js 22 and the lockfile are authoritative.
+`app/` is the read-only Juno Voice bounty ledger. It is pinned to chain `juno-1`, bounty contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, and the verified Wasm checksum above. Runtime reads go directly to the configured HTTPS RPC. Invalid provenance blocks rendering, RPC failures remain visible, and no sample-data, wallet, signing, or transaction fallback is included.
+
+Node.js 22 and `app/package-lock.json` are authoritative. The local equivalent of the non-browser release gates is:
 
 ```sh
 cd app
 npm ci
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run verify
+npx playwright install chromium # once per machine
+npm run test:e2e
+# From the repository root, confirm generated/tracked inputs remain clean:
+git diff --exit-code
 ```
 
-Pinned prototype deployment:
+`npm run verify` runs lint, typecheck, unit/component/accessibility and production-policy tests, both a full dependency-tree audit and a production-only dependency audit at the high-severity threshold, the Vite build, bundle budgets, and forbidden signing-symbol checks. Browser smoke builds the deployable `/juno-voice/` Pages artifact with the exact checked-out 40-character commit, verifies its critical script, stylesheet, and image requests, and uses deterministic intercepted RPC responses to exercise the configured `juno-1` provenance, authoritative live-empty, freshness/staleness, explicit error/retry, mismatch, and project-path hard-refresh behavior; it is not evidence that a public RPC or deployment is currently available.
 
-- Chain ID: `uni-7`
-- Contract: `juno1t7ajx85pkw8e0yl8vgnlxvnlq4yf0h6a3eahuystnf6e9jfhwvvsv4jcel`
-- Code ID: `85`
-- Code checksum: `fd264e53ae9af64231b8e62aff0da099e0ff21ba38d887c7a96d9c4ef755a96e`
+### GitHub Pages deployment
+
+`.github/workflows/frontend.yml` builds on pull requests and `main`. Only a successful **push to `main`** can package and deploy a Pages artifact. The artifact is rebuilt with base path `/juno-voice/` and embeds the exact 40-character release commit; the interface displays that commit alongside chain, contract, code, observation height, and freshness. Actions are pinned to immutable commits, PR jobs have read-only permissions, and the deploy job alone receives Pages/OIDC write permissions through the `github-pages` environment.
+
+The repository does **not** claim a public application URL is live. A maintainer must configure Pages to use GitHub Actions, require reviewed changes on `main`, and (if desired) add environment protection. After the first eligible `main` run, verify the URL reported by the deploy job, its hard-refresh behavior at the project path, and a live direct-RPC observation before announcing it as production-ready.
 
 ## License
 
