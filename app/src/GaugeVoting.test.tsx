@@ -86,17 +86,78 @@ describe("gauge voting UI", () => {
     expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
   });
 
-  it("keeps write exceptions fail-closed across navigation", async () => {
-    const transactionFlow = flow(); vi.mocked(transactionFlow.submit).mockResolvedValueOnce({ status: "unknown" });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+  it("prewrites exact hashless evidence before an unresolved submit and restores its disconnected latest-pointer lock", async () => {
+    const transactionFlow = flow();
+    vi.mocked(transactionFlow.submit).mockImplementationOnce(() => new Promise(() => {}));
     const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
     await prepareAndSubmit(transactionFlow);
+
+    view.unmount();
+    render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
+    expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
+    expect(screen.getByText(/no transaction hash is available/i)).toHaveTextContent(/do not submit again/i);
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+    expect(await screen.findByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Prepare ballot removal" })).toBeDisabled();
+  });
+
+  it("prevents submit when the uncertainty prewrite throws and stays fail-closed across navigation", async () => {
+    const transactionFlow = flow();
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+    const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Prepare ballot revision" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Recheck state, then sign" }));
+    expect(transactionFlow.submit).not.toHaveBeenCalled();
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     view.unmount();
     render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     expect(await screen.findByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
+  });
+
+  it.each(["synchronous", "rejected promise"])("preserves the prewritten hashless lock when submit throws via a %s exception", async (failure) => {
+    const transactionFlow = flow();
+    const submissionError = new Error("wallet transport failed after invocation");
+    if (failure === "synchronous") vi.mocked(transactionFlow.submit).mockImplementationOnce(() => { throw submissionError; });
+    else vi.mocked(transactionFlow.submit).mockRejectedValueOnce(submissionError);
+    const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await prepareAndSubmit(transactionFlow);
+    expect(await screen.findByRole("alert")).toHaveTextContent(submissionError.message);
+    expect(screen.getByText(/Action: Place votes · Epoch 2/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+
+    view.unmount();
+    render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
+    expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
+    expect(screen.getByText(/no transaction hash is available/i)).toHaveTextContent(/do not submit again/i);
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+    expect(await screen.findByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Prepare ballot removal" })).toBeDisabled();
+  });
+
+  it("retains a malformed fail-closed lock when returned hash evidence cannot replace the prewrite", async () => {
+    const transactionFlow = flow();
+    vi.mocked(transactionFlow.submit).mockResolvedValueOnce({ status: "pending", txHash: "GAUGE_KNOWN", explorerUrl: "https://www.mintscan.io/juno/tx/GAUGE_KNOWN" });
+    const setItem = Storage.prototype.setItem;
+    let writes = 0;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, ...args) {
+      writes += 1;
+      if (writes === 3) throw new Error("upgrade unavailable");
+      return setItem.apply(this, args);
+    });
+    const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await prepareAndSubmit(transactionFlow);
+    expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
+    expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
+
+    view.unmount();
+    render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
   });
 
   it.each(["malformed", "read exception"])("keeps %s restored evidence fail-closed across remount", async (failure) => {
