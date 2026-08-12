@@ -39,6 +39,8 @@ jobs:
         run: npm run typecheck
       - name: Unit, component, accessibility, and policy tests
         run: npm test
+      - name: Full dependency tree audit
+        run: npm run audit:all
       - name: Production dependency audit
         run: npm run audit:production
       - name: Build deployable Pages artifact

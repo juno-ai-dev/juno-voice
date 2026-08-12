@@ -17,9 +17,10 @@
     "test:e2e": "playwright test",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "audit:all": "npm audit --audit-level=high",
     "audit:production": "npm audit --omit=dev --audit-level=high",
     "check:production": "node scripts/check-production.mjs dist",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run audit:production && npm run build && npm run check:production"
+    "verify": "npm run lint && npm run typecheck && npm test && npm run audit:all && npm run audit:production && npm run build && npm run check:production"
   },
   "dependencies": {
     "@cosmjs/encoding": "0.37.0",

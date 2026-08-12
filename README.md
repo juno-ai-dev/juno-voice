@@ -151,7 +151,7 @@ npm run test:e2e
 git diff --exit-code
 ```
 
-`npm run verify` runs lint, typecheck, unit/component/accessibility and production-policy tests, a production-only dependency audit, the Vite build, bundle budgets, and forbidden signing-symbol checks. Browser smoke uses deterministic intercepted RPC responses to exercise the configured `juno-1` provenance, authoritative live-empty, freshness/staleness, explicit error/retry, mismatch, and hard-refresh behavior; it is not evidence that a public RPC or deployment is currently available.
+`npm run verify` runs lint, typecheck, unit/component/accessibility and production-policy tests, both a full dependency-tree audit and a production-only dependency audit at the high-severity threshold, the Vite build, bundle budgets, and forbidden signing-symbol checks. Browser smoke builds the deployable `/juno-voice/` Pages artifact with the exact checked-out 40-character commit, verifies its critical script, stylesheet, and image requests, and uses deterministic intercepted RPC responses to exercise the configured `juno-1` provenance, authoritative live-empty, freshness/staleness, explicit error/retry, mismatch, and project-path hard-refresh behavior; it is not evidence that a public RPC or deployment is currently available.
 
 ### GitHub Pages deployment
 
