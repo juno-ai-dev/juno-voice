@@ -195,5 +195,6 @@ test("gauge route verifies the full deployment and renders live-empty safety sem
   await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
   await expect(page.getByText("No epoch has opened")).toBeVisible();
   await expect(page.getByText(/Nothing shown here implies automatic rollover/)).toBeVisible();
-  await expect(page.getByText("No public gauge action is eligible at the observed canonical block time and state.")).toBeVisible();
+  await expect(page.getByText(/transaction support is unavailable in this browser/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Prepare open epoch" })).toHaveCount(0);
 });
