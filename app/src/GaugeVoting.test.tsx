@@ -40,6 +40,17 @@ describe("gauge voting UI", () => {
     expect(source.loadActionContext).toHaveBeenCalledWith(voter);
     expect(transactionFlow.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { place_votes: { gauge: 0, votes: null } }, funds: [] }));
   });
+  it("states the distinct gauge-stop and adapter-stop execution semantics", async () => {
+    const gaugeStopped = { ...gaugeData, gauge: { ...gaugeData.gauge, isStopped: true } };
+    const { unmount } = render(<GaugeVoting source={{ ...source, loadGauge: vi.fn(async () => gaugeStopped) }} config={config} sender={voter} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Opening, voting, and all epoch execution are disabled");
+    unmount();
+    const adapterStopped = { ...gaugeData, adapterStopped: true };
+    render(<GaugeVoting source={{ ...source, loadGauge: vi.fn(async () => adapterStopped) }} config={config} sender={voter} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("distribution-producing execution");
+    expect(alert).toHaveTextContent("No-turnout or no-candidate terminalization may remain available");
+  });
   it("has no WCAG A/AA violations in the populated responsive structure", async () => {
     const { container } = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={flow()} />);
     await screen.findByRole("heading", { name: "Weighted allocation" });

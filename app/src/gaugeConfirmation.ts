@@ -1,4 +1,4 @@
-import { canonicalDecimal, GAUGE_ID, type Ballot, type GaugeActionContext, type GaugeVote } from "./gauge";
+import { canonicalDecimal, DECIMAL_SCALE, GAUGE_ID, parseDecimal18, type Ballot, type GaugeActionContext, type GaugeVote } from "./gauge";
 import type { GaugeAction } from "./gaugeActions";
 import type { Coin } from "./transactions";
 
@@ -6,6 +6,23 @@ export interface GaugeEvent { type: string; attributes: readonly { key: string; 
 const attribute = (event: GaugeEvent, key: string) => event.attributes.find((item) => item.key === key)?.value;
 const equalVotes = (left: readonly GaugeVote[], right: readonly GaugeVote[]) =>
   left.length === right.length && left.every((vote, index) => vote.option === right[index]?.option && canonicalDecimal(vote.weight) === canonicalDecimal(right[index]?.weight ?? ""));
+const allocatedPower = (power: string, votes: readonly GaugeVote[]) => votes.reduce(
+  (total, vote) => total + BigInt(power) * parseDecimal18(vote.weight) / DECIMAL_SCALE, 0n,
+);
+const chainSecond = (x: GaugeActionContext) => BigInt(x.data.chainTimeNanos) / 1_000_000_000n;
+const exactVoteEvent = (event: GaugeEvent, context: GaugeActionContext, power: string, optionCount: number) => {
+  const epoch = context.data.current;
+  if (!epoch || attribute(event, "snapshot_height") !== String(epoch.snapshotHeight) ||
+    attribute(event, "voting_power") !== power || attribute(event, "option_count") !== String(optionCount) ||
+    attribute(event, "participating_power") !== epoch.participatingPower || attribute(event, "total_cast") !== epoch.totalCast)
+    throw new Error();
+};
+const exactEpochTransition = (before: GaugeActionContext, refreshed: GaugeActionContext, oldAllocated: bigint, newAllocated: bigint, participationDelta: bigint, voterDelta: number) => {
+  const prior = before.data.current, next = refreshed.data.current;
+  if (!prior || !next || BigInt(next.totalCast) !== BigInt(prior.totalCast) - oldAllocated + newAllocated ||
+    BigInt(next.participatingPower) !== BigInt(prior.participatingPower) + participationDelta || next.voterCount !== prior.voterCount + voterDelta)
+    throw new Error("transition");
+};
 const messageBody = (message: Readonly<Record<string, unknown>>, key: string) => {
   const body = message[key]; if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Canonical gauge message is unavailable.");
   return body as Record<string, unknown>;
@@ -36,11 +53,29 @@ export function confirmGaugeMutation({ action, events, refreshed, before, sender
   }
   const body = messageBody(executeMessage, "place_votes"), votes = body.votes;
   if (action === "remove_votes") {
-    if (votes !== null || refreshed.data.ballot !== null || attribute(event, "option_count") !== "0") throw new Error("Ballot removal was not canonically confirmed.");
+    const previous = before.data.ballot;
+    if (votes !== null || !previous || refreshed.data.ballot !== null || refreshed.data.votingPower?.power !== previous.power) throw new Error("Ballot removal was not canonically confirmed.");
+    exactVoteEvent(event, refreshed, previous.power, 0);
+    exactEpochTransition(before, refreshed, allocatedPower(previous.power, previous.votes), 0n, -BigInt(previous.power), -1);
     return;
   }
   if (!Array.isArray(votes)) throw new Error("Reviewed preference ballot is unavailable.");
   const reviewed = votes as GaugeVote[], ballot = refreshed.data.ballot as Ballot | null;
-  if (!ballot || ballot.voter !== sender || !equalVotes(reviewed, ballot.votes) || attribute(event, "option_count") !== String(reviewed.length))
+  if (!ballot || ballot.voter !== sender || !equalVotes(reviewed, ballot.votes))
     throw new Error("Refreshed ballot did not semantically match the reviewed preferences.");
+  const previous = before.data.ballot;
+  const beforeSecond = chainSecond(before), refreshedSecond = chainSecond(refreshed), revisedAt = BigInt(ballot.revisedAt);
+  if (revisedAt < beforeSecond || revisedAt > refreshedSecond) throw new Error("time");
+  if (previous) {
+    if (ballot.voter !== previous.voter || ballot.power !== previous.power || ballot.power !== refreshed.data.votingPower?.power || ballot.castAt !== previous.castAt ||
+      ballot.receiptIndex !== previous.receiptIndex || ballot.revisions !== previous.revisions + 1 || ballot.revisedAt < previous.revisedAt ||
+      (beforeSecond > BigInt(previous.revisedAt) && ballot.revisedAt <= previous.revisedAt))
+      throw new Error("revision");
+    exactEpochTransition(before, refreshed, allocatedPower(previous.power, previous.votes), allocatedPower(ballot.power, ballot.votes), 0n, 0);
+  } else {
+    if (ballot.power !== refreshed.data.votingPower?.power || ballot.revisions !== 0 || ballot.receiptIndex < 1 || ballot.castAt !== ballot.revisedAt)
+      throw new Error("first placement");
+    exactEpochTransition(before, refreshed, 0n, allocatedPower(ballot.power, ballot.votes), BigInt(ballot.power), 1);
+  }
+  exactVoteEvent(event, refreshed, ballot.power, reviewed.length);
 }

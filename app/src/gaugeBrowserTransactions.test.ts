@@ -8,10 +8,11 @@ import { gaugeContext, gaugeData, voter } from "./test/gaugeFixtures";
 
 const cosmwasm = vi.hoisted(() => ({ connectWithSigner: vi.fn() }));
 vi.mock("@cosmjs/cosmwasm-stargate", () => ({ SigningCosmWasmClient: { connectWithSigner: cosmwasm.connectWithSigner } }));
-const after = { ...gaugeContext, data: { ...gaugeData, ballot: { ...gaugeData.ballot!, revisedAt: 2300, revisions: 2 } }, fingerprint: "gauge:after" };
+const after = { ...gaugeContext, data: { ...gaugeData, ballot: { ...gaugeData.ballot!, revisedAt: 2500, revisions: 2 } }, fingerprint: "gauge:after" };
 const intent = buildGaugeIntent(config, voter, gaugeContext, "place_votes", [{ option: "alpha", weight: "0.5" }]);
 const success = { transactionHash: "GAUGE_HASH", height: 40_000_101, gasWanted: 1n, gasUsed: 1n, events: [{ type: "wasm", attributes: [
   { key: "action", value: "place_snapshot_vote" }, { key: "sender", value: voter }, { key: "gauge_id", value: "0" }, { key: "epoch_id", value: "2" }, { key: "option_count", value: "1" },
+  { key: "snapshot_height", value: "40000002" }, { key: "voting_power", value: "100" }, { key: "participating_power", value: "500" }, { key: "total_cast", value: "400" },
 ] }] };
 
 function setup() {
@@ -38,6 +39,12 @@ describe("production gauge browser transaction adapter", () => {
     fixture.loadActionContext.mockReset().mockResolvedValueOnce(gaugeContext).mockRejectedValueOnce(new Error("RPC unavailable"));
     await expect(fixture.access.submit(review)).resolves.toEqual({ status: "unknown", txHash: "GAUGE_HASH", explorerUrl: "https://www.mintscan.io/juno/tx/GAUGE_HASH" });
     await expect(fixture.access.submit(review)).rejects.toThrow("no longer available");
+    expect(fixture.signing.execute).toHaveBeenCalledTimes(1);
+  });
+  it("preserves the known hash when refreshed same-preference ballot state is stale", async () => {
+    const fixture = setup(); await fixture.access.connect(); const review = await fixture.access.prepare(intent);
+    fixture.loadActionContext.mockReset().mockResolvedValue(gaugeContext);
+    await expect(fixture.access.submit(review)).resolves.toEqual({ status: "unknown", txHash: "GAUGE_HASH", explorerUrl: "https://www.mintscan.io/juno/tx/GAUGE_HASH" });
     expect(fixture.signing.execute).toHaveBeenCalledTimes(1);
   });
 });
