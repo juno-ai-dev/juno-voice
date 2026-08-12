@@ -1,5 +1,28 @@
 # Release evidence
 
+## Current mainnet application release
+
+The operational checklist for the current public mainnet application is
+[`docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
+It records the production URL, deployed identities and checksums, dynamic web
+commit and funding checkpoints, bounded user trial, explicit approval boundary,
+pending/unknown transaction and RPC recovery, stop criteria, rollback, support
+triage, and final evidence packet.
+
+The Program Vault must be treated as unfunded unless a fresh authoritative
+`juno-1` query proves otherwise; the 2026-08-12 read-only observation was
+`0 ujuno`. Issue #37 funding and epoch rehearsal are not complete. Agent funds
+must not be used. Proposal preparation, proposal submission, deposit, signing,
+broadcast, and every follow-up transaction require separate approvals. Release
+documentation and read-only evidence do not authorize any of those actions.
+
+## Historical testnet evidence tooling
+
+The remainder of this document describes the earlier exact-artifact `uni-7`
+evidence packet and remains as historical tooling documentation. It does not
+describe the current product deployment and does not establish current mainnet
+funding, availability, or epoch rehearsal.
+
 `REQUIREMENTS_TRACEABILITY.md` maps each goal workstream and hard work bound to
 its direct test or external completion gate. `READINESS_AUDIT.md` is the concise
 point-in-time status summary.

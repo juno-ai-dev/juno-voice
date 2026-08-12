@@ -1,6 +1,22 @@
 # Release runbook
 
-## Candidate construction
+## Current public application
+
+For the deployed `juno-1` product, use the
+[mainnet user-trial and release runbook](../../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
+Its per-release record is authoritative for the exact production URL and web
+commit, deployed contracts/checksums, live funding checkpoint, limitations,
+approval gates, support recovery, stop conditions, and web rollback. The
+Program Vault remains unfunded unless a fresh authoritative query proves
+otherwise; no issue #37 funding or epoch rehearsal is claimed complete.
+
+## Historical candidate construction
+
+The candidate/evidence process below documents the earlier testnet release
+pipeline. References to `uni-7`, canaries, and prototype exclusion are retained
+as history, not as claims about the current mainnet application.
+
+### Candidate construction
 
 From a clean checkout with a clean, accepted submodule pin, run
 `scripts/build-release.sh`. It clones the repository recursively twice, checks
@@ -14,7 +30,7 @@ Review `build-tools.txt`, `build-provenance.txt`, sizes, checksums, and
 dirty source, gitlink mismatch, unexpected export/capability, or validator
 failure rejects the candidate.
 
-## Evidence gates
+### Evidence gates
 
 A testnet release candidate requires all of the following bound to the exact
 build and deployment config:
@@ -51,7 +67,7 @@ scenario, snapshot, canary, rehearsal, or runbook evidence unbound. Preparation
 first runs the complete semantic gate with only the not-yet-created decision
 omitted, so an invalid candidate never reaches the declaration/authorization step.
 
-## Authorization boundary
+### Authorization boundary
 
 The resulting packet authorizes, at most, the reviewed public-testnet/canary
 scope stated in its decision record. Mainnet upload, live admin assignment,
