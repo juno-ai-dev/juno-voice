@@ -21,6 +21,8 @@ const fmt = (amount: string) => {
   return `${whole.toLocaleString()}${fraction ? `.${fraction}` : ""} JUNO`;
 };
 const compact = (v: string) => `${v.slice(0, 12)}…${v.slice(-6)}`;
+const timestampDate = (nanoseconds: string) =>
+  new Date(Number(BigInt(nanoseconds) / 1_000_000n));
 export function Ledger({
   source,
   config,
@@ -261,12 +263,8 @@ function BountyRow({ bounty: b }: { bounty: Bounty }) {
       </div>
       <div>
         <small>Expires</small>
-        <time
-          dateTime={new Date(
-            Number(BigInt(b.expires_at) * 1000n),
-          ).toISOString()}
-        >
-          {new Date(Number(BigInt(b.expires_at) * 1000n)).toLocaleDateString()}
+        <time dateTime={timestampDate(b.expires_at).toISOString()}>
+          {timestampDate(b.expires_at).toLocaleDateString()}
         </time>
       </div>
     </article>

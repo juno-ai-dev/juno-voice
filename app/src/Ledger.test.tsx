@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Ledger } from "./Ledger";
@@ -7,6 +7,27 @@ const source = (value = ledger) => ({
   loadLedger: vi.fn().mockResolvedValue(value),
 });
 describe("read-only bounty ledger states", () => {
+  it("marks a fresh observation stale while the page remains open", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <Ledger
+          config={config}
+          source={source({ ...ledger, refreshedAt: new Date(Date.now()) })}
+        />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(
+        screen.getByText("Fresh direct-RPC observation"),
+      ).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(60_002));
+      expect(screen.getByText(/Stale/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("renders loading, mainnet provenance, health, economics, and a bounty", async () => {
     let done!: (v: typeof ledger) => void;
     render(
@@ -32,6 +53,10 @@ describe("read-only bounty ledger states", () => {
     expect(screen.getByText("Fully backed")).toBeInTheDocument();
     expect(screen.getAllByText("1 JUNO").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(document.querySelector("time")).toHaveAttribute(
+      "datetime",
+      "2027-01-15T08:00:00.000Z",
+    );
   });
   it("shows authoritative empty state without samples", async () => {
     render(

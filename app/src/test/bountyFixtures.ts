@@ -39,8 +39,8 @@ export const bounty: Bounty = {
   refunded_amount: "0",
   paid_at: null,
   graduated_at: null,
-  created_at: "1700000000",
-  expires_at: "1800000000",
+  created_at: "1700000000000000000",
+  expires_at: "1800000000000000000",
   history_count: 1,
 };
 export const ledger: LedgerData = {
