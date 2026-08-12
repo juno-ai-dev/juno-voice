@@ -153,6 +153,24 @@ describe("address and centrally-owned execute policy", () => {
     await expect(flow.prepare({ ...intent, executeMessage: { contribute: { bounty_id: -0 } } }))
       .rejects.toMatchObject({ code: "invalid_transaction" });
   });
+  it("allows only the exact validated create-bounty digest and project-candidate shape", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    const flow = createTransactionFlow(dependencies), digest = `sha256:${"ab".repeat(32)}`;
+    const create = { ...intent, executeMessage: { create_bounty: { title: "Ship tooling", summary: "Useful tooling",
+      acceptance_criteria: "Tests pass", content_uri: "ipfs://bafyterms", content_digest: digest,
+      expires_at: "1800000000000000000", project_candidate: {
+        project_id: "tooling-1", metadata_uri: "ipfs://bafyproject", metadata_digest: digest,
+      } } } };
+    await expect(flow.prepare(create)).resolves.toMatchObject({ executeMessage: create.executeMessage });
+    await expect(flow.prepare({ ...create, executeMessage: { create_bounty: {
+      ...create.executeMessage.create_bounty, content_digest: "ab".repeat(32),
+    } } })).rejects.toMatchObject({ code: "message_forbidden" });
+    await expect(flow.prepare({ ...create, executeMessage: { create_bounty: {
+      ...create.executeMessage.create_bounty, project_candidate: {
+        ...create.executeMessage.create_bounty.project_candidate, project_id: "INVALID_ID",
+      },
+    } } })).rejects.toMatchObject({ code: "message_forbidden" });
+  });
   it.each([
     ["number", 1], ["null", null], ["object", {}], ["boolean", true], ["empty", ""], ["whitespace", "   "],
   ])("rejects a %s consequence with a normalized safety error", async (_, consequence) => {

@@ -10,6 +10,13 @@ describe("canonical event plus refreshed-state confirmation", () => {
         { key: "bounty_id", value: "1" }, { key: "creator", value: sender }, { key: "amount", value: "1000000" }] }] }))
       .toEqual({ bountyId: 1, eventType: "juno_voice_bounties.bounty_created" });
   });
+  it("accepts the CosmWasm DeliverTx prefix on the exact contract event", () => {
+    const refreshed = { ...bounty, total_contribution: "1000000" };
+    expect(confirmBountyMutation({ action: "create_bounty", sender, amount: "1000000", refreshed,
+      events: [{ type: "wasm-juno_voice_bounties.bounty_created", attributes: [
+        { key: "bounty_id", value: "1" }, { key: "creator", value: sender }, { key: "amount", value: "1000000" }] }] }))
+      .toMatchObject({ bountyId: 1 });
+  });
   it("confirms contribution against canonical bounty total", () => {
     const refreshed = { ...bounty, total_contribution: "3500000" };
     expect(confirmBountyMutation({ action: "contribute", sender, amount: "1000000", priorTotal: "2500000", refreshed,

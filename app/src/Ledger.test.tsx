@@ -107,7 +107,7 @@ describe("read-only bounty ledger states", () => {
               project_candidate: {
                 project_id: "voice-ui",
                 metadata_uri: "https://example.invalid/voice-ui.json",
-                metadata_digest: "ab".repeat(32),
+                metadata_digest: `sha256:${"ab".repeat(32)}`,
               },
               refund_reason: { cancelled: { reason: "scope changed" } },
             },

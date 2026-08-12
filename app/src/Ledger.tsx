@@ -3,6 +3,7 @@ import type { VoiceDataSource } from "./client";
 import type { AppConfig } from "./config";
 import type { Bounty, BountyDetail, BountyStatus } from "./types";
 import { useAsync } from "./useAsync";
+import { BountyActions, type BountyTransactionAccess } from "./BountyActions";
 const labels: Record<BountyStatus, string> = {
   open: "Open",
   single_confirmation: "Awaiting confirmation",
@@ -26,9 +27,11 @@ const timestampDate = (nanoseconds: string) =>
 export function Ledger({
   source,
   config,
+  transactions,
 }: {
   source: VoiceDataSource;
   config: AppConfig;
+  transactions?: BountyTransactionAccess;
 }) {
   const load = useMemo(() => () => source.loadLedger(), [source]);
   const [state, retry] = useAsync(load, "bounties");
@@ -80,9 +83,9 @@ export function Ledger({
           <p className="eyebrow">JUNO VOICE · JUNO-1 MAINNET</p>
           <h1 id="page-title">Public bounty ledger</h1>
           <p>
-            Authoritative, read-only bounty state queried directly from the
-            verified Juno Voice contract. This interface cannot connect a
-            wallet, sign, or execute transactions.
+            Authoritative bounty state queried directly from the verified Juno
+            Voice contract. Read-only access is always available; wallet actions
+            use an exact pre-sign review when transaction support is present.
           </p>
         </div>
         <aside className="hero-summary" aria-label="Protocol summary">
@@ -109,6 +112,7 @@ export function Ledger({
           verified backing.
         </section>
       )}
+      <BountyActions access={transactions} stale={stale} canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
       <section aria-labelledby="ledger-title">
         <div className="toolbar">
           <div>
@@ -170,7 +174,7 @@ export function Ledger({
           )}
         </div>
       </section>
-      {detail.kind !== "closed" && <BountyDetailPanel state={detail} onClose={() => setDetail({ kind: "closed" })} />}
+      {detail.kind !== "closed" && <BountyDetailPanel state={detail} transactions={transactions} onClose={() => setDetail({ kind: "closed" })} />}
       <section className="facts-panel" aria-labelledby="economics">
         <h2 id="economics">Protocol economics</h2>
         <div className="network-grid">
@@ -286,8 +290,8 @@ function BountyRow({ bounty: b, onOpen }: { bounty: Bounty; onOpen: () => void }
     </article>
   );
 }
-function BountyDetailPanel({ state, onClose }: {
-  state: { kind: string; data?: BountyDetail; message?: string }; onClose: () => void;
+function BountyDetailPanel({ state, onClose, transactions }: {
+  state: { kind: string; data?: BountyDetail; message?: string }; onClose: () => void; transactions?: BountyTransactionAccess;
 }) {
   const d = state.data;
   const action = (value: string | Record<string, unknown>) =>
@@ -317,6 +321,8 @@ function BountyDetailPanel({ state, onClose }: {
       </div>
       <h3>History ({d.history.length} of {d.bounty.history_count})</h3><ol className="history">{d.history.map((x) => <li key={x.sequence}><strong>{action(x.action)}</strong> · {compact(x.actor)} · <time dateTime={timestampDate(x.at).toISOString()}>{timestampDate(x.at).toLocaleString()}</time></li>)}</ol>
       <p className="chain-time">Eligibility reference: canonical chain time {d.chainTimeNanos} ns. Browser time is display-only.</p>
+      <BountyActions bounty={d.bounty} contributions={d.contributions} access={transactions} stale={false}
+        canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
     </>}
   </section>;
 }

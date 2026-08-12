@@ -22,7 +22,7 @@ const optionalPair = (uri: string, digest: string, max: number, label: string) =
   if (!u) return { uri: null, digest: null };
   if (utf8(u) > max || !/^(https:\/\/|ipfs:\/\/)[^\s]+$/.test(u))
     throw new Error(`${label} URI must be a bounded HTTPS or IPFS URI.`);
-  if (!/^[0-9a-f]{64}$/.test(d)) throw new Error(`${label} digest must be 64 lowercase SHA-256 hex characters.`);
+  if (!/^sha256:[0-9a-f]{64}$/.test(d)) throw new Error(`${label} digest must use sha256:<64 lowercase hex characters>.`);
   return { uri: u, digest: d };
 };
 export interface CreateBountyInput {
@@ -52,11 +52,15 @@ export function createBountyIntent(input: CreateBountyInput, state: EligibilityS
   const content = optionalPair(input.contentUri, input.contentDigest, state.config.limits.max_uri_bytes, "Content");
   let project_candidate = null;
   if (input.projectCandidate) {
+    const projectId = input.projectCandidate.projectId.trim();
+    if (!/^[a-z0-9-]{3,64}$/.test(projectId))
+      throw new Error("Project ID must be 3-64 lowercase letters, digits, or hyphens.");
     const metadata = optionalPair(input.projectCandidate.metadataUri, input.projectCandidate.metadataDigest,
       state.config.limits.max_uri_bytes, "Project metadata");
+    if (metadata.uri === null || metadata.digest === null)
+      throw new Error("Project metadata URI and digest are required for a project candidate.");
     project_candidate = {
-      project_id: required(input.projectCandidate.projectId, state.config.limits.max_title_bytes, "Project ID"),
-      metadata_uri: metadata.uri as string, metadata_digest: metadata.digest as string,
+      project_id: projectId, metadata_uri: metadata.uri, metadata_digest: metadata.digest,
     };
   }
   return {
@@ -75,7 +79,8 @@ export function createBountyIntent(input: CreateBountyInput, state: EligibilityS
     expectedStateFingerprint: state.fingerprint,
   };
 }
-export function contributeIntent(bounty: Bounty, ujuno: string, contributor: string | null, state: EligibilityState): TransactionIntent {
+export function contributeIntent(bounty: Bounty, ujuno: string, contributor: string | null,
+  knownContributors: readonly string[], state: EligibilityState): TransactionIntent {
   assertConfig(state);
   const value = amount(ujuno, "Contribution");
   if (value < BigInt(state.config.min_contribution)) throw new Error("Contribution is below the live minimum.");
@@ -83,7 +88,7 @@ export function contributeIntent(bounty: Bounty, ujuno: string, contributor: str
   if (BigInt(state.chainTimeNanos) >= BigInt(bounty.expires_at)) throw new Error("This bounty has expired according to chain time.");
   if (BigInt(bounty.total_contribution) + value > BigInt(bounty.terms.max_bounty_total))
     throw new Error("Contribution exceeds this bounty's snapshotted total cap.");
-  const existing = contributor === bounty.creator;
+  const existing = contributor !== null && knownContributors.includes(contributor);
   if (!existing && bounty.contributor_count >= bounty.terms.max_contributors)
     throw new Error("This bounty has reached its snapshotted contributor cap.");
   return {

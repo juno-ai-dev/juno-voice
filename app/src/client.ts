@@ -22,9 +22,12 @@ export const queries = {
     bounties: { start_after: startAfter, limit: PAGE_LIMIT },
   }),
   bounty: (bountyId: number) => ({ bounty: { bounty_id: bountyId } }),
-  contributions: (bountyId: number) => ({ contributions: { bounty_id: bountyId, start_after: null, limit: PAGE_LIMIT } }),
-  claims: (bountyId: number) => ({ claims: { bounty_id: bountyId, start_after: null, limit: PAGE_LIMIT } }),
-  history: (bountyId: number) => ({ history: { bounty_id: bountyId, start_after: null, limit: PAGE_LIMIT } }),
+  contributions: (bountyId: number, startAfter: number | null = null) =>
+    ({ contributions: { bounty_id: bountyId, start_after: startAfter, limit: PAGE_LIMIT } }),
+  claims: (bountyId: number, startAfter: number | null = null) =>
+    ({ claims: { bounty_id: bountyId, start_after: startAfter, limit: PAGE_LIMIT } }),
+  history: (bountyId: number, startAfter: number | null = null) =>
+    ({ history: { bounty_id: bountyId, start_after: startAfter, limit: PAGE_LIMIT } }),
 } as const;
 
 const bad = (c: string): never => {
@@ -281,13 +284,18 @@ export function createDataSource(
           throw new Error(
             "Deployment mismatch: unsupported contract configuration.",
           );
+        const pauseState = pause(pr), bounties = await pages(query, br), observationHeight = int(height, "height");
         return {
           config,
-          pause: pause(pr),
+          pause: pauseState,
           health: health(hr),
-          bounties: await pages(query, br),
-          observationHeight: int(height, "height"),
+          bounties,
+          observationHeight,
           chainTimeNanos,
+          // Review freshness tracks state that can change create eligibility. Height
+          // and the exact block time are evidence, but would make every new block
+          // invalidate an otherwise unchanged review.
+          fingerprint: JSON.stringify({ config, pause: pauseState }),
           refreshedAt: new Date(),
           weakConsistency: true,
         };
@@ -300,15 +308,43 @@ export function createDataSource(
       try {
         await provenance(c, cfg);
         const query = (q: object) => c.queryContractSmart(cfg.contract, q);
-        const [detailRaw, contributionsRaw, claimsRaw, historyRaw, height, chainTimeNanos] = await Promise.all([
+        const [detailRaw, contributionsRaw, claimsRaw, historyRaw, configRaw, pauseRaw, height, chainTimeNanos] = await Promise.all([
           query(queries.bounty(bountyId)), query(queries.contributions(bountyId)), query(queries.claims(bountyId)),
-          query(queries.history(bountyId)), c.getHeight(), c.getChainTimeNanos(),
+          query(queries.history(bountyId)), query(queries.config()), query(queries.pause()), c.getHeight(), c.getChainTimeNanos(),
         ]);
-        const detail = rec(detailRaw, "bounty detail"), contributions = rec(contributionsRaw, "contributions").contributions,
-          claims = rec(claimsRaw, "claims").claims, history = rec(historyRaw, "history").entries;
-        if (!Array.isArray(contributions) || !Array.isArray(claims) || !Array.isArray(history)) bad("bounty detail");
-        const contributionItems = contributions as unknown[], claimItems = claims as unknown[], historyItems = history as unknown[];
+        const detail = rec(detailRaw, "bounty detail");
         const bounty = mapBounty(detail.bounty);
+        const contributionItems: unknown[] = [], claimItems: unknown[] = [], historyItems: unknown[] = [];
+        let contributionPage: unknown = contributionsRaw, claimPage: unknown = claimsRaw, historyPage: unknown = historyRaw;
+        for (let page = 0; page < 1000; page++) {
+          const values = rec(contributionPage, "contributions").contributions;
+          if (!Array.isArray(values)) bad("contributions");
+          const items = values as unknown[];
+          contributionItems.push(...items);
+          if (items.length < PAGE_LIMIT) break;
+          const last = rec(items.at(-1), "contribution");
+          contributionPage = await query(queries.contributions(bountyId, int(last.contributor_index, "contribution")));
+          if (page === 999) throw new Error("Too many contribution pages from RPC.");
+        }
+        for (let page = 0; page < 1000; page++) {
+          const response = rec(claimPage, "claims"), values = response.claims;
+          if (!Array.isArray(values)) bad("claims");
+          claimItems.push(...(values as unknown[]));
+          const cursor = nullable(response.next_start_after, (value) => int(value, "claims"));
+          if (cursor === null) break;
+          claimPage = await query(queries.claims(bountyId, cursor));
+          if (page === 999) throw new Error("Too many claim pages from RPC.");
+        }
+        for (let page = 0; page < 1000; page++) {
+          const values = rec(historyPage, "history").entries;
+          if (!Array.isArray(values)) bad("history");
+          const items = values as unknown[];
+          historyItems.push(...items);
+          if (items.length < PAGE_LIMIT) break;
+          const last = rec(items.at(-1), "history");
+          historyPage = await query(queries.history(bountyId, int(last.sequence, "history")));
+          if (page === 999) throw new Error("Too many history pages from RPC.");
+        }
         const mappedContributions = contributionItems.map((item) => { const x = rec(item, "contribution"); return {
           bounty_id: int(x.bounty_id, "contribution"), contributor: str(x.contributor, "contribution"),
           contributor_index: int(x.contributor_index, "contribution"), current_amount: uint(x.current_amount, "contribution"),
@@ -319,8 +355,16 @@ export function createDataSource(
           if (typeof action !== "string" && (typeof action !== "object" || action === null || Array.isArray(action))) bad("history");
           return { bounty_id: int(x.bounty_id, "history"), sequence: int(x.sequence, "history"), actor: str(x.actor, "history"),
             at: uint(x.at, "history", 18446744073709551615n), action: action as string | Record<string, unknown> }; });
-        const fingerprint = JSON.stringify({ bounty, chainTimeNanos, height });
-        return { bounty, activeRound: nullable(detail.active_round, (x) => rec(x, "active round")),
+        if (mappedContributions.length !== bounty.contributor_count || mappedHistory.length !== bounty.history_count)
+          throw new Error("Canonical bounty detail is incomplete.");
+        const config = mapConfig(configRaw), pauseState = pause(pauseRaw);
+        if (config.native_denom !== "ujuno") throw new Error("Deployment mismatch: unsupported contract configuration.");
+        // Exact time remains separately displayed and validated. The expiry bit
+        // changes precisely when contribution eligibility changes without
+        // rejecting a review merely because another block was produced.
+        const expired = BigInt(chainTimeNanos) >= BigInt(bounty.expires_at);
+        const fingerprint = JSON.stringify({ config, pause: pauseState, bounty, contributions: mappedContributions, expired });
+        return { bounty, config, pause: pauseState, activeRound: nullable(detail.active_round, (x) => rec(x, "active round")),
           moderation: nullable(detail.moderation, (x) => rec(x, "moderation")), graduation: nullable(detail.graduation, (x) => rec(x, "graduation")),
           contributions: mappedContributions, claims: mappedClaims, history: mappedHistory,
           observationHeight: int(height, "height"), chainTimeNanos, fingerprint };

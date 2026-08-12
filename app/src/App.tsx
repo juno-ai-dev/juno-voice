@@ -2,18 +2,30 @@ import { useMemo } from "react";
 import { createDataSource, type VoiceDataSource } from "./client";
 import type { AppConfig } from "./config";
 import { Ledger } from "./Ledger";
+import type { BountyTransactionAccess } from "./BountyActions";
+import { createBrowserTransactionAccess } from "./browserTransactions";
 export function App({
   source: supplied,
   config,
+  transactions,
 }: {
   source?: VoiceDataSource;
   config: AppConfig;
+  transactions?: BountyTransactionAccess;
 }) {
   const base = import.meta.env.BASE_URL;
   const source = useMemo(
     () => supplied ?? createDataSource(config),
     [supplied, config],
   );
+  const transactionAccess = useMemo(() => {
+    if (transactions) return transactions;
+    const browser = window as Window & { keplr?: unknown; leap?: unknown };
+    const kind = browser.keplr ? "keplr" : browser.leap ? "leap" : null;
+    if (!kind) return undefined;
+    try { return createBrowserTransactionAccess(config, source, kind); }
+    catch { return undefined; }
+  }, [transactions, config, source]);
   return (
     <div className="shell juno-grid">
       <header className="topbar">
@@ -23,13 +35,13 @@ export function App({
             <img src={`${base}assets/wordmark-salmon.svg`} alt="Juno" />
             <span>VOICE</span>
           </a>
-          <span className="mainnet">JUNO-1 · READ ONLY</span>
+          <span className="mainnet">JUNO-1 · PUBLIC LEDGER</span>
         </div>
       </header>
-      <Ledger source={source} config={config} />
+      <Ledger source={source} config={config} transactions={transactionAccess} />
       <footer>
         <p>
-          Read-only mainnet observation · No wallet or transaction capabilities
+          Public mainnet observation · Read-only access never requires a wallet
         </p>
         <p>
           Juno Design System{" "}

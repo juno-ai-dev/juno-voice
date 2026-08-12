@@ -7,7 +7,9 @@ export function confirmBountyMutation(options: {
 }): { bountyId: number; eventType: string } {
   const eventType = options.action === "create_bounty"
     ? "juno_voice_bounties.bounty_created" : "juno_voice_bounties.contributed";
-  const matches = options.events.filter((event) => event.type === eventType);
+  // DeliverTx prefixes CosmWasm custom events with `wasm-`, while contract
+  // response tests expose the declared type without that transport prefix.
+  const matches = options.events.filter((event) => event.type === eventType || event.type === `wasm-${eventType}`);
   if (matches.length !== 1) throw new Error("Canonical transaction event is missing or ambiguous.");
   const values = attrs(matches[0]), id = values.get("bounty_id");
   if (!id || !/^\d+$/.test(id) || Number(id) !== options.refreshed.id || values.get("amount") !== options.amount)
