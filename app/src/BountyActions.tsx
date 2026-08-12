@@ -54,7 +54,7 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
   };
   if (!bounty && !creating) return <section className="bounty-create-launcher" aria-labelledby="create-launcher-title">
     <div>
-      <p className="eyebrow">FUND A PUBLIC-GOODS OUTCOME</p>
+      <p className="eyebrow">FUND A SHARED OUTCOME</p>
       <h2 id="create-launcher-title">Have work the community can rally around?</h2>
       <p>Define the outcome and fund the first contribution. You will review the exact on-chain terms before signing.</p>
     </div>

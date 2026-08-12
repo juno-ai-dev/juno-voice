@@ -171,7 +171,7 @@ export function App({
         <footer className="app-footer">
           <div className="footer-identity">
             <strong>Juno Voice</strong>
-            <p>Public-goods coordination, built on Juno.</p>
+            <p>Community funding coordination, built on Juno.</p>
           </div>
           <div className="footer-network">
             <span>JUNO-1 · PUBLIC DATA</span>

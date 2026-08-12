@@ -76,7 +76,7 @@ export function LandingPage({ onNavigate }: { onNavigate: (view: PublicView) => 
           </div>
           <aside className="protocol-loop" aria-label="Juno Voice protocol loop">
             <div className="loop-status"><span>LIVE</span><strong>JUNO-1</strong></div>
-            <p className="loop-label">THE PUBLIC GOODS LOOP</p>
+            <p className="loop-label">THE COMMUNITY FUNDING LOOP</p>
             <ol>
               <li><span>01</span><strong>Request</strong><small>Define the outcome</small></li>
               <li><span>02</span><strong>Fund</strong><small>Pool $JUNO</small></li>

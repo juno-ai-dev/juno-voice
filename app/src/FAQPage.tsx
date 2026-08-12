@@ -17,7 +17,7 @@ const sections: ReadonlyArray<FAQSection> = [
     questions: [
       {
         question: "What is Juno Voice?",
-        answer: "Juno Voice is a public-goods coordination interface on Juno. It connects funded bounties, a registry of eligible projects, and a gauge where Juno stakers express preferences for recurring funding distribution.",
+        answer: "Juno Voice is a community funding interface on Juno. It connects funded bounties, a registry of eligible projects, and a gauge where Juno stakers express preferences for recurring funding distribution.",
       },
       {
         question: "Do I need a wallet to use it?",

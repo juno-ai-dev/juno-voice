@@ -5,7 +5,7 @@ export const bounty: Bounty = {
   id: 1,
   creator: "juno1creatorxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
   terms: {
-    title: "Fund public goods tooling",
+    title: "Fund community tooling",
     summary: "A real bounty record",
     acceptance_criteria: "Ship it",
     content_uri: null,
