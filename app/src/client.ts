@@ -1,4 +1,5 @@
 import type { AppConfig } from "./config";
+import { connectRpc, type Connect, type RpcClient } from "./rpc";
 import type {
   Accounting,
   Bounty,
@@ -20,19 +21,7 @@ export const queries = {
     bounties: { start_after: startAfter, limit: PAGE_LIMIT },
   }),
 } as const;
-interface RpcClient {
-  queryContractSmart(a: string, q: object): Promise<unknown>;
-  getChainId(): Promise<string>;
-  getHeight(): Promise<number>;
-  getContract(a: string): Promise<{ address: string; codeId: number }>;
-  getCodeDetails(id: number): Promise<{ checksum: string }>;
-  disconnect(): void;
-}
-type Connect = (rpc: string) => Promise<RpcClient>;
-const connect: Connect = async (rpc) => {
-  const { CosmWasmClient } = await import("@cosmjs/cosmwasm-stargate");
-  return CosmWasmClient.connect(rpc);
-};
+
 const bad = (c: string): never => {
   throw new Error(`Malformed ${c} response from RPC.`);
 };
@@ -262,7 +251,7 @@ export interface VoiceDataSource {
 }
 export function createDataSource(
   cfg: AppConfig,
-  connector: Connect = connect,
+  connector: Connect = connectRpc,
 ): VoiceDataSource {
   return {
     async loadLedger() {

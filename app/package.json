@@ -16,8 +16,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@cosmjs/cosmwasm-stargate": "0.37.0",
     "@cosmjs/encoding": "0.37.0",
+    "cosmjs-types": "0.10.1",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
