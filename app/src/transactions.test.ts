@@ -1,9 +1,23 @@
+import { fromBech32, toBech32 } from "@cosmjs/encoding";
 import { describe, expect, it, vi } from "vitest";
-import { TransactionSafetyError, createTransactionFlow, type TransactionDependencies } from "./transactions";
+import {
+  BroadcastDependencyError,
+  TransactionSafetyError,
+  createTransactionFlow,
+  type TransactionDependencies,
+  type TransactionIntent,
+} from "./transactions";
+import { DEFAULT_BOUNTY_CONTRACT } from "./config";
 import { WalletSession, type WalletConnector } from "./wallet";
 
-const identity = { chainId: "juno-1", address: "juno1sender" } as const;
-const contract = "juno1contract";
+const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
+const otherSender = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+const identity = { chainId: "juno-1", address: sender } as const;
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
 function setup() {
   let listener: (() => void) | undefined;
   let current: { chainId: string; address: string } = identity;
@@ -23,134 +37,152 @@ function setup() {
     explorerBaseUrl: "https://www.mintscan.io/juno",
   };
   return {
-    wallet,
-    dependencies,
+    wallet, walletPort, dependencies,
     changeAccount() {
-      current = { ...identity, address: "juno1other" };
+      current = { ...identity, address: otherSender };
       listener?.();
     },
   };
 }
-const intent = {
+const intent: TransactionIntent = {
   chainId: "juno-1",
-  contract,
+  contract: DEFAULT_BOUNTY_CONTRACT,
   executeMessage: { contribute: { bounty_id: 7 } },
   funds: [{ denom: "ujuno", amount: "250000" }],
   consequences: ["Send 0.25 JUNO to bounty #7 escrow."],
   expectedStateFingerprint: "bounty:7:v3",
-  allowedMessages: ["contribute"],
-} as const;
+};
+
+async function prepared() {
+  const fixture = setup();
+  await fixture.wallet.connect();
+  const flow = createTransactionFlow(fixture.dependencies);
+  return { ...fixture, flow, review: await flow.prepare(intent) };
+}
 
 describe("exact pre-sign transaction review", () => {
-  it("shows and signs the exact sender, chain, contract, message, funds, fee and consequences", async () => {
-    const { wallet, dependencies } = setup();
-    await wallet.connect();
-    const flow = createTransactionFlow(dependencies);
-    const review = await flow.prepare(intent);
-    expect(review).toMatchObject({
-      sender: identity.address,
-      chainId: "juno-1",
-      contract,
-      executeMessage: intent.executeMessage,
-      funds: intent.funds,
+  it("shows and signs the exact disclosed request and reports successful refresh", async () => {
+    const { dependencies, flow, review } = await prepared();
+    expect(review).toMatchObject({ sender, chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
+      executeMessage: intent.executeMessage, funds: intent.funds,
       fee: { gas: "180000", amount: [{ denom: "ujuno", amount: "4500" }] },
-      consequences: intent.consequences,
-      canonicalState: { fingerprint: "bounty:7:v3", height: 100 },
-    });
-    const result = await flow.submit(review);
-    expect(dependencies.signAndBroadcast).toHaveBeenCalledWith({
-      sender: review.sender,
-      chainId: review.chainId,
-      contract: review.contract,
-      executeMessage: review.executeMessage,
-      funds: review.funds,
-      fee: review.fee,
-    });
-    expect(result).toEqual({
-      status: "confirmed",
-      txHash: "ABC123",
-      height: 101,
-      explorerUrl: "https://www.mintscan.io/juno/tx/ABC123",
-    });
-    expect(dependencies.refreshCanonical).toHaveBeenCalledOnce();
+      consequences: intent.consequences, canonicalState: { fingerprint: "bounty:7:v3", height: 100 } });
+    await expect(flow.submit(review)).resolves.toEqual({ status: "confirmed", confirmationStatus: "confirmed",
+      refreshStatus: "refreshed", txHash: "ABC123", height: 101,
+      explorerUrl: "https://www.mintscan.io/juno/tx/ABC123" });
+    expect(dependencies.signAndBroadcast).toHaveBeenCalledWith({ sender: review.sender, chainId: review.chainId,
+      contract: review.contract, executeMessage: review.executeMessage, funds: review.funds, fee: review.fee });
     expect(dependencies.readCanonicalState).toHaveBeenCalledTimes(2);
   });
 
-  it("revalidates immediately before construction and signing and refuses stale state", async () => {
-    const { wallet, dependencies } = setup();
-    await wallet.connect();
-    vi.mocked(dependencies.readCanonicalState)
+  it("revalidates canonical state and then exact identity immediately before signing", async () => {
+    const fixture = setup();
+    await fixture.wallet.connect();
+    const gate = deferred<{ fingerprint: string; height: number }>();
+    vi.mocked(fixture.dependencies.readCanonicalState)
       .mockResolvedValueOnce({ fingerprint: "bounty:7:v3", height: 100 })
-      .mockResolvedValueOnce({ fingerprint: "bounty:7:v4", height: 101 });
-    const flow = createTransactionFlow(dependencies);
+      .mockReturnValueOnce(gate.promise);
+    const flow = createTransactionFlow(fixture.dependencies);
     const review = await flow.prepare(intent);
-    await expect(flow.submit(review)).rejects.toMatchObject({ code: "stale_state" });
-    expect(dependencies.signAndBroadcast).not.toHaveBeenCalled();
+    const submission = flow.submit(review);
+    await vi.waitFor(() => expect(fixture.dependencies.readCanonicalState).toHaveBeenCalledTimes(2));
+    fixture.changeAccount(); // synchronously revokes the reviewed authorization while canonical IO is in flight
+    gate.resolve({ fingerprint: "bounty:7:v3", height: 101 });
+    await expect(submission).rejects.toMatchObject({ code: "stale_identity" });
+    expect(fixture.dependencies.signAndBroadcast).not.toHaveBeenCalled();
   });
 
-  it("refuses account changes and exact-review tampering", async () => {
-    const { wallet, dependencies, changeAccount } = setup();
-    await wallet.connect();
-    const flow = createTransactionFlow(dependencies);
-    const review = await flow.prepare(intent);
-    changeAccount();
-    await wallet.settled();
-    await expect(flow.submit(review)).rejects.toMatchObject({ code: "stale_identity" });
+  it("refuses stale canonical state and concurrent submits before broadcasting", async () => {
+    const { dependencies, flow, review } = await prepared();
+    vi.mocked(dependencies.readCanonicalState).mockResolvedValueOnce({ fingerprint: "changed", height: 101 });
+    const one = flow.submit(review);
+    await expect(flow.submit(review)).rejects.toMatchObject({ code: "duplicate_broadcast" });
+    await expect(one).rejects.toMatchObject({ code: "stale_state" });
     expect(dependencies.signAndBroadcast).not.toHaveBeenCalled();
-    expect(() => {
-      (review.executeMessage as { contribute: { bounty_id: number } }).contribute.bounty_id = 8;
-    }).toThrow();
-  });
-
-  it("requires a caller allowlist and makes privileged messages impossible", async () => {
-    const { wallet, dependencies } = setup();
-    await wallet.connect();
-    const flow = createTransactionFlow(dependencies);
-    await expect(flow.prepare({ ...intent, executeMessage: { pause: {} }, allowedMessages: ["pause"] }))
-      .rejects.toMatchObject({ code: "message_forbidden" });
-    await expect(flow.prepare({ ...intent, allowedMessages: [] }))
-      .rejects.toBeInstanceOf(TransactionSafetyError);
   });
 });
 
-describe("broadcast outcomes and duplicate protection", () => {
-  it.each(["pending", "unknown"] as const)("preserves %s and will not retry an ambiguous broadcast", async (status) => {
-    const { wallet, dependencies } = setup();
-    await wallet.connect();
-    vi.mocked(dependencies.signAndBroadcast).mockResolvedValueOnce(
-      status === "pending" ? { status, txHash: "PEND" } : { status },
-    );
-    const flow = createTransactionFlow(dependencies);
-    const review = await flow.prepare(intent);
-    await expect(flow.submit(review)).resolves.toMatchObject({ status });
-    await expect(flow.submit(review)).rejects.toMatchObject({ code: "duplicate_broadcast" });
-    expect(dependencies.signAndBroadcast).toHaveBeenCalledTimes(1);
+describe("address and centrally-owned execute policy", () => {
+  it.each([
+    ["bad checksum", `${sender.slice(0, -1)}x`],
+    ["mixed case", `J${sender.slice(1)}`],
+    ["wrong prefix", toBech32("cosmos", fromBech32(sender).data)],
+    ["wrong account length", toBech32("juno", new Uint8Array(21))],
+  ])("rejects a %s sender", async (_, address) => {
+    const fixture = setup();
+    vi.mocked(fixture.walletPort.connect).mockResolvedValueOnce({ chainId: "juno-1", address });
+    await expect(fixture.wallet.connect()).rejects.toMatchObject({ code: "invalid_identity" });
   });
 
-  it("classifies wallet rejection and chain failure without refreshing canonical data", async () => {
-    const { wallet, dependencies } = setup();
-    await wallet.connect();
-    vi.mocked(dependencies.signAndBroadcast).mockRejectedValueOnce(Object.assign(new Error("User rejected"), { code: 4001 }));
-    const flow = createTransactionFlow(dependencies);
-    const rejected = await flow.submit(await flow.prepare(intent));
-    expect(rejected).toEqual({ status: "rejected", reason: "User rejected" });
-    expect(dependencies.refreshCanonical).not.toHaveBeenCalled();
+  it.each([
+    ["bad checksum", `${DEFAULT_BOUNTY_CONTRACT.slice(0, -1)}x`],
+    ["mixed case", `J${DEFAULT_BOUNTY_CONTRACT.slice(1)}`],
+    ["wrong prefix", toBech32("cosmos", fromBech32(DEFAULT_BOUNTY_CONTRACT).data)],
+    ["wrong contract length", toBech32("juno", new Uint8Array(20))],
+  ])("rejects a %s contract", async (_, contract) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract }))
+      .rejects.toMatchObject({ code: "invalid_transaction" });
   });
 
-  it("preserves an explicit failed-chain outcome without claiming confirmation", async () => {
-    const { wallet, dependencies } = setup();
-    await wallet.connect();
-    vi.mocked(dependencies.signAndBroadcast).mockResolvedValueOnce({
-      status: "failed",
-      txHash: "FAILED1",
-      reason: "out of gas",
+  it.each(["moderate", "graduate_project", "pause_new_activity", "unpause_new_activity", "update_roles", "update_config"])(
+    "rejects privileged action %s even with an otherwise valid request", async (action) => {
+      const { wallet, dependencies } = setup(); await wallet.connect();
+      await expect(createTransactionFlow(dependencies).prepare({ ...intent, executeMessage: { [action]: {} } }))
+        .rejects.toMatchObject({ code: "message_forbidden" });
     });
-    const flow = createTransactionFlow(dependencies);
-    await expect(flow.submit(await flow.prepare(intent))).resolves.toEqual({
-      status: "failed",
-      txHash: "FAILED1",
-      reason: "out of gas",
-    });
-    expect(dependencies.refreshCanonical).not.toHaveBeenCalled();
+  it("rejects unknown future actions and malformed schemas from the central positive allowlist", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect(); const flow = createTransactionFlow(dependencies);
+    await expect(flow.prepare({ ...intent, executeMessage: { future_admin_action: {} } }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
+    await expect(flow.prepare({ ...intent, executeMessage: { contribute: { bounty_id: "7" } } }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
+  });
+});
+
+describe("strict canonical JSON review", () => {
+  it.each([
+    ["NaN", { contribute: { bounty_id: Number.NaN } }], ["Infinity", { contribute: { bounty_id: Infinity } }],
+    ["BigInt", { contribute: { bounty_id: 7n } }], ["undefined", { contribute: { bounty_id: 7, x: undefined } }],
+    ["symbol", { contribute: { bounty_id: 7, x: Symbol("x") } }],
+    ["nonplain", { contribute: Object.assign(new Date(), { bounty_id: 7 }) }],
+    ["sparse", { contribute: { bounty_id: 7, x: Array(1) } }],
+    ["symbol key", Object.assign({ contribute: { bounty_id: 7 } }, { [Symbol("hidden")]: true })],
+    ["getter", { contribute: Object.defineProperty({ bounty_id: 7 }, "hidden", { enumerable: true, get: () => true }) }],
+  ])("rejects %s rather than permitting canonical collisions", async (_, executeMessage) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, executeMessage }))
+      .rejects.toBeInstanceOf(TransactionSafetyError);
+  });
+  it("accepts nested finite JSON and detects detached review tampering", async () => {
+    const { flow, review } = await prepared();
+    const clone = structuredClone(review) as typeof review;
+    (clone.executeMessage as { contribute: { bounty_id: number } }).contribute.bounty_id = 8;
+    await expect(flow.submit(clone)).rejects.toMatchObject({ code: "invalid_review" });
+  });
+});
+
+describe("broadcast and confirmation outcomes", () => {
+  it.each(["timeout", "disconnect", "post-broadcast"])("maps typed %s transport uncertainty to unknown and preserves hash", async (kind) => {
+    const { dependencies, flow, review } = await prepared();
+    vi.mocked(dependencies.signAndBroadcast).mockRejectedValueOnce(
+      new BroadcastDependencyError("transport", kind, { txHash: kind === "post-broadcast" ? "KNOWN" : undefined }));
+    await expect(flow.submit(review)).resolves.toEqual({ status: "unknown",
+      ...(kind === "post-broadcast" ? { txHash: "KNOWN" } : {}) });
+  });
+  it("uses typed rejection and preserves authoritative chain failure", async () => {
+    const first = await prepared();
+    vi.mocked(first.dependencies.signAndBroadcast).mockRejectedValueOnce(new BroadcastDependencyError("rejected", "User rejected"));
+    await expect(first.flow.submit(first.review)).resolves.toEqual({ status: "rejected", reason: "User rejected" });
+    const second = await prepared();
+    vi.mocked(second.dependencies.signAndBroadcast).mockResolvedValueOnce({ status: "failed", txHash: "FAILED1", reason: "out of gas" });
+    await expect(second.flow.submit(second.review)).resolves.toEqual({ status: "failed", txHash: "FAILED1", reason: "out of gas" });
+  });
+  it("never loses a confirmed transaction when canonical refresh fails", async () => {
+    const { dependencies, flow, review } = await prepared();
+    vi.mocked(dependencies.refreshCanonical).mockRejectedValueOnce(new Error("RPC unavailable"));
+    await expect(flow.submit(review)).resolves.toEqual({ status: "confirmed", confirmationStatus: "confirmed",
+      refreshStatus: "failed", txHash: "ABC123", height: 101,
+      explorerUrl: "https://www.mintscan.io/juno/tx/ABC123" });
   });
 });
