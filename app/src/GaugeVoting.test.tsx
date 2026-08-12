@@ -38,6 +38,8 @@ describe("gauge voting UI", () => {
     await userEvent.click(screen.getByRole("button", { name: "Prepare ballot revision" }));
     expect(await screen.findByRole("dialog", { name: "Exact transaction review" })).toHaveTextContent('"place_votes"');
     expect(screen.getByRole("dialog")).toHaveTextContent('"funds": []');
+    expect(screen.getByRole("dialog")).toHaveTextContent("$JUNO 0.0075");
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("ujuno");
     expect(transactionFlow.submit).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Recheck state, then sign" }));
     expect(transactionFlow.submit).toHaveBeenCalledTimes(1);

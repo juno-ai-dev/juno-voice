@@ -5,6 +5,7 @@ import type { TransactionIntent, TransactionOutcome, TransactionReview } from ".
 import { cancelSoleFundedIntent, claimRefundIntent, confirmSolePayoutIntent, declineSolePayoutIntent,
   expireBountyIntent, finalizePayoutIntent, nominatePayoutIntent, type SettlementState,
   votePayoutIntent } from "./settlementFlows";
+import { formatJuno, formatJunoCoin } from "./junoAmount";
 
 export interface BountyTransactionAccess {
   connect(): Promise<{ address: string }>;
@@ -75,14 +76,14 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
   const defaultExpiry = (now + defaultLifetime * 1_000_000_000n).toString();
   return <form onSubmit={(event) => { event.preventDefault(); const f = new FormData(event.currentTarget); onPrepare({
     title: String(f.get("title")), summary: String(f.get("summary")), acceptanceCriteria: String(f.get("criteria")),
-    contentUri: String(f.get("uri")), contentDigest: String(f.get("digest")), expiresAtNanos: String(f.get("expiry")), initialUjuno: String(f.get("amount")),
+    contentUri: String(f.get("uri")), contentDigest: String(f.get("digest")), expiresAtNanos: String(f.get("expiry")), initialJuno: String(f.get("amount")),
     ...(["projectId", "projectUri", "projectDigest"].some((name) => String(f.get(name)).trim()) ? { projectCandidate: {
       projectId: String(f.get("projectId")), metadataUri: String(f.get("projectUri")), metadataDigest: String(f.get("projectDigest")),
     } } : {}),
   }); }}>
-    <h2 id="create-title">Create a bounty</h2><p>All limits come from live config version {canonical.config.version}. Amounts are exact ujuno.</p>
+    <h2 id="create-title">Create a bounty</h2><p>All limits come from live config version {canonical.config.version}. Enter decimal $JUNO amounts (up to 6 decimal places).</p>
     <div className="action-grid">
-      <label>Title<input name="title" required /></label><label>Initial contribution (ujuno)<input name="amount" inputMode="numeric" pattern="[1-9][0-9]*" defaultValue={canonical.config.min_contribution} required /></label>
+      <label>Title<input name="title" required /></label><label>Initial contribution ($JUNO)<input name="amount" inputMode="decimal" pattern="(0|[1-9][0-9]*)(\.[0-9]{1,6})?" defaultValue={formatJuno(canonical.config.min_contribution).slice(6).replaceAll(",", "")} required /></label>
       <label className="wide">Summary<textarea name="summary" required /></label><label className="wide">Acceptance criteria<textarea name="criteria" required /></label>
       <label>Content URI (HTTPS/IPFS, optional pair)<input name="uri" /></label><label>Digest (sha256: + 64 lowercase hex, optional pair)<input name="digest" pattern="sha256:[0-9a-f]{64}" /></label>
       <fieldset className="wide"><legend>Project candidate (optional)</legend>
@@ -98,7 +99,7 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
 function ContributeForm({ bounty, disabled, onPrepare }: { bounty: Bounty; disabled: boolean; onPrepare: (amount: string) => void }) {
   return <form onSubmit={(event) => { event.preventDefault(); onPrepare(String(new FormData(event.currentTarget).get("amount"))); }}>
     <h2 id="contribute-title">Contribute to bounty #{bounty.id}</h2>
-    <label>Contribution (exact ujuno)<input name="amount" inputMode="numeric" pattern="[1-9][0-9]*" required /></label>{" "}
+    <label>Contribution ($JUNO)<input name="amount" inputMode="decimal" pattern="(0|[1-9][0-9]*)(\.[0-9]{1,6})?" required /></label>{" "}
     <button className="button" type="submit" disabled={disabled}>Connect and review contribution</button>
   </form>;
 }
@@ -135,7 +136,7 @@ function SettlementControls({ state, disabled, onPrepare }: {
     </section>}
     {b.status === "ratifying" && round && <section aria-labelledby="ballot-title">
       <h3 id="ballot-title">Weighted ballot · round {round.number}</h3>
-      <p>YES {round.yes_weight} ujuno · NO {round.no_weight} ujuno · {round.voter_count} voter(s).</p>
+      <p>YES {formatJuno(round.yes_weight)} · NO {formatJuno(round.no_weight)} · {round.voter_count} voter(s).</p>
       <p className="chain-time">Ballots close at exactly {round.closes_at} ns. Equality is closed; weights are snapshotted and revisions replace the prior ballot.</p>
       {!closed && <form onSubmit={(event) => { event.preventDefault(); const f = new FormData(event.currentTarget);
         onPrepare((sender) => votePayoutIntent(state, sender, round.number, String(f.get("vote")) as "yes" | "no", String(f.get("voteRationale")))); }}>
@@ -165,7 +166,7 @@ function TransactionReviewPanel({ value, busy, onCancel, onSubmit }: { value: Tr
   return <section className="review" role="dialog" aria-modal="true" aria-labelledby="review-title">
     <h2 id="review-title">Exact transaction review</h2><p>Nothing is signed until you select the final button.</p>
     <dl><dt>Sender</dt><dd>{value.sender}</dd><dt>Contract</dt><dd>{value.contract}</dd><dt>Message</dt><dd><code>{JSON.stringify(value.executeMessage)}</code></dd>
-      <dt>Attached funds</dt><dd>{value.funds.length ? value.funds.map((x) => `${x.amount} ${x.denom}`).join(", ") : "None"}</dd><dt>Estimated fee</dt><dd>{value.fee.amount.map((x) => `${x.amount} ${x.denom}`).join(", ")} · gas {value.fee.gas}</dd><dt>Canonical height</dt><dd>{value.canonicalState.height}</dd></dl>
+      <dt>Attached funds</dt><dd>{value.funds.length ? value.funds.map(formatJunoCoin).join(", ") : "None"}</dd><dt>Estimated fee</dt><dd>{value.fee.amount.map(formatJunoCoin).join(", ")} · gas {value.fee.gas}</dd><dt>Canonical height</dt><dd>{value.canonicalState.height}</dd></dl>
     <ul>{value.consequences.map((item) => <li key={item}>{item}</li>)}</ul>
     <button className="button secondary" onClick={onCancel} disabled={busy}>Cancel</button>{" "}<button className="button" onClick={onSubmit} disabled={busy}>{busy ? "Checking canonical state…" : "Recheck state, then sign"}</button>
   </section>;

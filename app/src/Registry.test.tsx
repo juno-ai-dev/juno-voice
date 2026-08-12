@@ -40,6 +40,10 @@ async function prepareAndSubmit(port: RegistryTransactionFlow) {
   await userEvent.click(screen.getByRole("button", { name: "Prepare wallet review" }));
   expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ contract: config.registryContract,
     funds: [{ denom: "ujuno", amount: "1000000" }], expectedStateFingerprint: "registry" }));
+  const reviewBox = screen.getByText("Exact wallet review").parentElement!;
+  expect(reviewBox).toHaveTextContent("$JUNO 1");
+  expect(reviewBox).toHaveTextContent("$JUNO 0.0045");
+  expect(reviewBox).not.toHaveTextContent("ujuno");
   await userEvent.click(await screen.findByRole("button", { name: "Recheck state, then sign" }));
 }
 

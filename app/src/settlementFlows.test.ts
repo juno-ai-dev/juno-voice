@@ -61,8 +61,8 @@ describe("settlement intent actor, state, schema, and time boundaries", () => {
     const intent = votePayoutIntent(revised, creator, 1, "yes", "Changed after review");
     expect(intent.executeMessage).toEqual({ vote_payout: { bounty_id: 1, round: 1, vote: "yes", rationale: "Changed after review" } });
     expect(intent.funds).toEqual([]);
-    expect(intent.consequences[0]).toMatch(/Revise.*weight 600/);
-    expect(intent.consequences.join(" ")).not.toContain("weight 900");
+    expect(intent.consequences[0]).toMatch(/Revise.*weight \$JUNO 0.0006/);
+    expect(intent.consequences.join(" ")).not.toContain("$JUNO 0.0009");
     expect(() => votePayoutIntent({ ...base, chainTimeNanos: base.activeRound!.closes_at! }, creator, 1, "no", "")).toThrow(/closed/);
     expect(() => votePayoutIntent(base, toBech32("juno", new Uint8Array(20).fill(9)), 1, "yes", "")).toThrow(/snapshotted/);
   });

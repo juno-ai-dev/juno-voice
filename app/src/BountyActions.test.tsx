@@ -32,7 +32,7 @@ describe("bounty action UI", () => {
       executeMessage: { create_bounty: expect.objectContaining({ title: "Ship tooling", expires_at: expiry }) },
       expectedStateFingerprint: ledger.fingerprint }));
     expect(await screen.findByRole("dialog")).toHaveTextContent("Exact transaction review");
-    expect(screen.getByText("1000000 ujuno")).toBeInTheDocument();
+    expect(screen.getByText("$JUNO 1")).toBeInTheDocument();
   });
   it("makes optional project-candidate semantics explicit and reviews the exact metadata", async () => {
     const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} />);
@@ -50,14 +50,23 @@ describe("bounty action UI", () => {
   });
   it("blocks stale preparation before wallet access", async () => {
     const port = access(); render(<BountyActions canonical={canonical} stale access={port} bounty={bounty} />);
-    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     expect(await screen.findByRole("status")).toHaveTextContent(/stale/);
     expect(port.connect).not.toHaveBeenCalled(); expect(port.prepare).not.toHaveBeenCalled();
   });
+  it("converts a decimal $JUNO contribution to exact ujuno only at intent construction", async () => {
+    const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1.000001");
+    await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
+    expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      funds: [{ denom: "ujuno", amount: "1000001" }],
+      consequences: expect.arrayContaining([expect.stringContaining("$JUNO 1.000001")]),
+    }));
+  });
   it("submits only the reviewed object through the shared lifecycle", async () => {
     const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
-    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
     expect(port.submit).toHaveBeenCalledWith(review);
@@ -68,7 +77,7 @@ describe("bounty action UI", () => {
     vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown", txHash: "KNOWN",
       explorerUrl: "https://example/tx/KNOWN" });
     const view = render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
-    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
     expect(await screen.findByRole("status")).toHaveTextContent(/do not submit again/i);
@@ -82,7 +91,7 @@ describe("bounty action UI", () => {
   it("discloses hashless post-sign uncertainty without explorer evidence or a retry action", async () => {
     const port = access(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
     render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
-    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
     expect(await screen.findByRole("status")).toHaveTextContent(/may have occurred.*Do not submit again/i);
@@ -110,7 +119,7 @@ describe("bounty action UI", () => {
       rationale: "Acceptance criteria shipped" } }, funds: [] }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Attached fundsNone");
-    expect(dialog).toHaveTextContent(/entire 2500000 ujuno escrow/);
+    expect(dialog).toHaveTextContent(/entire \$JUNO 2.5 escrow/);
   });
   it("shows canonical weighted deadlines, revisions, and only permits finalization at close equality", () => {
     const round: PayoutRound = { bounty_id: 1, number: 1, nomination: { nominator: bounty.creator, recipient: bounty.creator,
@@ -132,7 +141,7 @@ describe("bounty action UI", () => {
   it("preserves a raw chain failure and adds defensive retry guidance", async () => {
     const port = access(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "failed", reason: "Error parsing into type: WrongRound" });
     render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
-    await userEvent.type(screen.getByLabelText("Contribution (exact ujuno)"), "1000000");
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
     expect(await screen.findByRole("status")).toHaveTextContent("Raw chain error: Error parsing into type: WrongRound");

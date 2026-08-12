@@ -2,6 +2,7 @@ import { fromBech32 } from "@cosmjs/encoding";
 import { DEFAULT_BOUNTY_CONTRACT } from "./config";
 import type { BountyDetail, PayoutRound, PayoutVote } from "./types";
 import type { TransactionIntent } from "./transactions";
+import { formatJuno } from "./junoAmount";
 
 const U64_MAX = 18446744073709551615n;
 const utf8 = (value: string) => new TextEncoder().encode(value).length;
@@ -71,7 +72,7 @@ export function nominatePayoutIntent(state: SettlementState, sender: string, inp
   const rule = b.contributor_count === 1 ? "sole-contributor confirmation" : "revisable contribution-weighted voting";
   return base(state, { nominate_payout: { bounty_id: b.id, recipient, evidence_uri: evidenceUri,
     evidence_digest: evidenceDigest, rationale } }, [
-    `Nominate ${recipient} to receive the entire ${b.total_contribution} ujuno escrow for bounty #${b.id}.`,
+    `Nominate ${recipient} to receive the entire ${formatJuno(b.total_contribution)} escrow for bounty #${b.id}.`,
     `This opens round ${b.next_round} under ${rule}; contribution weights are snapshotted when the contract accepts the nomination.`,
     "No funds are attached. A later contributor decision, public finalization, or refund path determines where escrow goes.",
   ]);
@@ -83,7 +84,7 @@ export function confirmSolePayoutIntent(state: SettlementState, sender: string, 
     throw new Error("This bounty is not awaiting a sole-contributor decision.");
   contributor(state, sender); beforeClose(state, round, true);
   return base(state, { confirm_sole_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
-    `Irreversibly approve payment of ${round.total_weight} ujuno to ${round.nomination.recipient}.`,
+    `Irreversibly approve payment of ${formatJuno(round.total_weight)} to ${round.nomination.recipient}.`,
     `This must land before both close ${round.closes_at} ns and bounty expiry ${state.bounty.expires_at} ns.`,
     "No funds are attached; the contract sends the escrow to the nominated recipient.",
   ]);
@@ -113,7 +114,7 @@ export function votePayoutIntent(state: SettlementState, sender: string, roundNu
   const previous = state.receipts.find((item) => item.round === roundNumber && item.voter === sender);
   return base(state, { vote_payout: { bounty_id: state.bounty.id, round: roundNumber, vote,
     rationale: normalized || null } }, [
-    `${previous ? "Revise" : "Cast"} a ${vote.toUpperCase()} ballot with immutable round-${roundNumber} weight ${snapshot.weight_at_round} ujuno.`,
+    `${previous ? "Revise" : "Cast"} a ${vote.toUpperCase()} ballot with immutable round-${roundNumber} weight ${formatJuno(snapshot.weight_at_round!)}.`,
     `Ballots remain revisable until the exact canonical close ${round.closes_at} ns; this submission replaces any prior choice from this account.`,
     "No funds are attached. Finalization, not this ballot alone, determines payment.",
   ]);
@@ -131,7 +132,7 @@ export function finalizePayoutIntent(state: SettlementState, roundNumber: number
     : yes === no ? "tie" : yes > no ? "paid" : "no-majority";
   return base(state, { finalize_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
     `Publicly finalize closed round ${roundNumber}; current canonical weights predict ${outcome}.`,
-    outcome === "paid" ? `The contract will send ${round.total_weight} ujuno to ${round.nomination.recipient}.`
+    outcome === "paid" ? `The contract will send ${formatJuno(round.total_weight)} to ${round.nomination.recipient}.`
       : "No payout occurs; the contract reopens nomination or enters refunds according to expiry and the round limit.",
     "No funds are attached. The contract's canonical state at execution is authoritative.",
   ]);
@@ -144,7 +145,7 @@ export function cancelSoleFundedIntent(state: SettlementState, sender: string, r
     throw new Error("Public cancellation is allowed only while a sole-funded bounty is open.");
   const value = required(reason, b.terms.max_reason_bytes, "Cancellation reason");
   return base(state, { cancel_sole_funded: { bounty_id: b.id, reason: value } }, [
-    `Cancel bounty #${b.id} and move its entire ${b.total_contribution} ujuno escrow into contributor refunds.`,
+    `Cancel bounty #${b.id} and move its entire ${formatJuno(b.total_contribution)} escrow into contributor refunds.`,
     "No funds are attached. The contributor must separately claim the refund exactly once.",
   ]);
 }
@@ -154,7 +155,7 @@ export function expireBountyIntent(state: SettlementState): TransactionIntent {
   if (b.status !== "open") throw new Error("Only an open bounty can be publicly expired.");
   if (chainNow(state) < BigInt(b.expires_at)) throw new Error("This bounty has not expired according to canonical chain time.");
   return base(state, { expire: { bounty_id: b.id } }, [
-    `Publicly mark bounty #${b.id} expired and move ${b.total_contribution} ujuno into contributor refunds.`,
+    `Publicly mark bounty #${b.id} expired and move ${formatJuno(b.total_contribution)} into contributor refunds.`,
     "No funds are attached. Each contributor must separately claim exactly once.",
   ]);
 }
@@ -166,7 +167,7 @@ export function claimRefundIntent(state: SettlementState, sender: string): Trans
   if (state.claims.some((item) => item.contributor === sender))
     throw new Error("This contributor refund was already claimed; do not submit again.");
   return base(state, { claim_refund: { bounty_id: b.id } }, [
-    `Claim exactly ${contribution.current_amount} ujuno back to the connected contributor account.`,
+    `Claim exactly ${formatJuno(contribution.current_amount)} back to the connected contributor account.`,
     "This refund can be claimed exactly once. No funds are attached to the request.",
   ]);
 }
