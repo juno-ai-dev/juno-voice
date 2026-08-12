@@ -10,8 +10,7 @@ pending/unknown transaction and RPC recovery, stop criteria, rollback, support
 triage, and final evidence packet.
 
 The Program Vault must be treated as unfunded unless a fresh authoritative
-`juno-1` query proves otherwise; the 2026-08-12 read-only observation was
-`0 ujuno`. Issue #37 funding and epoch rehearsal are not complete. Agent funds
+`juno-1` query proves otherwise. Issue #37 funding and epoch rehearsal are not complete. Agent funds
 must not be used. Proposal preparation, proposal submission, deposit, signing,
 broadcast, and every follow-up transaction require separate approvals. Release
 documentation and read-only evidence do not authorize any of those actions.

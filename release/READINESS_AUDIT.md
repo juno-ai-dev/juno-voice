@@ -5,6 +5,12 @@ separates locally demonstrated implementation properties from evidence that
 requires upstream maintainers, an independent reviewer, or authorized public
 chain operations.
 
+> **Historical snapshot:** this audit predates the later `juno-1` deployment and
+> public frontend release. Statements below describe evidence available at the
+> audit point, not current production state. Use
+> [`MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md)
+> for current trial gates and live verification.
+
 ## Definition-of-done matrix
 
 | Requirement | Status | Current evidence or missing gate |

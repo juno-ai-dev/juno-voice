@@ -1,5 +1,10 @@
 # Deployment runbook
 
+> **Historical testnet procedure:** this runbook targets the pre-mainnet
+> `uni-7` deployment workflow. Do not use it as current mainnet authorization or
+> release status. See
+> [`MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
+
 ## Preconditions
 
 Deployment is a separately authorized public-chain action. Before any

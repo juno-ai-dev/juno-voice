@@ -52,8 +52,8 @@ incident/support contact:   [REQUIRED BEFORE PUBLIC TRIAL]
 ### Funding status and issue #37 boundary
 
 The Program Vault is **unfunded** unless a fresh authoritative `juno-1` bank
-balance query proves otherwise. A read-only Cosmos bank REST query on 2026-08-12
-returned no balances (`0 ujuno`) for the Vault. That observation does **not**
+balance query proves otherwise. Bind any release observation to its endpoint,
+UTC time, chain height, raw response, and evidence hash. A query does **not**
 complete funding or an epoch rehearsal.
 
 The prepared #37 target is 1,000 JUNO, but it is not approved or transferred by
@@ -145,7 +145,7 @@ on chain. Capture a screenshot/text export before and after every step.
 2. Do not add a second contributor in the bounded default scenario. A second
    contributor changes settlement to weighted 72-hour ratification and requires
    a separately designed trial and approval.
-3. The submitter prepares **Nominate payout** to the pre-approved trial recipient
+3. The bounty creator or trial account prepares **Nominate payout** to the pre-approved trial recipient
    with durable evidence URI/digest and rationale. Funds must be empty. Record
    **Approval B2**, sign once, then save hash/height/event, round, recipient, and
    confirmation deadline.

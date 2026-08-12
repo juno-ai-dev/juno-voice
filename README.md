@@ -152,8 +152,7 @@ explicit final wallet approval. Pending or unknown outcomes remain locked
 against duplicate submission.
 
 The Program Vault is **unfunded unless a fresh authoritative mainnet balance
-query proves otherwise**. The read-only query recorded on 2026-08-12 returned
-`0 ujuno`. Agent funds must not be used. Governance proposal preparation,
+query proves otherwise**. Agent funds must not be used. Governance proposal preparation,
 submission, deposit, signing, broadcast, and every follow-up transaction require
 separate approvals. Funding and the first epoch rehearsal in issue #37 are not
 claimed complete. See the
