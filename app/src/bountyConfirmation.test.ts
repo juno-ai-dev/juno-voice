@@ -51,7 +51,8 @@ describe("canonical settlement event plus refreshed-state confirmation", () => {
     const refreshed = detail({ bounty: { ...bounty, status: "ratifying", active_round: 1 } });
     const options = { action: "nominate_payout" as const, before, refreshed, sender,
       message: { nominate_payout: { bounty_id: 1, recipient: sender, evidence_uri: "ipfs://evidence", evidence_digest: digest, rationale: "done" } },
-      events: [event("wasm-juno_voice_bounties.payout_nominated", { bounty_id: "1", round: "1", nominator: sender, recipient: sender })] };
+      events: [event("wasm-juno_voice_bounties.payout_nominated", { bounty_id: "1", round: "1", nominator: sender, recipient: sender,
+        contributor_count: "1", total_weight: "2500000", closes_at: "2" })] };
     expect(confirmSettlementMutation(options)).toMatchObject({ bountyId: 1 });
     expect(() => confirmSettlementMutation({ ...options, events: [...options.events, ...options.events] })).toThrow(/ambiguous/);
     expect(() => confirmSettlementMutation({ ...options, refreshed: detail({ bounty: { ...refreshed.bounty, active_round: 2 } }) })).toThrow();

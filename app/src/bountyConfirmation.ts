@@ -57,7 +57,11 @@ export function confirmSettlementMutation(options: {
     case "nominate_payout":
       if (!options.refreshed.activeRound || options.refreshed.activeRound.number !== options.before.bounty.next_round ||
         options.refreshed.bounty.active_round !== options.refreshed.activeRound.number ||
+        values.get("round") !== String(options.refreshed.activeRound.number) ||
         values.get("nominator") !== options.sender || values.get("recipient") !== body.recipient ||
+        values.get("contributor_count") !== String(options.refreshed.activeRound.contributor_count) ||
+        values.get("total_weight") !== options.refreshed.activeRound.total_weight ||
+        values.get("closes_at") !== options.refreshed.activeRound.closes_at ||
         options.refreshed.activeRound.nomination.recipient !== body.recipient ||
         options.refreshed.activeRound.nomination.evidence_uri !== body.evidence_uri ||
         options.refreshed.activeRound.nomination.evidence_digest !== body.evidence_digest ||
@@ -77,6 +81,7 @@ export function confirmSettlementMutation(options: {
       break;
     case "vote_payout": { const receipt = options.refreshed.receipts.find((item) => item.round === roundNumber && item.voter === options.sender);
       if (!round || !receipt || receipt.vote !== body.vote || values.get("voter") !== options.sender || values.get("vote") !== receipt.vote ||
+        receipt.rationale !== (body.rationale ?? null) ||
         values.get("weight") !== receipt.weight || values.get("yes_weight") !== round.yes_weight ||
         values.get("no_weight") !== round.no_weight || values.get("revisions") !== String(receipt.revisions))
         throw new Error("Payout ballot was not confirmed by refreshed canonical state.");
@@ -87,12 +92,16 @@ export function confirmSettlementMutation(options: {
         values.get("participating_weight") !== (BigInt(round.yes_weight) + BigInt(round.no_weight)).toString() ||
         values.get("next_status") !== options.refreshed.bounty.status)
         throw new Error("Payout finalization was not confirmed by refreshed canonical state.");
+      if (round.outcome === "paid" && (options.refreshed.bounty.paid_recipient !== round.nomination.recipient ||
+        options.refreshed.bounty.paid_amount !== round.total_weight))
+        throw new Error("Finalized payment does not match the canonical nomination.");
       break;
     case "cancel_sole_funded":
       if (values.get("creator") !== options.sender || values.get("reason") !== body.reason ||
         values.get("refundable") !== options.refreshed.bounty.total_contribution ||
         options.refreshed.bounty.status !== "refunding" || !options.refreshed.bounty.refund_reason ||
-        typeof options.refreshed.bounty.refund_reason !== "object" || !("cancelled" in options.refreshed.bounty.refund_reason))
+        typeof options.refreshed.bounty.refund_reason !== "object" || !("cancelled" in options.refreshed.bounty.refund_reason) ||
+        options.refreshed.bounty.refund_reason.cancelled.reason !== body.reason)
         throw new Error("Cancellation was not confirmed by refreshed canonical state.");
       break;
     case "expire":
@@ -102,7 +111,8 @@ export function confirmSettlementMutation(options: {
         throw new Error("Expiry was not confirmed by refreshed canonical state.");
       break;
     case "claim_refund": { const claim = options.refreshed.claims.find((item) => item.contributor === options.sender);
-      if (!claim || values.get("contributor") !== options.sender || values.get("amount") !== claim.amount ||
+      if (!claim || options.before.claims.some((item) => item.contributor === options.sender) ||
+        values.get("contributor") !== options.sender || values.get("amount") !== claim.amount ||
         BigInt(options.refreshed.bounty.refunded_amount) !== BigInt(options.before.bounty.refunded_amount) + BigInt(claim.amount) ||
         values.get("fully_refunded") !== String(options.refreshed.bounty.status === "refunded"))
         throw new Error("Refund was not confirmed by refreshed canonical state.");
