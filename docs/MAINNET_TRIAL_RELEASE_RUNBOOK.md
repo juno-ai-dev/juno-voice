@@ -145,7 +145,7 @@ on chain. Capture a screenshot/text export before and after every step.
 2. Do not add a second contributor in the bounded default scenario. A second
    contributor changes settlement to weighted 72-hour ratification and requires
    a separately designed trial and approval.
-3. The bounty creator or trial account prepares **Nominate payout** to the pre-approved trial recipient
+3. The bounty creator, using the trial account that created the bounty, prepares **Nominate payout** to the pre-approved trial recipient
    with durable evidence URI/digest and rationale. Funds must be empty. Record
    **Approval B2**, sign once, then save hash/height/event, round, recipient, and
    confirmation deadline.
