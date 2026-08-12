@@ -72,6 +72,23 @@ main {
   margin: auto;
   padding: 64px 0;
 }
+.onboarding {
+  width: min(1120px, calc(100% - 40px));
+  margin: 32px auto 0;
+  padding: 24px;
+}
+.onboarding-intro {
+  display: flex;
+  gap: 16px;
+}
+.onboarding-intro > p:last-child { margin-left: auto; }
+.journey-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.journey { padding: 16px; border-right: 1px solid #553033; }
+.journey summary, .safety-guide summary { min-height: 44px; cursor: pointer; font-weight: 700; }
+.journey p, .journey li, .safety-guide p { color: #d7bda1; }
+.safety-guide { border-top: 1px solid #a65a5c; padding: 16px; }
+.safety-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; }
+.safety-grid strong { display: block; color: #ff9a9b; }
 .hero {
   display: grid;
   grid-template-columns: 1fr 300px;
@@ -219,6 +236,10 @@ footer {
   font-size: 12px;
 }
 @media (max-width: 800px) {
+  .onboarding-intro { flex-direction: column; }
+  .journey-grid { grid-template-columns: repeat(2, 1fr); }
+  .journey:nth-child(2) { border-right: 0; }
+  .safety-grid { grid-template-columns: 1fr; }
   .hero {
     grid-template-columns: 1fr;
   }
@@ -323,6 +344,9 @@ dd { margin: 0; }
 .gauge-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .gauge-workbench pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #ffebd2; }
 @media (max-width: 600px) {
+  .onboarding { width: calc(100% - 20px); padding: 16px; }
+  .journey-grid { grid-template-columns: 1fr; }
+  .journey { border-right: 0; border-bottom: 1px solid #553033; }
   .allocation-row { align-items: start; flex-direction: column; gap: 4px; }
   .preference-editor > label { grid-template-columns: 1fr; gap: 6px; padding: 10px 0; }
   .epoch-detail { padding: 16px; }

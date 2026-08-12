@@ -3,7 +3,6 @@ import type { BountyTransactionAccess } from "./BountyActions";
 import { createBrowserTransactionAccess } from "./browserTransactions";
 import { createDataSource, type VoiceDataSource } from "./client";
 import type { AppConfig } from "./config";
-import { Ledger } from "./Ledger";
 import { createRegistryDataSource, type RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
 import { createGaugeDataSource, type GaugeDataSource } from "./gauge";
@@ -15,8 +14,13 @@ const Registry = lazy(() =>
 const GaugeVoting = lazy(() =>
   import("./GaugeVoting").then((module) => ({ default: module.GaugeVoting })),
 );
+const Ledger = lazy(() =>
+  import("./Ledger").then((module) => ({ default: module.Ledger })),
+);
+const Onboarding = lazy(() => import("./Onboarding"));
 
 type TransactionAccess = BountyTransactionAccess & RegistryTransactionFlow & GaugeTransactionFlow;
+type PublicView = "bounties" | "projects" | "gauge";
 
 export function App({
   source: supplied,
@@ -64,7 +68,7 @@ export function App({
   const bountyAccess = transactions ?? productionTransactions;
   const registryAccess = registryTransactionFlow ?? productionTransactions;
   const gaugeAccess = gaugeTransactionFlow ?? productionTransactions;
-  const [view, setView] = useState<"bounties" | "projects" | "gauge">("bounties");
+  const [view, setView] = useState<PublicView>("bounties");
 
   return (
     <div className="shell juno-grid">
@@ -83,6 +87,7 @@ export function App({
           <span className="mainnet">JUNO-1 · PUBLIC LEDGER</span>
         </div>
       </header>
+      <Suspense fallback={null}><Onboarding onNavigate={setView} /></Suspense>
       {view === "gauge" ? (
         <Suspense fallback={<main><p>Loading gauge…</p></main>}>
           <GaugeVoting source={gaugeSource} config={config} transactionFlow={gaugeAccess} sender={walletAddress} />
@@ -92,7 +97,9 @@ export function App({
           <Registry source={registrySource} config={config} transactionFlow={registryAccess} sender={walletAddress} />
         </Suspense>
       ) : (
-        <Ledger source={source} config={config} transactions={bountyAccess} />
+        <Suspense fallback={<main><p>Loading bounties…</p></main>}>
+          <Ledger source={source} config={config} transactions={bountyAccess} />
+        </Suspense>
       )}
       <footer>
         <p>Public mainnet observation · Read-only access never requires a wallet · Supported wallet actions use exact review before signing</p>
