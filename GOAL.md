@@ -1,374 +1,510 @@
-# Historical goal: build the Juno Voice v1 backend
+# Goal: remediate the Juno Voice v1 security review
 
-**Status:** Historical backend-only scope. Later release work deployed the v1
-contracts and frontend on `juno-1`; this document preserves the original goal
-and must not be read as current deployment status.
+**Status:** Active remediation goal; funded use remains blocked.
 
-**Scope owner:** Juno Voice backend
+**Opened:** 2026-08-12
 
-**Normative design:** [Backend architecture](docs/architecture/ARCHITECTURE.md)
+**Scope owner:** Juno Voice contracts and release engineering
+
+**Authoritative findings:** [Juno Voice security audit](audit/SECURITY_AUDIT.md)
+
+**Normative architecture:** [Backend architecture](docs/architecture/ARCHITECTURE.md)
 
 **Policy design:** [Incentives and governance](docs/design/INCENTIVES_AND_GOVERNANCE.md)
 
+This goal supersedes the historical root backend-build goal. That goal remains
+available in repository history. The deployed Program Vault must remain
+unfunded, and no gauge epoch may be opened, until the pre-canary release gates
+are met. An explicitly authorized, tightly capped canary is the only funded
+epoch permitted before this goal is complete.
+
 ## Outcome
 
-Ship a production-reviewable on-chain backend in which:
+Ship a reviewed Juno Voice contract revision in which:
 
-1. people create and pool native-Juno social bounties;
-2. a sole contributor explicitly confirms delivery, while multiple contributors receive a full 72-hour contribution-weighted ratification period;
-3. successful bounties can graduate into a curated project registry;
-4. existing projects can enter through bonded registration;
-5. Juno stakers direct a capped Hack Juno epoch using one historical Juno staking snapshot; and
-6. Juno `x/gov`, a minimal Program Vault, and a bounded Agent Operations DAO enforce the authority split in the accepted architecture.
+1. partial ballots can spend only the share of voting power actually allocated
+   to eligible projects;
+2. deliberate `do-not-distribute` votes, unallocated ballot power, excluded
+   allocations, cap overflow, and integer dust remain unspent without being
+   renormalized;
+3. an epoch cannot be opened without its configured maximum budget and cannot
+   remain indefinitely open after an execution failure;
+4. project identity uses registry-assigned numeric IDs rather than caller-chosen
+   identifiers;
+5. bounty graduation replay protection is namespaced by the source contract;
+6. every project-status transition preserves its registration-bond invariant;
+   and
+7. the deployed empty system is migrated, verified, and independently reviewed
+   before any public use or funding.
 
-The result is backend-complete when the contracts, upstream gauge changes, schemas, deployment composition, deterministic artifacts, public-testnet evidence, and security/release evidence below are complete. It does not require a frontend or mainnet funding proposal.
+Completion requires contract code, upstream gauge changes, migrations, schemas,
+clients, deployment tooling, deterministic artifacts, tests, live verification,
+and security evidence. A source-only fix is not completion.
 
-## Scope
+## Non-negotiable protocol invariants
 
-### In scope
+### Voting quantities
 
-- A new `juno-voice-bounties` CosmWasm contract.
-- A new `hack-juno-registry-adapter` CosmWasm contract.
-- Upstream `dao-contracts` changes adding epoch-snapshot gauge power, turnout accounting, and stop-only guardian behavior.
-- Independent integration with pinned `dao-dao-core`, `dao-voting-juno-staked`, reviewed proposal/membership components for Agent Operations, and the gauge stack.
-- Versioned JSON schemas, stable events, bounded queries, and deployment configuration.
-- Deterministic Wasm builds and a release manifest binding source to deployed identities.
-- Unit, model, property, integration, gas, and exact-artifact `uni-7` testing.
-- Operational runbooks for configuration, deployment, monitoring, pause, recovery, submodule updates, and releases.
+For one epoch, define:
 
-### Out of scope
+- `snapshot_total_power`: total voting power at the epoch snapshot height;
+- `participating_power`: the full snapshotted power of every voter with a
+  non-empty ballot, counted once;
+- `option_power[o]`: power allocated to option `o`; and
+- `allocated_power`: the sum of power allocated across every option, including
+  the retained option.
 
-- Frontend or prototype application changes.
-- A hosted indexer, search service, keeper service, or notification system.
-- Mainnet upload, instantiation, community-pool transfer, or submission of a Juno governance proposal.
-- Migrating data or funds from the pre-release prototype contract.
-- CW20, multiple denominations, cross-chain funds, transferable contribution shares, delegated contributor votes, milestones, or partial bounty payouts.
-- Per-bounty DAO cores or arbitrary execution messages.
-- Automatic subjective verification of off-chain delivery evidence.
-- A separate feasibility gate for nested DAO-core/governance messages; the accepted composition is implemented and exercised as ordinary integration behavior.
-
-## Repository and ownership boundary
-
-```text
-contracts/juno-voice-bounties/       Juno Voice-owned bounty escrow
-contracts/hack-juno-registry-adapter/ Juno Voice-owned project registry and gauge adapter
-packages/                             shared Juno Voice types, if a real reuse boundary emerges
-schema/                               canonical pre-release prototype schemas
-contracts/*/schema/                   canonical v1 owned-contract schemas
-deployment/                           validated configs, manifests, and orchestration
-integration/                          exact-artifact scenario capture and validation
-release/                              readiness, evidence, and release-decision gates
-artifacts/                            deterministic Juno Voice Wasm and checksums
-deps/dao-contracts/                   independently built upstream submodule
-```
-
-Do not add `deps/dao-contracts` packages to the root Cargo workspace. The repositories currently use different CosmWasm dependency generations and must build independently. Integration occurs through stable JSON messages, generated schemas, exact Wasm artifacts, and chain-level tests.
-
-All gauge-orchestrator changes are authored and reviewed in the upstream `dao-contracts` repository. After upstream acceptance, advance the Juno Voice gitlink to the exact commit. Do not ship with a dirty submodule.
-
-The existing `contracts/juno-voice` package is a pre-release prototype. It is not a v1 migration source and must not appear in the v1 release manifest. The bounty, registry, Program Vault, Juno voting module, and snapshot gauge are instantiated fresh; migrating prototype state or an existing gauge instance is outside this goal. A separately reviewed Agent Operations DAO may still be bound by address without migrating it. Removing or archiving the prototype code can be a separate cleanup once no build tooling depends on it.
-
-## Workstream A: bounty escrow
-
-### A1. Messages and state
-
-Implement the bounded execute surface defined by the architecture:
-
-- create and fund a bounty;
-- add contributions;
-- nominate a delivery and recipient;
-- confirm or decline a sole-contributor nomination;
-- cast or revise a contributor `YES`/`NO` vote;
-- finalize a mature ratification;
-- cancel a sole-funded bounty;
-- expire a bounty;
-- claim an individual refund;
-- moderate an open bounty into a typed refund path;
-- graduate a paid project through the configured registry;
-- pause new activity, unpause through the governor, replace bounded roles, and update future-only configuration.
-
-Store explicit bounty, nomination, round, contribution, receipt, claim, moderation, graduation, authority, pause, and accounting records. Every list has stable bounded pagination. Exact state enums and errors are part of the checked-in schema.
-
-### A2. Settlement semantics
-
-The implementation must enforce:
-
-- native `ujuno` only;
-- immutable funded terms and acceptance criteria;
-- positive bounded contributions aggregated per address;
-- no live contribution withdrawal or transfer;
-- a snapshotted contributor set and weights when a nomination opens;
-- separate explicit confirmation for one contributor within a bounded deadline;
-- permissionless refund finalization for an unconfirmed sole round at its deadline or bounty expiry;
-- `closes_at = opens_at + 259_200 seconds` for multiple contributors;
-- no early finalization;
-- vote revision through checked removal/addition of the same fixed weight;
-- payout only when participation is positive and `yes_weight > no_weight` after close;
-- reset for no majority, tie, or no votes, with expired resets entering refunds;
-- full-pot, one-recipient payout only;
-- pull refunds with no loop over contributors; and
-- no agent or governor runtime path that can redirect active bounty principal.
-
-State changes precede bank messages so CosmWasm transaction atomicity protects accounting. Every execute except creation and contribution rejects funds.
-
-### A3. Bounty acceptance tests
-
-At minimum, automate:
-
-- creation amount, denomination, metadata, lifetime, and attached-funds bounds;
-- repeated and multi-address contributions and exact contributor counting;
-- immutable terms and frozen nomination round data;
-- sole confirmation, bounded-deadline decline, permissionless timeout/expiry refund, and failed-transfer rollback;
-- two or more contributors with unequal weights;
-- vote creation and every revision pair (`YES→NO`, `NO→YES`, and same-vote replacement policy);
-- rejection of non-contributor, zero-weight, late, and wrong-round votes;
-- rejection at one nanosecond before close and finalization at/after close;
-- yes majority, no majority, tie, no votes, and low-participation yes majority;
-- round reset, top-up, later nomination, and old-receipt isolation;
-- expiry before nomination and expiry during ratification;
-- sole cancellation and prohibited multi-contributor cancellation;
-- typed moderation, agent authorization, and full principal refunds;
-- double-payout, double-refund, and cross-bounty replay resistance;
-- unsolicited native transfer accounting isolation;
-- stop-only agent behavior and continued settlement/refund liveness while paused;
-- governor-only recovery and future-only configuration changes; and
-- pagination/order stability at every configured maximum.
-
-Add a state-machine/model test that generates valid and invalid sequences and checks liability backing after every successful transition:
+The implementation must maintain:
 
 ```text
-accounted active escrow + outstanding refund claims + pending payout liabilities
-<= accounted contract native balance
+allocated_power <= participating_power <= snapshot_total_power
 ```
 
-The model must also prove that each contributed unit is paid once, refunded once, or remains an explicit live liability—never more than one of those.
+Turnout is:
 
-## Workstream B: project registry adapter
+```text
+participating_power / snapshot_total_power
+```
 
-### B1. Registry behavior
+Every project threshold, cap, and uncapped payout share uses
+`participating_power` as its denominator. No payout calculation may use
+`allocated_power` or the sum of winning allocations as the denominator.
 
-Implement stable project IDs and explicit `PENDING`, `ACTIVE`, `SUSPENDED`, `REJECTED`, and `RETIRED` states.
+For an eligible project `p`:
 
-Support two authenticated admission paths:
+```text
+raw_share[p] = option_power[p] / participating_power
+payable_share[p] = min(raw_share[p], max_project_share)
+```
 
-- a paid, project-candidate bounty may be graduated by Agent Operations through the configured bounty-contract address without a registration bond; and
-- an existing project may deposit the exact registration bond and await agent review.
+The minimum-project-share check also uses `raw_share[p]`. The total emitted
+value is the sum of individually floored project payouts and must never exceed
+the epoch budget or available Vault balance.
 
-The contract must preserve admission provenance, metadata digest, current/pending payout address, bond accounting, typed review reason, and status history. Address changes use propose/accept and a configured delay. Only active records pass option validation.
+### Retained value
 
-Cap active records at 99 and reserve the 100th option as immutable `do-not-distribute`. Capacity errors fail atomically; no query or execution path truncates the registry silently.
+The following value remains in the Program Vault for the current tranche:
 
-### B2. Adapter behavior
+- power explicitly allocated to `do-not-distribute`;
+- `participating_power - allocated_power`;
+- allocations below the project threshold;
+- allocations to projects invalid at execution;
+- allocation above a project's cap; and
+- integer rounding dust.
 
-Implement the minimum gauge interface required by the pinned orchestrator while narrowing its authority to:
+None of it is redistributed to other projects. It does not automatically return
+to the community pool after an epoch. Any eventual return occurs only through
+the separately authorized unused-funds recovery path and tranche-expiry policy.
 
-- fixed native denomination;
-- fixed epoch ceiling and supplied available budget;
-- active stable project IDs resolved at execution time;
-- one bank send per selected eligible project;
-- bounded selected projects and total messages;
-- no send for `do-not-distribute`, threshold exclusions, cap overflow, or integer dust; and
-- no stored or forwarded arbitrary `CosmosMsg`.
+`do-not-distribute` is an affirmative voting signal. An omitted portion of a
+non-empty ballot is unallocated power. An empty ballot is abstention and does
+not count toward turnout. Clients must not silently convert one meaning into
+another.
 
-Economic configuration is Program-Vault-governor-only. Project review is curator-only. Agent suspension and stop are one-way; resume and overrides are governor-only.
+### Identity and provenance
 
-### B3. Registry acceptance tests
+- A project ID is an immutable, monotonically increasing `u64` assigned by the
+  registry.
+- IDs are never supplied by applicants or bounty creators and are never reused.
+- Human-readable names and slugs are presentation metadata, not security keys.
+- Gauge option encoding is canonical, for example `project:<base-10-id>` with
+  no leading zeroes.
+- `do-not-distribute` is a reserved non-project option and cannot collide with
+  the numeric namespace.
+- A graduated bounty is uniquely identified by
+  `(source_bounty_contract, source_bounty_id)`.
 
-At minimum, automate:
+### Project and bond state
 
-- graduation authentication, paid-bounty provenance, duplicate source, and duplicate project ID;
-- existing-project bond denomination/amount and pending isolation from gauge options;
-- approval, soft rejection/refund, hard spam rejection/destination, suspension, reactivation, retirement, and bond claim;
-- active capacity at 98, 99, and attempted 100th project;
-- stable identity across payout-address changes;
-- address proposal, acceptance, delay, cancellation/replacement policy, and unauthorized calls;
-- suspension after tally but before adapter execution;
-- governor override and curator replacement;
-- exact epoch ceiling, integer flooring, share cap, threshold, dust, abstention, and unallocated treatment;
-- invalid option, duplicate selected option, too many options/messages, wrong denom, overflow, and insufficient available balance; and
-- proof that every produced message is a bounded bank send to the currently approved address.
+For a bonded project, `ACTIVE` or `SUSPENDED` requires a fully backed
+`DEPOSITED` bond. A graduated project has explicit bond-free provenance.
+`REFUNDED`, `FORFEITED`, or `CLAIMED` bonds cannot back an active project.
 
-Property-test that total emitted native value never exceeds the supplied budget or configured epoch ceiling under arbitrary valid allocations.
+Every status change, including a governor override, must pass through one
+shared transition validator. Administrative authority may choose among valid
+transitions; it may not bypass state invariants.
 
-## Workstream C: dao-contracts epoch-snapshot gauge
+## Workstream A: snapshot gauge allocation repair
 
-### C1. Upstream implementation
+### A1. Correct denominator and accounting
 
-In the upstream `dao-contracts` gauge orchestrator:
+In the pinned upstream `dao-contracts` gauge:
 
-- add an explicit `EpochSnapshot` power-source mode without changing hook-mode semantics;
-- snapshot one historical height and nonzero total power when an epoch opens;
-- query every ballot's power at exactly that height;
-- scope receipts, votes, tallies, and cleanup by epoch;
-- allow ballot revision without changing fixed voter power;
-- reject hook configuration/calls in snapshot mode;
-- track full participating voter power separately from allocated power;
-- enforce configurable `min_turnout_bps` with checked ratio arithmetic;
-- terminally record a no-distribution outcome when turnout fails;
-- add an authenticated guardian that may stop but cannot resume; and
-- expose snapshot, turnout, allocation, terminal outcome, health, and cleanup progress through bounded queries/events.
+- preserve `participating_power` independently of allocated tallies;
+- use it for project thresholds, caps, and adapter shares;
+- retain partial-ballot remainder without synthesizing a vote;
+- preserve exact revision accounting when a ballot changes between partial,
+  full, retained-only, and empty states;
+- record raw allocated, retained-option, unallocated, selected, emitted, and
+  retained values through bounded queries and stable events; and
+- terminally distribute nothing when turnout fails.
 
-Do not synthesize Juno staking hooks. Do not mix snapshot heights within an epoch. Do not roll a failed-turnout budget automatically into a later epoch.
+Division-by-zero paths must produce an explicit no-distribution outcome. All
+arithmetic remains checked.
 
-### C2. Gauge acceptance tests
+### A2. Treat the retained option as a sink, not a project
 
-Extend upstream unit/model/property coverage for:
+Do not hard-code the Juno Voice option string into the generic gauge. Add a
+versioned, explicit retained-option configuration or equivalent typed adapter
+metadata.
 
-- snapshot selection and zero/failed total-power queries;
-- every voter and denominator queried at the identical height;
-- delegation or current-power changes after opening with unchanged epoch weight;
-- allocation revision and exact tally subtraction/addition;
-- partial allocation with full voter power counted once for turnout;
-- empty ballot removal and participation decrement;
-- turnout immediately below, equal to, and above threshold;
-- terminal no-distribution and no rollover;
-- complete epoch isolation and bounded cleanup;
-- hook-mode regression compatibility;
-- rejection of hooks in snapshot mode;
-- agent stop, prohibited agent resume, and governor resume;
-- option, selected-set, message, and gas bounds; and
-- adapter failure, project suspension, and atomic execution rollback.
+For the configured retained option:
 
-Model at least two consecutive epochs with stake changes between their snapshot heights. Prove that an epoch's stored total and every ballot use its own height only.
+- validate its existence when opening an epoch;
+- tally and report its raw power;
+- exclude it from project minimum-share and maximum-share rules;
+- exclude it from project top-N selection and the selected-project count;
+- never produce an execution message for it; and
+- preserve legacy behavior for gauges that configure no retained option.
 
-### C3. Upstream acceptance and pin
+The current adapter may keep its defensive no-send check, but safety and
+selection correctness must not depend on the adapter receiving the retained
+option as a winning project.
 
-The workstream is not complete while gauge changes exist only as a dirty submodule. It completes when:
+### A3. Gauge regression tests
 
-1. changes and schemas are committed in upstream `dao-contracts`;
-2. its full required checks pass;
-3. the Juno Voice gitlink advances to that reviewed commit; and
-4. Juno Voice records the exact commit in its release manifest.
+At minimum, prove:
 
-## Workstream D: governance composition and deployment
+- a voter allocating 5% to projects can cause at most 5% of that voter's
+  participating-power share to be emitted;
+- 5% project plus 95% `do-not-distribute` and 5% project plus 95% unallocated
+  both retain 95%, while reporting different signals;
+- a 100% retained-only ballot counts for turnout and emits zero;
+- an empty ballot removes the voter from participating power;
+- tiny project allocations cannot be renormalized to exhaust the epoch;
+- thresholds and caps use participating power at exact below/equal/above
+  boundaries;
+- the retained option never consumes a selected-project slot;
+- threshold exclusions, suspended projects, cap overflow, and dust stay in the
+  Vault;
+- revision and removal preserve every tally and participation invariant; and
+- hook-mode and gauges without a retained option have no semantic regression.
 
-### D1. Versioned deployment configuration
+Include model/property tests over arbitrary bounded ballots. Assert after every
+successful mutation that option tallies equal the reference-model sum and that
+total payable share is no greater than total project allocation divided by
+participating power.
 
-Create a validated, environment-specific configuration format containing:
+## Workstream B: epoch funding and terminal liveness
 
-- chain ID, RPC/gRPC endpoints used for verification, native denom, and bech32 prefix;
-- every Wasm checksum and expected code identity;
-- Juno `x/gov` module account used as external admin;
-- Program Vault, voting module, gauge, bounty, registry, and Agent Operations addresses or instantiate definitions;
-- CosmWasm code admin and application governor separately;
-- bounty limits and immutable 72-hour duration;
-- registration bond and disposition destinations;
-- gauge snapshot mode, epoch duration, turnout, share/selection caps, project capacity, and epoch ceiling;
-- tranche term and unused-funds policy; and
-- submodule commit and build-tool identities.
+### B1. Funded opening
 
-No deploy command accepts an unvalidated free-form address, moving source branch, unknown checksum, unexpected denom, or implicit authority default.
+`OpenEpoch` may remain permissionless, but it must atomically query the Program
+Vault and reject opening unless the Vault holds at least the epoch's full fixed
+budget in the configured denomination. A failed opening creates no epoch,
+snapshot, receipt, or schedule mutation.
 
-### D2. Composition
+The epoch stores its budget and policy version at opening. Economic policy
+changes do not retroactively alter an open epoch.
 
-Provide reproducible orchestration for:
+Because Juno `x/gov` is the trusted Vault root, a balance gate is sufficient for
+this revision; a new escrow or reservation contract is out of scope. Removing
+funds after opening must nevertheless lead to a safe terminal outcome.
 
-1. uploading exact artifacts;
-2. instantiating or binding the reviewed Agent Operations DAO;
-3. instantiating `dao-voting-juno-staked` and the Program Vault composition;
-4. instantiating bounty and registry contracts with the correct split roles;
-5. instantiating epoch-snapshot gauge components;
-6. registering only the required execution modules and adapter relationships;
-7. transferring final application ownership/admin relationships; and
-8. querying every resulting relationship back into a signed-off deployment manifest.
+### B2. Execution and failure outcomes
 
-The orchestration must support dry-run/message generation separately from broadcast. It must stop on an address, checksum, chain ID, code ID, role, or config mismatch and must be restartable without silently duplicating instantiated state.
+Execution must:
 
-### D3. Agent Operations DAO
+1. calculate selected project shares without renormalization;
+2. obtain or validate the adapter's bounded messages and actual emitted value;
+3. require only `emitted_value`, not the full nominal epoch budget, to be
+   available at execution; and
+4. atomically emit all messages or none.
 
-Use one reusable DAO with public on-chain proposals and a reviewed CW4 or CW721-roles membership/threshold, either newly instantiated from the pinned source or bound through an explicit deployment record. Its executable permissions are limited by the bounty, registry, and gauge message APIs; membership alone grants no contract authority.
+If the current balance is below the actual emitted value, record a terminal
+`INSUFFICIENT_FUNDS` outcome with no messages. Later funding must not make that
+stale ballot executable.
 
-The deployment record must disclose members, threshold, voting duration, core/proposal/voting code identities, and every assigned role.
+Add a bounded execution deadline. After it, anyone may terminally expire an
+otherwise unexecuted epoch with no distribution. Provide a governor-only,
+reasoned abort path for unrecoverable adapter or migration failures. Guardian
+stop authority remains stop-only and cannot abort, resume, or allocate funds.
 
-## Workstream E: integration and release evidence
+All terminal paths advance scheduling exactly once and are idempotently
+queryable. No failure budget rolls into a later epoch implicitly.
 
-### E1. Cross-contract integration
+### B3. Epoch liveness tests
 
-Use a chain-capable harness for dependency-generation boundaries that cannot safely share one Rust test graph. Cover complete flows:
+Cover:
 
-1. create → multi-fund → nominate → wait 72 hours → vote → pay;
-2. create → reject/tie/no-vote → reset → re-nominate → pay;
-3. moderate/expire → independent refunds;
-4. paid bounty → agent graduation → active project;
-5. bonded existing project → approval → active project;
-6. open epoch → historical Juno power ballot → meet turnout → bounded transfers;
-7. failed turnout → no transfers and retained vault funds;
-8. suspension between vote and execution → no project transfer;
-9. agent stop → failed resume → governor recovery; and
-10. consecutive epochs with distinct snapshots and no state leakage.
+- direct callers bypassing the frontend funding check;
+- balances immediately below, equal to, and above the epoch budget at open;
+- no state change after rejected opening;
+- partial and retained-only execution requiring only actual emitted value;
+- Vault balance removal between open and execution;
+- terminal insufficient-funds behavior and later top-up resistance;
+- adapter errors followed by governor abort;
+- permissionless expiry at the exact deadline and rejection before it;
+- double execute, double abort, and execute-after-expiry rejection; and
+- schedule behavior across at least two subsequent epochs.
 
-Assertions inspect final chain balances, contract states, emitted events, authorities, code IDs, and exact message destinations—not only transaction success.
+## Workstream C: registry-assigned project identity
 
-### E2. Juno snapshot behavior
+### C1. Numeric IDs
 
-On a Juno v30-compatible public testnet:
+Replace caller-supplied string project IDs with a checked `NEXT_PROJECT_ID`
+counter and numeric storage keys.
 
-- record the snapshot module activation/export boundary and observed retention policy;
-- exercise native staking changes across EndBlock and query exact historical voter/total power;
-- demonstrate that one epoch remains fixed while a later epoch observes the change;
-- record the configured liquid-staking-token allowlist and resulting power basis; and
-- fail deployment readiness if required history is not retained beyond the longest open epoch plus operational margin.
+- Bonded registration allocates an ID atomically after all validation succeeds.
+- Bounty graduation allocates an ID atomically after authentication and replay
+  checks succeed.
+- Failed transactions do not consume an ID.
+- Rejected and retired records remain historical and their IDs are not reused.
+- Queries paginate in numeric order.
+- Events and response data return the assigned ID.
+- The UI resolves gauge option IDs to project metadata and does not present the
+  raw number as the project's primary name.
 
-### E3. Deterministic artifacts
+Do not enforce permanent uniqueness on a display name, slug, payout address, or
+metadata URI. Duplicate-project detection remains a curation decision rather
+than a storage-key collision.
 
-Produce optimized Wasm in a pinned builder environment. For every release candidate:
+### C2. Bounty graduation handshake
 
-- rebuild from a clean recursive clone;
-- prove byte-for-byte repeatability;
-- reject floating dependencies and dirty repositories/submodules;
-- generate and diff schemas;
-- record SHA-256 checksums and contract CW2 versions; and
-- generate a machine-readable manifest binding both repository commits to artifacts, code IDs, addresses, config, and test evidence.
+Remove `project_id` from a new-project bounty candidate. On graduation, the
+registry returns a typed response containing the assigned project ID. The
+bounty contract uses a reply-on-success flow or an equivalently atomic typed
+handshake to store its graduation record.
 
-CI must initialize submodules and test the two workspaces independently before integration checks.
+The complete bounty-to-registry transaction must roll back if ID allocation,
+registry creation, response decoding, or bounty record finalization fails.
+Repeated graduation of one bounty must fail without allocating another ID.
 
-### E4. Security and operational readiness
+Linking a bounty to a pre-existing project is outside this remediation goal and
+must not be smuggled in through a user-supplied numeric ID.
 
-Before funded production use:
+### C3. Source-contract namespace
 
-- complete an independent review/audit of bounty escrow, registry adapter, and changed gauge paths;
-- resolve all critical/high findings and explicitly disposition lower findings;
-- measure target-chain gas at configured maxima: contributors, projects, selected options, messages, pagination, history, and cleanup;
-- run exact-artifact public-testnet scenarios and publish transaction/evidence references;
-- document snapshot-retention, balance-liability, overdue-finalization, stopped-state, adapter-failure, and tranche-balance alerts;
-- document pause, refund, epoch failure, role replacement, and unused-funds recovery procedures; and
-- complete at least two low-value canary epochs before proposing a larger recurring tranche.
+Replace the global `source_bounty_id` replay map with a map keyed by the
+validated source contract address and source bounty ID. Store both fields in
+admission provenance and expose them in queries and events.
 
-The canary's actual economic settings are deployment/governance inputs, not contract constants. Recommended values in the design report are hypotheses to validate, not defaults to hide in code.
+After an authorized bounty-contract replacement:
+
+- the old contract is no longer authorized to graduate;
+- an ID used by the old contract does not collide with the same numeric ID from
+  the new contract; and
+- an already consumed `(contract, id)` pair remains permanently consumed.
+
+### C4. Identity tests
+
+At minimum, cover:
+
+- sequential registration and graduation IDs;
+- atomic rollback without counter consumption;
+- concurrent ordering as determined by chain transaction order;
+- inability to reserve or predictively squat another project's ID;
+- retained historical IDs after every terminal project state;
+- canonical gauge-option encoding and malformed encoding rejection;
+- bounty reply success, malformed reply, submessage failure, and replay;
+- same bounty ID from two authorized contract generations; and
+- old-source rejection after source replacement.
+
+## Workstream D: project/bond transition repair
+
+### D1. One transition engine
+
+Replace ad hoc review, retirement, and override bond mutations with one
+transition function that validates:
+
+- admission provenance;
+- current and requested project status;
+- current bond state and actual liability backing;
+- caller authority and typed reason; and
+- option-index additions/removals and accounting deltas.
+
+The minimum supported bonded flow is:
+
+```text
+PENDING + DEPOSITED -> ACTIVE + DEPOSITED
+PENDING + DEPOSITED -> REJECTED + REFUNDED       (soft reject)
+PENDING + DEPOSITED -> REJECTED + FORFEITED      (hard reject)
+ACTIVE  + DEPOSITED -> SUSPENDED + DEPOSITED
+SUSPENDED + DEPOSITED -> ACTIVE + DEPOSITED
+ACTIVE|SUSPENDED + DEPOSITED -> RETIRED + CLAIMABLE
+RETIRED + CLAIMABLE -> RETIRED + CLAIMED          (claim)
+```
+
+A governor may restore `RETIRED + CLAIMABLE` to `ACTIVE + DEPOSITED` only while
+the bond remains unclaimed and fully backed. Reactivation from `REFUNDED`,
+`FORFEITED`, or `CLAIMED` is prohibited. Graduated bond-free projects follow a
+separate explicit transition table.
+
+Bond claims require both the expected bond state and a compatible terminal
+project status. Option membership, active-project counts, pending counts, and
+bond liabilities must update atomically with the transition.
+
+### D2. Transition tests
+
+Table-test every valid and invalid status × provenance × bond-state
+combination, including every governor override target. Add a state-machine test
+that proves after every generated sequence:
+
+```text
+bond_liability <= actual_registry_balance
+ACTIVE bonded project => bond.state == DEPOSITED
+SUSPENDED bonded project => bond.state == DEPOSITED
+settled bond => project is not an active gauge option
+```
+
+Also cover failed bank-send rollback, repeated terminal actions, reactivation
+before and after claim, and exact active/pending/option counts.
+
+## Workstream E: migration and compatibility
+
+### E1. Guarded empty-state migration
+
+The audited live state contained no bounties, projects, bond liabilities, open
+epoch, or Program Vault funds. Prefer a small, guarded empty-state migration
+over a complex speculative data transformer.
+
+Immediately before migration, independently query and record those conditions.
+Each migration must fail before mutation if its required empty-state predicate
+is false. If any user state or funds appear, stop this plan and design a
+separately reviewed populated-state migration.
+
+The intended empty-state migration must:
+
+- preserve contract addresses and authority relationships;
+- initialize the numeric project counter and new provenance indexes;
+- preserve the immutable retained option under the new option encoding;
+- update bounty candidate/graduation state only after proving there are no
+  existing bounties or pending graduation replies;
+- reject migration with an open gauge epoch;
+- preserve gauge history and configuration not superseded by this goal; and
+- validate exact prior CW2 names and versions.
+
+Migration is performed through the documented Juno `x/gov` administration
+path. No script may infer an address, code ID, checksum, or prior version.
+
+### E2. Public interface and clients
+
+Version and regenerate all changed JSON schemas. Update:
+
+- the web application and transaction builders;
+- deployment configuration and message generation;
+- integration fixtures and captured expected events;
+- monitoring, reconciliation, and operator runbooks;
+- release manifests and exact-artifact verification; and
+- architecture and governance documentation.
+
+Breaking message changes must fail loudly against old clients. Do not retain a
+second caller-chosen-ID path for convenience.
+
+### E3. Upstream pin
+
+All gauge changes are authored, tested, reviewed, and committed in the upstream
+`dao-contracts` repository. The root repository then advances to one clean
+exact gitlink. Neither repository may release from a dirty tree or floating
+branch.
+
+## Workstream F: verification and release
+
+### F1. Automated verification
+
+Required green checks include:
+
+- both Rust workspaces' full locked test suites;
+- formatting, clippy, schema regeneration, and schema-diff checks;
+- new model/property tests for allocation and registry transitions;
+- root deployment and cross-contract integration suites;
+- migration tests starting from exact deployed v1 code and representative
+  state snapshots;
+- deterministic optimized Wasm builds from a clean recursive clone;
+- `cosmwasm-check`, export allowlists, artifact-size limits, and checksum
+  verification; and
+- maximum-bound target-chain gas tests for ballots, options, selected projects,
+  migration, execution, and queries.
+
+Tests must include a red/green regression for every audit finding and every
+new invariant in this goal.
+
+### F2. Chain evidence
+
+Before mainnet migration:
+
+- deploy exact candidate artifacts to a Juno-compatible testnet;
+- run funded, partial, retained-only, underfunded, expired, and aborted epochs;
+- run bonded registration and bounty graduation through numeric ID assignment;
+- rotate the configured bounty contract and prove namespaced replay behavior;
+- exercise the complete bond transition table used operationally;
+- record transactions, balances, events, code identities, admins, and gas; and
+- reconcile emitted plus retained value for every epoch.
+
+Immediately after mainnet migration, query back code IDs, checksums, CW2
+versions, admins, authorities, configs, counters, retained option, balances,
+liabilities, project/bounty emptiness, and absence of an open epoch. Publish the
+signed release manifest before funding.
+
+### F3. Security disposition
+
+The remediation is not approved by its implementers alone. Before authorizing
+the canary:
+
+- independently re-review the changed gauge, registry, bounty reply, and
+  migration paths;
+- close JV-01 through JV-05 with direct code and test evidence;
+- disposition the retained-option/top-N and epoch-expiry design explicitly;
+- resolve all new critical/high findings and document lower-severity decisions.
+
+After those gates pass, run at least one explicitly authorized low-value canary
+epoch and reconcile it before any production tranche or recurring epoch.
+
+## Out of scope
+
+- Automatic per-epoch return of retained value to the community pool.
+- A majority-veto interpretation of `do-not-distribute`.
+- A new epoch escrow/reservation contract.
+- Linking a bounty candidate to an existing project.
+- Reusing or renaming numeric project IDs.
+- Migrating the historical `contracts/juno-voice` prototype.
+- Broad bounty settlement, DAO-governance, or frontend redesign unrelated to
+  the changed interfaces.
+- Funding the Program Vault or opening a production epoch.
 
 ## Implementation order
 
-1. Freeze shared terms, schemas, error taxonomy, limits, and event conventions.
-2. Implement bounty escrow and its model/property test suite.
-3. Implement project registry/adapter and integrate bounty graduation.
-4. Implement and upstream epoch-snapshot gauge changes; advance the submodule pin.
-5. Build validated deployment composition and release manifest generation.
-6. Run cross-contract integration and Juno snapshot testnet scenarios.
-7. Complete deterministic builds, maximum-bound gas evidence, independent review, and runbooks.
-8. Produce a testnet release candidate and evidence packet suitable for a later Juno governance funding decision.
+1. Freeze the formulas, retained-option semantics, epoch terminal states,
+   numeric ID encoding, provenance key, and transition tables in an ADR.
+2. Implement and test the upstream gauge allocation and liveness changes.
+3. Implement and test registry IDs, namespaced provenance, and bond transitions.
+4. Implement the bounty graduation reply handshake.
+5. Regenerate schemas and update clients, documentation, deployment tooling,
+   monitoring, and integration tests.
+6. Implement guarded migrations and rehearse them from exact deployed code.
+7. Produce deterministic artifacts and complete testnet/gas evidence.
+8. Complete independent remediation review, mainnet migration, post-migration
+   verification, and a low-value canary.
 
-Parallel work is acceptable after shared schemas and authority boundaries are frozen, but no release may substitute mocked DAO/gauge behavior for exact pinned artifacts.
+Parallel work is acceptable only after step 1 freezes the shared interfaces.
+The Program Vault remains unfunded throughout implementation and review, until
+the separately authorized canary.
 
-## Historical definition of done
+## Definition of done
 
-Under this original backend-only scope, completion required all of the following:
+- [ ] JV-01 through JV-05 have fixes, regression tests, and explicit audit
+      dispositions.
+- [ ] Project payouts use participating power and cannot be renormalized.
+- [ ] Deliberate retained votes and implicit unallocated power are separately
+      observable and economically retained.
+- [ ] The retained option never consumes a funded-project selection slot.
+- [ ] An unfunded epoch cannot open, and every opened epoch reaches one terminal
+      outcome within a bounded time.
+- [ ] Only actual emitted value is required at execution.
+- [ ] Registry-assigned numeric IDs eliminate caller-controlled ID squatting.
+- [ ] Graduation replay keys and provenance include the source contract.
+- [ ] Every project/status/bond combination is accepted or rejected by one
+      tested transition table.
+- [ ] Empty-state migration predicates are reverified immediately before use.
+- [ ] Exact deployed-code migrations pass rehearsal and mainnet verification.
+- [ ] Both repositories are clean and pinned to reviewed commits.
+- [ ] Schemas, clients, docs, runbooks, monitoring, and release manifests match
+      the new protocol.
+- [ ] Locked tests, properties, integration scenarios, deterministic builds,
+      artifact checks, and target-chain gas gates pass.
+- [ ] Independent review reports no unresolved critical/high issue.
+- [ ] A low-value canary reconciles exactly before any larger funding action.
 
-- [ ] Bounty and registry contracts implement the accepted state machines and authority split.
-- [ ] Every protocol invariant in the architecture has a direct automated test or model assertion.
-- [ ] No unbounded contributor, voter, project, history, message, or cleanup loop exists.
-- [ ] `ujuno` liability accounting reconciles across success, reset, expiry, moderation, refund, and failure paths.
-- [ ] Multi-contributor settlement cannot occur before the complete 72-hour window.
-- [ ] Gauge epoch voting uses one historical height and passes turnout/epoch-isolation tests.
-- [ ] Adapter output is restricted to capped native sends to active registered projects.
-- [ ] Agent Operations can stop but cannot pay pooled bounties, allocate rewards, raise limits, resume, or migrate.
-- [ ] Program Vault and Juno `x/gov` relationships are explicit and query-confirmed.
-- [ ] Gauge changes are accepted upstream and the clean submodule pin references them.
-- [ ] Schemas and stable events cover all public messages, states, outcomes, and authorities.
-- [ ] CI builds/tests both workspaces independently and runs cross-contract integration.
-- [ ] Clean recursive-clone deterministic Wasm checks pass and the release manifest is complete.
-- [ ] Exact-artifact `uni-7` flows and maximum-bound gas evidence are published.
-- [ ] Independent security review has no unresolved critical/high findings.
-- [ ] Deployment, monitoring, pause, recovery, and submodule-update runbooks are usable.
-- [ ] The existing prototype frontend redesign remains outside v1 backend release approval; no v1 frontend release, mainnet deployment, funding transfer, or prototype state/fund migration is smuggled into the goal.
-
-Completion produces a backend release candidate and evidence packet. Uploading it to mainnet, assigning live admins, transferring community-pool funds, or enabling a production tranche requires a separate explicit authorization.
+Completion authorizes preparation of a separate funding decision. It does not
+itself authorize a community-pool transfer, Program Vault funding, or recurring
+production epochs.
