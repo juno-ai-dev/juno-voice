@@ -29,6 +29,15 @@ afterEach(() => {
 });
 
 describe("production transaction wiring", () => {
+  it("moves focus to the selected public view after onboarding navigation", async () => {
+    render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
+    await userEvent.click(await screen.findByText("Register a project"));
+    await userEvent.click(screen.getByRole("button", { name: "Open projects" }));
+    const region = screen.getByLabelText("projects view");
+    await screen.findByRole("heading", { name: "Eligible projects" });
+    expect(region).toHaveFocus();
+  });
+
   it("keeps registry browsing wallet-free when no supported extension is present", async () => {
     render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
     await userEvent.click(screen.getByRole("button", { name: "Projects" }));

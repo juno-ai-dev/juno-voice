@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
 import type { BountyTransactionAccess } from "./BountyActions";
 import { createBrowserTransactionAccess } from "./browserTransactions";
 import { createDataSource, type VoiceDataSource } from "./client";
@@ -69,6 +69,11 @@ export function App({
   const registryAccess = registryTransactionFlow ?? productionTransactions;
   const gaugeAccess = gaugeTransactionFlow ?? productionTransactions;
   const [view, setView] = useState<PublicView>("bounties");
+  const viewRegion = useRef<HTMLDivElement>(null);
+  const navigate = (next: PublicView) => {
+    setView(next);
+    window.requestAnimationFrame(() => viewRegion.current?.focus());
+  };
 
   return (
     <div className="shell juno-grid">
@@ -80,14 +85,14 @@ export function App({
             <span>VOICE</span>
           </a>
           <nav aria-label="Primary">
-            <button className={view === "gauge" ? "nav-active" : ""} onClick={() => setView("gauge")}>Gauge</button>
-            <button className={view === "projects" ? "nav-active" : ""} onClick={() => setView("projects")}>Projects</button>
-            <button className={view === "bounties" ? "nav-active" : ""} onClick={() => setView("bounties")}>Bounties</button>
+            <button className={view === "gauge" ? "nav-active" : ""} onClick={() => navigate("gauge")}>Gauge</button>
+            <button className={view === "projects" ? "nav-active" : ""} onClick={() => navigate("projects")}>Projects</button>
+            <button className={view === "bounties" ? "nav-active" : ""} onClick={() => navigate("bounties")}>Bounties</button>
           </nav>
           <span className="mainnet">JUNO-1 · PUBLIC LEDGER</span>
         </div>
       </header>
-      <Suspense fallback={null}><Onboarding onNavigate={setView} /></Suspense>
+      <div ref={viewRegion} className="view-region" tabIndex={-1} aria-live="polite" aria-label={`${view} view`}>
       {view === "gauge" ? (
         <Suspense fallback={<main><p>Loading gauge…</p></main>}>
           <GaugeVoting source={gaugeSource} config={config} transactionFlow={gaugeAccess} sender={walletAddress} />
@@ -101,6 +106,8 @@ export function App({
           <Ledger source={source} config={config} transactions={bountyAccess} />
         </Suspense>
       )}
+      </div>
+      <Suspense fallback={null}><Onboarding onNavigate={navigate} /></Suspense>
       <footer>
         <p>Public mainnet observation · Read-only access never requires a wallet · Supported wallet actions use exact review before signing</p>
         <p>Juno Design System{" "}<a href="https://github.com/juno-ai-dev/juno-design-system/commit/0dc0ae9ae80e0378b61fc9f67cbf417f291d6f16">0dc0ae9</a>{" "}· MIT</p>
