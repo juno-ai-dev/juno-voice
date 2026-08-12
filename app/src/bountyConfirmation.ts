@@ -56,9 +56,12 @@ export function confirmSettlementMutation(options: {
   switch (options.action) {
     case "nominate_payout":
       if (!options.refreshed.activeRound || options.refreshed.activeRound.number !== options.before.bounty.next_round ||
+        options.refreshed.bounty.active_round !== options.refreshed.activeRound.number ||
         values.get("nominator") !== options.sender || values.get("recipient") !== body.recipient ||
         options.refreshed.activeRound.nomination.recipient !== body.recipient ||
-        options.refreshed.activeRound.nomination.evidence_digest !== body.evidence_digest)
+        options.refreshed.activeRound.nomination.evidence_uri !== body.evidence_uri ||
+        options.refreshed.activeRound.nomination.evidence_digest !== body.evidence_digest ||
+        options.refreshed.activeRound.nomination.rationale !== body.rationale)
         throw new Error("Payout nomination was not confirmed by refreshed canonical state.");
       break;
     case "confirm_sole_payout":
@@ -68,12 +71,12 @@ export function confirmSettlementMutation(options: {
         throw new Error("Sole payout was not confirmed by refreshed canonical state.");
       break;
     case "decline_sole_payout":
-      if (!round || round.outcome !== "declined" || values.get("contributor") !== options.sender ||
+      if (!round || round.outcome !== "declined" || values.get("contributor") !== options.sender || values.get("reason") !== body.reason ||
         options.refreshed.bounty.active_round !== null || values.get("next_status") !== options.refreshed.bounty.status)
         throw new Error("Sole payout decline was not confirmed by refreshed canonical state.");
       break;
     case "vote_payout": { const receipt = options.refreshed.receipts.find((item) => item.round === roundNumber && item.voter === options.sender);
-      if (!round || !receipt || receipt.vote !== body.vote || values.get("voter") !== options.sender ||
+      if (!round || !receipt || receipt.vote !== body.vote || values.get("voter") !== options.sender || values.get("vote") !== receipt.vote ||
         values.get("weight") !== receipt.weight || values.get("yes_weight") !== round.yes_weight ||
         values.get("no_weight") !== round.no_weight || values.get("revisions") !== String(receipt.revisions))
         throw new Error("Payout ballot was not confirmed by refreshed canonical state.");
@@ -81,17 +84,20 @@ export function confirmSettlementMutation(options: {
     case "finalize_payout":
       if (!round || round.outcome === "pending" || values.get("outcome") !== round.outcome ||
         values.get("yes_weight") !== round.yes_weight || values.get("no_weight") !== round.no_weight ||
+        values.get("participating_weight") !== (BigInt(round.yes_weight) + BigInt(round.no_weight)).toString() ||
         values.get("next_status") !== options.refreshed.bounty.status)
         throw new Error("Payout finalization was not confirmed by refreshed canonical state.");
       break;
     case "cancel_sole_funded":
-      if (values.get("creator") !== options.sender || values.get("refundable") !== options.refreshed.bounty.total_contribution ||
+      if (values.get("creator") !== options.sender || values.get("reason") !== body.reason ||
+        values.get("refundable") !== options.refreshed.bounty.total_contribution ||
         options.refreshed.bounty.status !== "refunding" || !options.refreshed.bounty.refund_reason ||
         typeof options.refreshed.bounty.refund_reason !== "object" || !("cancelled" in options.refreshed.bounty.refund_reason))
         throw new Error("Cancellation was not confirmed by refreshed canonical state.");
       break;
     case "expire":
-      if (values.get("actor") !== options.sender || options.refreshed.bounty.status !== "refunding" ||
+      if (values.get("actor") !== options.sender || values.get("refundable") !== options.refreshed.bounty.total_contribution ||
+        options.refreshed.bounty.status !== "refunding" ||
         options.refreshed.bounty.refund_reason !== "expired")
         throw new Error("Expiry was not confirmed by refreshed canonical state.");
       break;

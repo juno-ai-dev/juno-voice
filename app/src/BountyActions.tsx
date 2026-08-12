@@ -17,7 +17,6 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
   canonical: EligibilityState; access?: BountyTransactionAccess; stale: boolean;
   bounty?: Bounty; contributions?: readonly Contribution[]; settlement?: SettlementState;
 }) {
-  const [address, setAddress] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState>(null);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
@@ -28,8 +27,9 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
     if (!access) return setMessage("Wallet transaction support is unavailable; the public ledger remains fully readable.");
     if (stale) return setMessage("Canonical state is stale. Refresh the ledger before preparing a transaction.");
     try {
-      const sender = address ?? (await access.connect()).address;
-      setAddress(sender);
+      // Re-read the extension account for every new review. The transaction
+      // flow performs another identity check immediately before signing.
+      const sender = (await access.connect()).address;
       setReview({ review: await access.prepare(make(sender)), submitting: false });
     } catch (error) { setMessage(error instanceof Error ? error.message : "Transaction preparation failed."); }
   };

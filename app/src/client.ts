@@ -355,6 +355,7 @@ export function createDataSource(
         ]);
         const detail = rec(detailRaw, "bounty detail");
         const bounty = mapBounty(detail.bounty);
+        if (bounty.id !== bountyId) throw new Error("Canonical bounty detail identifies a different bounty.");
         const contributionItems: unknown[] = [], claimItems: unknown[] = [], historyItems: unknown[] = [], roundItems: unknown[] = [];
         let contributionPage: unknown = contributionsRaw, claimPage: unknown = claimsRaw,
           historyPage: unknown = historyRaw, roundPage: unknown = roundsRaw;
@@ -408,6 +409,10 @@ export function createDataSource(
           if (typeof action !== "string" && (typeof action !== "object" || action === null || Array.isArray(action))) bad("history");
           return { bounty_id: int(x.bounty_id, "history"), sequence: int(x.sequence, "history"), actor: str(x.actor, "history"),
             at: uint(x.at, "history", 18446744073709551615n), action: action as string | Record<string, unknown> }; });
+        if (mappedContributions.some((item, index) => item.bounty_id !== bountyId || item.contributor_index !== index + 1) ||
+          mappedClaims.some((item) => item.bounty_id !== bountyId) ||
+          mappedHistory.some((item, index) => item.bounty_id !== bountyId || item.sequence !== index + 1))
+          throw new Error("Canonical bounty child records are inconsistent.");
         const rounds = roundItems.map(mapRound);
         for (let index = 0; index < rounds.length; index++) {
           if (rounds[index].bounty_id !== bountyId || (index > 0 && rounds[index - 1].number >= rounds[index].number))
@@ -421,7 +426,8 @@ export function createDataSource(
         if (activeRound) {
           mappedContributions = await Promise.all(mappedContributions.map(async (item) => {
             const weighted = mapContribution(await query(queries.contribution(bountyId, item.contributor, activeRound.number)));
-            if (weighted.contributor_index !== item.contributor_index || weighted.current_amount !== item.current_amount)
+            if (weighted.bounty_id !== bountyId || weighted.contributor !== item.contributor ||
+              weighted.contributor_index !== item.contributor_index || weighted.current_amount !== item.current_amount)
               throw new Error("Canonical contribution snapshot is inconsistent.");
             return weighted;
           }));
@@ -433,6 +439,9 @@ export function createDataSource(
             const response = rec(await query(queries.receipts(bountyId, round.number, cursor)), "receipts"), values = response.receipts;
             if (!Array.isArray(values)) bad("receipts");
             const items = (values as unknown[]).map(mapReceipt);
+            const existing = mappedReceipts.filter((item) => item.round === round.number).length;
+            if (items.some((item, index) => item.bounty_id !== bountyId || item.round !== round.number || item.voter_index !== existing + index + 1))
+              throw new Error("Canonical vote receipts are inconsistent.");
             mappedReceipts.push(...items);
             if (items.length < PAGE_LIMIT) break;
             cursor = items.at(-1)?.voter_index ?? null;

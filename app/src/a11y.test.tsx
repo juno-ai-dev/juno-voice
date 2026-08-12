@@ -73,6 +73,19 @@ describe("accessibility", () => {
     await checkA11y(container);
   });
 
+  it("has no WCAG A/AA violations in canonical settlement detail and controls", async () => {
+    const detail = { bounty: ledger.bounties[0], config: ledger.config, pause: ledger.pause, activeRound: null,
+      rounds: [], receipts: [], moderation: null, graduation: null,
+      contributions: [{ bounty_id: 1, contributor: ledger.bounties[0].creator, contributor_index: 1,
+        current_amount: "2500000", weight_at_round: null }], claims: [], history: [],
+      observationHeight: ledger.observationHeight, chainTimeNanos: ledger.chainTimeNanos, fingerprint: "detail" };
+    const { container } = render(<Ledger config={config} source={{ loadLedger: async () => ledger,
+      loadBountyDetail: async () => detail }} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Fund public goods tooling" }));
+    await screen.findByRole("heading", { name: "Contributor-controlled settlement" });
+    await checkA11y(container);
+  });
+
   it("meets AA contrast for the static production palette", () => {
     // axe-core cannot calculate CSS color contrast in JSDOM because layout and
     // canvas pixel data are unavailable, so verify the shipped solid-color

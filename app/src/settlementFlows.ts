@@ -126,9 +126,9 @@ export function finalizePayoutIntent(state: SettlementState, roundNumber: number
   if (round.closes_at === null || now < BigInt(round.closes_at))
     throw new Error("Ratification is still open according to canonical chain time.");
   const participating = BigInt(round.yes_weight) + BigInt(round.no_weight);
+  const yes = BigInt(round.yes_weight), no = BigInt(round.no_weight);
   const outcome = round.rule === "sole_confirmation" || participating === 0n ? "no-votes"
-    : round.yes_weight === round.no_weight ? "tie"
-      : BigInt(round.yes_weight) > BigInt(round.no_weight) ? "paid" : "no-majority";
+    : yes === no ? "tie" : yes > no ? "paid" : "no-majority";
   return base(state, { finalize_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
     `Publicly finalize closed round ${roundNumber}; current canonical weights predict ${outcome}.`,
     outcome === "paid" ? `The contract will send ${round.total_weight} ujuno to ${round.nomination.recipient}.`
