@@ -126,8 +126,11 @@ describe("address and centrally-owned execute policy", () => {
     ["retire", { project_id: "alpha", reason: { code: "voluntary_retirement", note: "done" } }, []],
   ])("allows exact registry public action %s", async (action, body, funds) => {
     const { wallet, dependencies } = setup(); await wallet.connect();
-    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT,
+    const flow = createTransactionFlow(dependencies);
+    await expect(flow.prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT,
       executeMessage: { [action]: body }, funds })).resolves.toMatchObject({ contract: DEFAULT_REGISTRY_CONTRACT, funds });
+    await expect(flow.prepare({ ...intent, executeMessage: { [action]: body }, funds }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
   });
   it("rejects privileged registry actions and non-voluntary retirement", async () => {
     const { wallet, dependencies } = setup(); await wallet.connect(); const flow = createTransactionFlow(dependencies);
@@ -189,6 +192,30 @@ describe("address and centrally-owned execute policy", () => {
         ...create.executeMessage.create_bounty.project_candidate, project_id: "INVALID_ID",
       },
     } } })).rejects.toMatchObject({ code: "message_forbidden" });
+  });
+  it("allows exact public settlement schemas only when nonpayable and keeps privileged actions forbidden", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect(); const flow = createTransactionFlow(dependencies);
+    const settlement = [
+      { nominate_payout: { bounty_id: 7, recipient: otherSender, evidence_uri: "ipfs://evidence",
+        evidence_digest: `sha256:${"ab".repeat(32)}`, rationale: "Shipped" } },
+      { confirm_sole_payout: { bounty_id: 7, round: 1 } },
+      { decline_sole_payout: { bounty_id: 7, round: 1, reason: "Incomplete" } },
+      { vote_payout: { bounty_id: 7, round: 1, vote: "yes", rationale: null } },
+      { finalize_payout: { bounty_id: 7, round: 1 } },
+      { cancel_sole_funded: { bounty_id: 7, reason: "Cancelled" } },
+      { expire: { bounty_id: 7 } }, { claim_refund: { bounty_id: 7 } },
+    ];
+    for (const executeMessage of settlement) {
+      await expect(flow.prepare({ ...intent, executeMessage, funds: [] })).resolves.toMatchObject({ executeMessage, funds: [] });
+      await expect(flow.prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT, executeMessage, funds: [] }))
+        .rejects.toMatchObject({ code: "message_forbidden" });
+    }
+    await expect(flow.prepare({ ...intent, executeMessage: settlement[1], funds: intent.funds }))
+      .rejects.toMatchObject({ code: "invalid_transaction" });
+    await expect(flow.prepare({ ...intent, executeMessage: { vote_payout: { bounty_id: 7, round: 1, vote: "abstain", rationale: null } }, funds: [] }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
+    await expect(flow.prepare({ ...intent, executeMessage: { finalize_payout: { bounty_id: 7, round: 1, force: true } }, funds: [] }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
   });
   it.each([
     ["number", 1], ["null", null], ["object", {}], ["boolean", true], ["empty", ""], ["whitespace", "   "],

@@ -314,14 +314,22 @@ function BountyDetailPanel({ state, onClose, transactions }: {
         <section><h3>Project candidate</h3>{d.bounty.project_candidate ? <><p>{d.bounty.project_candidate.project_id}</p>
           <p><SafeUri uri={d.bounty.project_candidate.metadata_uri} /> <code>{d.bounty.project_candidate.metadata_digest}</code></p>
           <small>Candidate only; this is not a registry listing until a separate authorized graduation.</small></> : <p>None attached.</p>}
-          <h3>Active round</h3><pre>{d.activeRound ? JSON.stringify(d.activeRound, null, 2) : "No active round"}</pre>
+          <h3>Active round</h3>{d.activeRound ? <><p><strong>Round {d.activeRound.number} · {d.activeRound.rule.replaceAll("_", " ")}</strong></p>
+            <p>Recipient {compact(d.activeRound.nomination.recipient)} · outcome {d.activeRound.outcome.replaceAll("_", " ")}</p>
+            <p>YES {fmt(d.activeRound.yes_weight)} · NO {fmt(d.activeRound.no_weight)} · total snapshot {fmt(d.activeRound.total_weight)}</p>
+            <p>Opens {d.activeRound.opens_at} ns · closes {d.activeRound.closes_at} ns</p>
+            <p><SafeUri uri={d.activeRound.nomination.evidence_uri} /> <code>{d.activeRound.nomination.evidence_digest}</code></p>
+            <p>{d.activeRound.nomination.rationale}</p></> : <p>No active round</p>}
           <h3>Moderation / graduation</h3><pre>{JSON.stringify({ moderation: d.moderation, graduation: d.graduation }, null, 2)}</pre></section>
-        <section><h3>Contributions ({d.contributions.length})</h3>{d.contributions.map((x) => <p key={x.contributor_index}>{compact(x.contributor)} · {fmt(x.current_amount)}</p>)}</section>
+        <section><h3>Contributions ({d.contributions.length})</h3>{d.contributions.map((x) => <p key={x.contributor_index}>{compact(x.contributor)} · current {fmt(x.current_amount)}
+          {x.weight_at_round !== null && <> · round snapshot {fmt(x.weight_at_round)}</>}</p>)}</section>
         <section><h3>Claims ({d.claims.length})</h3>{d.claims.length ? d.claims.map((x) => <p key={x.contributor}>{compact(x.contributor)} · {fmt(x.amount)}</p>) : <p>No completed claims.</p>}</section>
       </div>
+      <h3>Settlement rounds ({d.rounds.length})</h3>{d.rounds.length ? <ol>{d.rounds.map((x) => <li key={x.number}>Round {x.number}: <strong>{x.outcome.replaceAll("_", " ")}</strong> · YES {fmt(x.yes_weight)} / NO {fmt(x.no_weight)} · {x.voter_count} vote(s)</li>)}</ol> : <p>No payout rounds.</p>}
+      <h3>Ballot receipts ({d.receipts.length})</h3>{d.receipts.length ? <ul>{d.receipts.map((x) => <li key={`${x.round}:${x.voter}`}>Round {x.round} · {compact(x.voter)} · {x.vote.toUpperCase()} · immutable weight {fmt(x.weight)} · revisions {x.revisions}</li>)}</ul> : <p>No ballots recorded.</p>}
       <h3>History ({d.history.length} of {d.bounty.history_count})</h3><ol className="history">{d.history.map((x) => <li key={x.sequence}><strong>{action(x.action)}</strong> · {compact(x.actor)} · <time dateTime={timestampDate(x.at).toISOString()}>{timestampDate(x.at).toLocaleString()}</time></li>)}</ol>
       <p className="chain-time">Eligibility reference: canonical chain time {d.chainTimeNanos} ns. Browser time is display-only.</p>
-      <BountyActions bounty={d.bounty} contributions={d.contributions} access={transactions} stale={false}
+      <BountyActions bounty={d.bounty} contributions={d.contributions} settlement={d} access={transactions} stale={false}
         canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
     </>}
   </section>;

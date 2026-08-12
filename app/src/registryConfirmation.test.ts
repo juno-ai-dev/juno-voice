@@ -45,4 +45,12 @@ describe("registry canonical transaction confirmation", () => {
       executeMessage: { retire: { project_id: "alpha", reason: { code: "voluntary_retirement", note: "done" } } }, funds: [] }))
       .toThrow(/not canonically recorded/);
   });
+
+  it("rejects missing or ambiguous canonical mutation events", () => {
+    const options = { action: "retire" as const, refreshed: context({ ...baseProject, status: "retired" as const }), sender,
+      executeMessage: { retire: { project_id: "alpha", reason: { code: "voluntary_retirement", note: "done" } } }, funds: [] };
+    expect(() => confirmRegistryMutation({ ...options, events: [] })).toThrow(/missing, ambiguous/);
+    expect(() => confirmRegistryMutation({ ...options, events: [...event("retire"), ...event("retire")] }))
+      .toThrow(/missing, ambiguous/);
+  });
 });
