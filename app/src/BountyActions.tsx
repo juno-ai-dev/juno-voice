@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { contributeIntent, createBountyIntent, type EligibilityState } from "./bountyFlows";
 import type { Bounty, Contribution } from "./types";
 import type { TransactionIntent, TransactionOutcome, TransactionReview } from "./transactions";
@@ -6,6 +6,7 @@ import { cancelSoleFundedIntent, claimRefundIntent, confirmSolePayoutIntent, dec
   expireBountyIntent, finalizePayoutIntent, nominatePayoutIntent, type SettlementState,
   votePayoutIntent } from "./settlementFlows";
 import { formatJuno, formatJunoCoin } from "./junoAmount";
+import "./bounty.css";
 
 export interface BountyTransactionAccess {
   connect(): Promise<{ address: string }>;
@@ -18,6 +19,7 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
   canonical: EligibilityState; access?: BountyTransactionAccess; stale: boolean;
   bounty?: Bounty; contributions?: readonly Contribution[]; settlement?: SettlementState;
 }) {
+  const [creating, setCreating] = useState(false);
   const [review, setReview] = useState<ReviewState>(null);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
@@ -50,14 +52,28 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
       setReview(null);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Transaction was blocked before signing."); setReview(null); }
   };
-  return <section className="action-panel" aria-labelledby={bounty ? settlement ? "settlement-title" : "contribute-title" : "create-title"}>
+  if (!bounty && !creating) return <section className="bounty-create-launcher" aria-labelledby="create-launcher-title">
+    <div>
+      <p className="eyebrow">FUND A PUBLIC-GOODS OUTCOME</p>
+      <h2 id="create-launcher-title">Have work the community can rally around?</h2>
+      <p>Define the outcome and fund the first contribution. You will review the exact on-chain terms before signing.</p>
+    </div>
+    <button className="button" type="button" aria-expanded="false" aria-controls="create-bounty-panel"
+      onClick={() => setCreating(true)}>Create a bounty</button>
+  </section>;
+  return <section id={!bounty ? "create-bounty-panel" : undefined} className="action-panel"
+    aria-labelledby={bounty ? settlement ? "settlement-title" : "contribute-title" : "create-title"}>
+    {!bounty && <div className="action-panel-heading">
+      <div><p className="eyebrow">CREATE BOUNTY</p><p>Complete the essentials first. Optional metadata stays out of the way until you need it.</p></div>
+      <button className="button secondary" type="button" onClick={() => { setCreating(false); setReview(null); setMessage(""); }}>Close form</button>
+    </div>}
     <p className="eyebrow">OPTIONAL WALLET ACTION · READ BEFORE SIGNING</p>
     {bounty ? <>{bounty.status === "open" && BigInt(canonical.chainTimeNanos) < BigInt(bounty.expires_at) &&
       <ContributeForm bounty={bounty} disabled={submissionLocked} onPrepare={(value) => act((sender) =>
         contributeIntent(bounty, value, sender, contributions.map((item) => item.contributor), canonical))} />}
       {settlement && <SettlementControls state={settlement} disabled={submissionLocked} onPrepare={(make) => act(make)} />}</> :
       <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical))} />}
-    <p className="chain-time">Eligibility uses canonical chain time {canonical.chainTimeNanos} ns, never browser time.</p>
+    {bounty && <p className="chain-time">Deadlines are checked against Juno network time.</p>}
     {!access && <p>Wallet actions are unavailable in this environment. Browsing does not require a wallet.</p>}
     {message && <p role="status" className="notice">{message}</p>}
     {receipt && <p><a href={receipt.url} target="_blank" rel="noopener noreferrer">
@@ -70,31 +86,124 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
   const now = BigInt(canonical.chainTimeNanos);
   const minLifetime = BigInt(canonical.config.min_lifetime_seconds);
   const maxLifetime = BigInt(canonical.config.max_lifetime_seconds);
-  // Avoid producing a value that falls below the minimum while the user is
-  // completing the form, while retaining an exact nanosecond timestamp.
+  const nanosPerSecond = 1_000_000_000n;
+  const nanosPerMillisecond = 1_000_000n;
+  const minExpiry = now + minLifetime * nanosPerSecond;
+  const maxExpiry = now + maxLifetime * nanosPerSecond;
+  // datetime-local is only a human input affordance. Round the display bounds
+  // inward so every selectable millisecond remains within the exact chain window.
+  const minExpiryMillis = (minExpiry + nanosPerMillisecond - 1n) / nanosPerMillisecond;
+  const maxExpiryMillis = maxExpiry / nanosPerMillisecond;
   const defaultLifetime = minLifetime + (maxLifetime - minLifetime) / 2n;
-  const defaultExpiry = (now + defaultLifetime * 1_000_000_000n).toString();
-  return <form onSubmit={(event) => { event.preventDefault(); const f = new FormData(event.currentTarget); onPrepare({
+  const defaultExpiryMillis = (now + defaultLifetime * nanosPerSecond + nanosPerMillisecond - 1n) / nanosPerMillisecond;
+  const [expiry, setExpiry] = useState(() => localDateTimeValue(defaultExpiryMillis));
+  const [expiryError, setExpiryError] = useState("");
+  const expiresAtNanos = localDateTimeToNanos(expiry);
+  const expiryHintId = useId();
+  return <form className="create-bounty-form" onSubmit={(event) => {
+    event.preventDefault();
+    const exactExpiry = localDateTimeToNanos(expiry);
+    if (!exactExpiry) return setExpiryError("Choose a valid expiration date and time.");
+    setExpiryError("");
+    const f = new FormData(event.currentTarget); onPrepare({
     title: String(f.get("title")), summary: String(f.get("summary")), acceptanceCriteria: String(f.get("criteria")),
-    contentUri: String(f.get("uri")), contentDigest: String(f.get("digest")), expiresAtNanos: String(f.get("expiry")), initialJuno: String(f.get("amount")),
+    contentUri: String(f.get("uri")), contentDigest: String(f.get("digest")), expiresAtNanos: exactExpiry, initialJuno: String(f.get("amount")),
     ...(["projectId", "projectUri", "projectDigest"].some((name) => String(f.get(name)).trim()) ? { projectCandidate: {
       projectId: String(f.get("projectId")), metadataUri: String(f.get("projectUri")), metadataDigest: String(f.get("projectDigest")),
     } } : {}),
   }); }}>
-    <h2 id="create-title">Create a bounty</h2><p>All limits come from live config version {canonical.config.version}. Enter decimal $JUNO amounts (up to 6 decimal places).</p>
-    <div className="action-grid">
-      <label>Title<input name="title" required /></label><label>Initial contribution ($JUNO)<input name="amount" inputMode="decimal" pattern="(0|[1-9][0-9]*)(\.[0-9]{1,6})?" defaultValue={formatJuno(canonical.config.min_contribution).slice(6).replaceAll(",", "")} required /></label>
-      <label className="wide">Summary<textarea name="summary" required /></label><label className="wide">Acceptance criteria<textarea name="criteria" required /></label>
-      <label>Content URI (HTTPS/IPFS, optional pair)<input name="uri" /></label><label>Digest (sha256: + 64 lowercase hex, optional pair)<input name="digest" pattern="sha256:[0-9a-f]{64}" /></label>
-      <fieldset className="wide"><legend>Project candidate (optional)</legend>
-        <p>Attaching a candidate does not register or graduate a project.</p>
-        <label>Project ID<input name="projectId" /></label>
-        <label>Metadata URI (HTTPS/IPFS)<input name="projectUri" /></label>
-        <label>Metadata digest (sha256: + 64 lowercase hex)<input name="projectDigest" pattern="sha256:[0-9a-f]{64}" /></label>
-      </fieldset>
-      <label className="wide">Expiration (exact Unix nanoseconds)<input name="expiry" inputMode="numeric" pattern="[0-9]+" defaultValue={defaultExpiry} required /></label>
-    </div><button className="button" type="submit" disabled={disabled}>Prepare bounty review</button>
+    <h2 id="create-title">Create a bounty</h2>
+    <p className="form-intro">Describe a specific outcome and seed its escrow. Limits come from live config version {canonical.config.version}; nothing is signed on this screen.</p>
+    <fieldset className="form-section">
+      <legend>1. Bounty essentials</legend>
+      <div className="action-grid">
+        <label>Title<span className="field-hint">A short, outcome-focused name · {canonical.config.limits.max_title_bytes} bytes max</span><input name="title" placeholder="e.g. Ship a Juno developer quickstart" required /></label>
+        <label>Initial funding ($JUNO)<span className="field-hint">Escrowed with the bounty · up to 6 decimal places</span><input name="amount" inputMode="decimal" pattern="(0|[1-9][0-9]*)(\.[0-9]{1,6})?" defaultValue={formatJuno(canonical.config.min_contribution).slice(6).replaceAll(",", "")} required /></label>
+        <label className="wide">Summary<span className="field-hint">Give contributors enough context to understand why this matters.</span><textarea name="summary" placeholder="What should be built, researched, or delivered?" required /></label>
+        <label className="wide">Acceptance criteria<span className="field-hint">Use observable conditions contributors can evaluate during settlement.</span><textarea name="criteria" placeholder="List the evidence that will count as complete." required /></label>
+        <label className="wide">Expiration date and time<span className="field-hint" id={expiryHintId}>Shown in your local time. Select between {formatLocalDateTime(minExpiryMillis)} and {formatLocalDateTime(maxExpiryMillis)}.</span>
+          <input name="expiryDisplay" type="datetime-local" step="1" min={localDateTimeValue(minExpiryMillis)} max={localDateTimeValue(maxExpiryMillis)}
+            value={expiry} aria-describedby={expiryHintId} aria-invalid={Boolean(expiryError)} onChange={(event) => setExpiry(event.target.value)} required />
+        </label>
+        <div className="expiry-preview wide" aria-live="polite">
+          <span>On-chain expiration</span>
+          <strong>{expiresAtNanos ? `${expiresAtNanos} ns` : "Choose a valid date and time"}</strong>
+          <small>Converted exactly at review time. Eligibility still uses canonical chain time, not your device clock.</small>
+          {expiryError && <small className="field-error">{expiryError}</small>}
+        </div>
+      </div>
+    </fieldset>
+    <details className="form-disclosure">
+      <summary>Add supporting content <span>Optional</span></summary>
+      <p>Link to a brief, specification, or other stable content. The URI and its SHA-256 digest must be provided together.</p>
+      <div className="action-grid">
+        <label>Content URI<span className="field-hint">HTTPS or IPFS</span><input name="uri" type="url" placeholder="ipfs://… or https://…" /></label>
+        <HashDigestField name="digest" label="Content SHA-256 digest" fileLabel="Calculate content digest from file" />
+      </div>
+    </details>
+    <details className="form-disclosure">
+      <summary>Propose a project candidate <span>Optional</span></summary>
+      <div className="disclosure-help">
+        <strong>What is a project candidate?</strong>
+        <p>It links this bounty to a proposed project identity and metadata. A candidate is only a proposal: creating the bounty does not register, endorse, or graduate the project. Graduation is a separate authorized action after the relevant checks.</p>
+      </div>
+      <div className="action-grid">
+        <label>Project ID<span className="field-hint">3–64 lowercase letters, numbers, or hyphens</span><input name="projectId" pattern="[a-z0-9-]{3,64}" placeholder="developer-quickstart" /></label>
+        <label>Project metadata URI<span className="field-hint">HTTPS or IPFS; required with a candidate</span><input name="projectUri" type="url" placeholder="ipfs://… or https://…" /></label>
+        <div className="wide"><HashDigestField name="projectDigest" label="Project metadata SHA-256 digest" fileLabel="Calculate project metadata digest from file" /></div>
+      </div>
+    </details>
+    <div className="form-submit-row"><div><strong>Ready for the safety check?</strong><small>You will see the exact message, funds, fee, and consequences before signing.</small></div>
+      <button className="button" type="submit" disabled={disabled}>Connect wallet and review bounty</button></div>
   </form>;
+}
+
+const localDateTimeValue = (milliseconds: bigint) => {
+  const date = new Date(Number(milliseconds));
+  const part = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}T${part(date.getHours())}:${part(date.getMinutes())}:${part(date.getSeconds())}`;
+};
+
+const formatLocalDateTime = (milliseconds: bigint) => new Date(Number(milliseconds)).toLocaleString([], {
+  dateStyle: "medium", timeStyle: "short",
+});
+
+const localDateTimeToNanos = (value: string) => {
+  if (!/^\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(value)) return null;
+  const milliseconds = new Date(value).getTime();
+  return Number.isFinite(milliseconds) && milliseconds >= 0 ? (BigInt(milliseconds) * 1_000_000n).toString() : null;
+};
+
+function HashDigestField({ name, label, fileLabel }: { name: string; label: string; fileLabel: string }) {
+  const [digest, setDigest] = useState("");
+  const [hashStatus, setHashStatus] = useState("");
+  const hashGeneration = useRef(0);
+  const hintId = useId();
+  const hashFile = async (file?: File) => {
+    const generation = ++hashGeneration.current;
+    if (!file) return setHashStatus("");
+    if (file.size > 20 * 1024 * 1024) return setHashStatus("Choose a file no larger than 20 MB, or paste its digest instead.");
+    if (!globalThis.crypto?.subtle) return setHashStatus("File hashing is unavailable in this browser. Paste a verified digest instead.");
+    setHashStatus(`Calculating SHA-256 for ${file.name}…`);
+    try {
+      const bytes = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+      if (generation !== hashGeneration.current) return;
+      const value = `sha256:${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+      setDigest(value);
+      setHashStatus(`Digest calculated locally from ${file.name}. The file was not uploaded.`);
+    } catch {
+      if (generation !== hashGeneration.current) return;
+      setHashStatus("This file could not be hashed. Paste a verified digest instead.");
+    }
+  };
+  return <div className="hash-field">
+    <label>{label}<span className="field-hint" id={hintId}>Paste a sha256: digest, or calculate it from the exact file published at the URI.</span>
+      <input name={name} value={digest} onChange={(event) => { hashGeneration.current += 1; setDigest(event.target.value); setHashStatus(""); }}
+        pattern="sha256:[0-9a-f]{64}" placeholder="sha256:…" spellCheck={false} autoComplete="off" aria-describedby={hintId} />
+    </label>
+    <label className="file-picker">{fileLabel}<input type="file" onChange={(event) => void hashFile(event.target.files?.[0])} /></label>
+    {hashStatus && <small className="hash-status" role="status">{hashStatus}</small>}
+  </div>;
 }
 function ContributeForm({ bounty, disabled, onPrepare }: { bounty: Bounty; disabled: boolean; onPrepare: (amount: string) => void }) {
   return <form onSubmit={(event) => { event.preventDefault(); onPrepare(String(new FormData(event.currentTarget).get("amount"))); }}>

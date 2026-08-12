@@ -105,7 +105,6 @@ export function Ledger({
           verified backing.
         </section>
       )}
-      <BountyActions access={transactions} stale={stale} canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
       <section aria-labelledby="ledger-title">
         <div className="toolbar">
           <div>
@@ -167,6 +166,7 @@ export function Ledger({
           )}
         </div>
       </section>
+      <BountyActions access={transactions} stale={stale} canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
       {detail.kind !== "closed" && <BountyDetailPanel state={detail} transactions={transactions} onClose={() => setDetail({ kind: "closed" })} />}
       <section className="facts-panel" aria-labelledby="economics">
         <h2 id="economics">Protocol economics</h2>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -26,22 +26,39 @@ const registrySource = (): RegistryDataSource => ({
 afterEach(() => {
   delete (window as Window & { keplr?: unknown }).keplr;
   delete (window as Window & { leap?: unknown }).leap;
+  window.history.replaceState(null, "", window.location.pathname);
 });
 
 describe("production transaction wiring", () => {
-  it("moves focus to the selected public view after onboarding navigation", async () => {
+  it("starts on the product landing page and opens every public view", async () => {
     render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
-    await userEvent.click(await screen.findByText("Register a project"));
-    await userEvent.click(screen.getByRole("button", { name: "Open projects" }));
-    const region = screen.getByLabelText("projects view");
-    await screen.findByRole("heading", { name: "Eligible projects" });
+
+    expect(await screen.findByRole("heading", { name: /Fund useful work/ })).toBeInTheDocument();
+    expect(screen.queryByText("NEW TO JUNO VOICE?")).not.toBeInTheDocument();
+    const primaryNavigation = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(primaryNavigation).getAllByRole("button").map((button) => button.textContent)).toEqual(["Bounties", "Gauge", "Projects"]);
+    expect(within(primaryNavigation).queryByRole("button", { name: "About" })).not.toBeInTheDocument();
+    await userEvent.click(within(primaryNavigation).getByRole("button", { name: "Bounties" }));
+    expect(await screen.findByRole("heading", { name: "Public bounty ledger" })).toBeInTheDocument();
+    await userEvent.click(within(primaryNavigation).getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { name: "Eligible projects" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Juno VOICE" }));
+    expect(await screen.findByRole("heading", { name: /Fund useful work/ })).toBeInTheDocument();
+  });
+
+  it("opens the FAQ from the footer and moves focus to the new view", async () => {
+    render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
+    await userEvent.click(await screen.findByRole("link", { name: /^FAQ/ }));
+    const region = screen.getByLabelText("faq view");
+    await screen.findByRole("heading", { name: /Questions, answered plainly/ });
     expect(region).toHaveFocus();
+    expect(window.location.hash).toBe("#faq");
   });
 
   it("keeps registry browsing wallet-free when no supported extension is present", async () => {
     render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
     await userEvent.click(screen.getByRole("button", { name: "Projects" }));
-    expect(await screen.findByText(/Registry browsing never requires a wallet/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Eligible projects" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
   });
 
@@ -52,11 +69,12 @@ describe("production transaction wiring", () => {
       enable, getKey, getOfflineSigner: vi.fn(() => ({})),
     } });
     render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     await userEvent.click(screen.getByRole("button", { name: "Projects" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Connect wallet" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open project actions" }));
     expect(await screen.findByText(/Connected account/)).toBeInTheDocument();
     expect(enable).toHaveBeenCalledWith("juno-1");
     expect(getKey).toHaveBeenCalledWith("juno-1");
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeEnabled();
   });
 });

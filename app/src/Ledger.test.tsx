@@ -53,6 +53,10 @@ describe("read-only bounty ledger states", () => {
     expect(screen.getByText("Fully backed")).toBeInTheDocument();
     expect(screen.getAllByText("$JUNO 1").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /connect|sign|contribute/i })).not.toBeInTheDocument();
+    const bountyRecord = screen.getByRole("button", { name: "Fund public goods tooling" });
+    const createAction = screen.getByRole("button", { name: "Create a bounty" });
+    expect(bountyRecord.compareDocumentPosition(createAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /^Title/ })).not.toBeInTheDocument();
     expect(document.querySelector("time")).toHaveAttribute(
       "datetime",
       "2027-01-15T08:00:00.000Z",

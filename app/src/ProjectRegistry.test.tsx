@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Registry } from "./Registry";
+import { Registry } from "./ProjectRegistry";
+import { digestMetadataFile } from "./metadataDigest";
 import type { RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
 import { clearRegistrySubmission, saveRegistrySubmission } from "./registrySubmissionState";
@@ -31,41 +32,62 @@ const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender, cha
 const flow = (): RegistryTransactionFlow => ({ connect: vi.fn(async () => ({ address: sender })),
   prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "pending" as const, txHash: "KNOWN",
     explorerUrl: "https://www.mintscan.io/juno/tx/KNOWN" })) });
+async function openProjectWorkbench() {
+  const launcher = screen.queryByRole("button", { name: "Open project actions" });
+  if (launcher) await userEvent.click(launcher);
+}
 async function prepareAndSubmit(port: RegistryTransactionFlow) {
   await screen.findByText("Eligible projects");
+  await openProjectWorkbench();
   await userEvent.type(screen.getByLabelText("Project ID"), "alpha");
   await userEvent.type(screen.getByLabelText("Metadata URI"), "ipfs://alpha");
   await userEvent.type(screen.getByLabelText("SHA-256 metadata digest"), `sha256:${"a".repeat(64)}`);
   await userEvent.type(screen.getByLabelText("Payout address"), sender);
-  await userEvent.click(screen.getByRole("button", { name: "Prepare wallet review" }));
+  await userEvent.click(screen.getByRole("button", { name: "Review project action" }));
   expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ contract: config.registryContract,
     funds: [{ denom: "ujuno", amount: "1000000" }], expectedStateFingerprint: "registry" }));
-  const reviewBox = screen.getByText("Exact wallet review").parentElement!;
+  const reviewBox = screen.getByText("Review before signing").parentElement!;
   expect(reviewBox).toHaveTextContent("$JUNO 1");
   expect(reviewBox).toHaveTextContent("$JUNO 0.0045");
   expect(reviewBox).not.toHaveTextContent("ujuno");
-  await userEvent.click(await screen.findByRole("button", { name: "Recheck state, then sign" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Confirm and open wallet" }));
 }
 
 describe("registry transaction UI evidence", () => {
   beforeEach(() => sessionStorage.clear());
-  afterEach(() => { vi.restoreAllMocks(); clearRegistrySubmission({ sender, chainId: config.chainId, contract: config.registryContract }); });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); clearRegistrySubmission({ sender, chainId: config.chainId, contract: config.registryContract }); });
+
+  it("calculates a canonical metadata digest without uploading the selected file", async () => {
+    const bytes = new Uint8Array(32); bytes[0] = 1; bytes[31] = 255;
+    const digest = vi.fn(async () => bytes.buffer);
+    vi.stubGlobal("crypto", { subtle: { digest } });
+    const fileBytes = new Uint8Array([123, 125]).buffer;
+    const file = { arrayBuffer: vi.fn(async () => fileBytes) } as unknown as File;
+    expect(await digestMetadataFile(file)).toBe(`sha256:01${"00".repeat(30)}ff`);
+    expect(digest).toHaveBeenCalledWith("SHA-256", fileBytes);
+  });
 
   it("restores a known-hash pending lock and explorer evidence after unmount and remount", async () => {
     const port = flow(); const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    await screen.findByText("Eligible projects");
+    expect(screen.queryByLabelText("Project action")).not.toBeInTheDocument();
+    await openProjectWorkbench();
+    expect(screen.getByRole("heading", { name: "Choose a project action" })).toBeInTheDocument();
+    expect(screen.queryByText("Prepare an exact transaction")).not.toBeInTheDocument();
     expect(await screen.findAllByRole("option")).toHaveLength(7);
     expect(screen.queryByText(/override project status|review registration|update curator/i)).not.toBeInTheDocument();
     await prepareAndSubmit(port);
     expect(await screen.findByText(/Submission is not canonically confirmed/)).toHaveTextContent(/do not submit again/i);
     const evidence = screen.getByRole("link", { name: /transaction evidence KNOWN/ });
     expect(evidence).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/KNOWN");
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     expect(sessionStorage.length).toBeGreaterThan(0);
     view.unmount();
     render(<Registry source={source()} config={config} transactionFlow={port} />);
+    await openProjectWorkbench();
     expect(await screen.findByRole("link", { name: /transaction evidence KNOWN/ })).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/KNOWN");
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
   });
 
   it("restores a hashless unknown lock after unmount and remount without inventing explorer evidence", async () => {
@@ -74,14 +96,15 @@ describe("registry transaction UI evidence", () => {
     await prepareAndSubmit(port);
     expect(await screen.findByText(/no transaction hash is available/i)).toHaveTextContent(/Do not submit again/i);
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     expect(sessionStorage.length).toBeGreaterThan(0);
     view.unmount();
     render(<Registry source={source()} config={config} transactionFlow={port} />);
+    await openProjectWorkbench();
     expect(await screen.findByText(/no transaction hash is available/i)).toHaveTextContent(/Do not submit again/i);
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
   });
 
   it("remains fail-closed after remount when uncertainty cannot be written to session storage", async () => {
@@ -90,12 +113,13 @@ describe("registry transaction UI evidence", () => {
     const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
     await prepareAndSubmit(port);
     expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     view.unmount();
     render(<Registry source={source()} config={config} transactionFlow={port} />);
+    await openProjectWorkbench();
     expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     setItem.mockRestore();
   });
 
@@ -119,7 +143,7 @@ describe("registry transaction UI evidence", () => {
     await prepareAndSubmit(port);
     expect(await screen.findByText(terminal.reason)).toBeInTheDocument();
     expect(sessionStorage).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeEnabled();
   });
 
   it("fails closed when persisted uncertainty is malformed", async () => {
@@ -130,9 +154,10 @@ describe("registry transaction UI evidence", () => {
     sessionStorage.setItem(evidenceKey, "not json");
     const port = flow();
     render(<Registry source={source()} config={config} transactionFlow={port} />);
+    await openProjectWorkbench();
     expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
-    expect(screen.getByLabelText("Public action")).toBeDisabled();
+    expect(screen.getByLabelText("Project action")).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
-    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
   });
 });

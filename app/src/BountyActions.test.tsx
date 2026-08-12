@@ -18,16 +18,21 @@ const access = (): BountyTransactionAccess => ({ connect: vi.fn(async () => ({ a
 describe("bounty action UI", () => {
   it("keeps read-only access and explains unavailable wallet support", async () => {
     render(<BountyActions canonical={canonical} stale={false} />);
+    expect(screen.queryByRole("textbox", { name: /^Title/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
+    expect(screen.queryByText(/Eligibility uses canonical chain time/)).not.toBeInTheDocument();
     expect(screen.getByText(/Browsing does not require a wallet/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Prepare bounty review/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Connect wallet and review bounty/ })).toBeInTheDocument();
   });
   it("constructs exact create message/funds from accessible controls and discloses review", async () => {
     const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} />);
-    await userEvent.type(screen.getByLabelText("Title"), "Ship tooling");
-    await userEvent.type(screen.getByLabelText("Summary"), "Useful tooling");
-    await userEvent.type(screen.getByLabelText("Acceptance criteria"), "Tests pass");
-    await userEvent.click(screen.getByRole("button", { name: /Prepare bounty review/ }));
-    const expiry = (screen.getByLabelText("Expiration (exact Unix nanoseconds)") as HTMLInputElement).value;
+    await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
+    await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
+    await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
+    await userEvent.type(screen.getByLabelText(/^Acceptance criteria/), "Tests pass");
+    const displayedExpiry = (screen.getByLabelText(/^Expiration date and time/) as HTMLInputElement).value;
+    const expiry = (BigInt(new Date(displayedExpiry).getTime()) * 1_000_000n).toString();
+    await userEvent.click(screen.getByRole("button", { name: /Connect wallet and review bounty/ }));
     expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ funds: [{ denom: "ujuno", amount: "1000000" }],
       executeMessage: { create_bounty: expect.objectContaining({ title: "Ship tooling", expires_at: expiry }) },
       expectedStateFingerprint: ledger.fingerprint }));
@@ -36,17 +41,35 @@ describe("bounty action UI", () => {
   });
   it("makes optional project-candidate semantics explicit and reviews the exact metadata", async () => {
     const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} />);
-    await userEvent.type(screen.getByLabelText("Title"), "Ship tooling");
-    await userEvent.type(screen.getByLabelText("Summary"), "Useful tooling");
-    await userEvent.type(screen.getByLabelText("Acceptance criteria"), "Tests pass");
-    await userEvent.type(screen.getByLabelText("Project ID"), "tooling-1");
-    await userEvent.type(screen.getByLabelText("Metadata URI (HTTPS/IPFS)"), "ipfs://bafyproject");
-    await userEvent.type(screen.getByLabelText("Metadata digest (sha256: + 64 lowercase hex)"), `sha256:${"ab".repeat(32)}`);
-    await userEvent.click(screen.getByRole("button", { name: /Prepare bounty review/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
+    await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
+    await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
+    await userEvent.type(screen.getByLabelText(/^Acceptance criteria/), "Tests pass");
+    await userEvent.click(screen.getByText("Propose a project candidate"));
+    await userEvent.type(screen.getByLabelText(/^Project ID/), "tooling-1");
+    await userEvent.type(screen.getByLabelText(/^Project metadata URI/), "ipfs://bafyproject");
+    await userEvent.type(screen.getByLabelText(/^Project metadata SHA-256 digest/), `sha256:${"ab".repeat(32)}`);
+    await userEvent.click(screen.getByRole("button", { name: /Connect wallet and review bounty/ }));
     expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { create_bounty: expect.objectContaining({
       project_candidate: { project_id: "tooling-1", metadata_uri: "ipfs://bafyproject", metadata_digest: `sha256:${"ab".repeat(32)}` },
     }) } }));
-    expect(screen.getByText(/does not register or graduate/)).toBeInTheDocument();
+    expect(screen.getByText(/does not register, endorse, or graduate/)).toBeInTheDocument();
+  });
+  it("calculates a lowercase SHA-256 digest locally from a selected metadata file", async () => {
+    const digestBytes = new Uint8Array(32).fill(0xab);
+    vi.stubGlobal("crypto", { subtle: { digest: vi.fn(async () => digestBytes.buffer) } });
+    try {
+      render(<BountyActions canonical={canonical} stale={false} access={access()} />);
+      await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
+      await userEvent.click(screen.getByText("Add supporting content"));
+      const file = new File(["metadata"], "metadata.json", { type: "application/json" });
+      Object.defineProperty(file, "arrayBuffer", { value: async () => new TextEncoder().encode("metadata").buffer });
+      await userEvent.upload(screen.getByLabelText("Calculate content digest from file"), file);
+      expect(await screen.findByRole("status")).toHaveTextContent(/calculated locally.*not uploaded/i);
+      expect(screen.getByLabelText(/^Content SHA-256 digest/)).toHaveValue(`sha256:${"ab".repeat(32)}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
   it("blocks stale preparation before wallet access", async () => {
     const port = access(); render(<BountyActions canonical={canonical} stale access={port} bounty={bounty} />);

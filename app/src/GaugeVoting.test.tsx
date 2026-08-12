@@ -14,7 +14,13 @@ const source: GaugeDataSource = { loadGauge: vi.fn(async () => gaugeData), loadA
 const review = { reviewId: "review", flowBinding: "flow", sender: voter, chainId: "juno-1", contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }] } }, funds: [], fee: { gas: "100000", amount: [{ denom: "ujuno", amount: "7500" }] }, consequences: ["Replace ballot"], canonicalState: { fingerprint: gaugeContext.fingerprint, height: 40_000_100 }, walletRevision: 1 } as const;
 function flow(): GaugeTransactionFlow { return { connect: vi.fn(async () => ({ address: voter })), prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "confirmed" as const, confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, txHash: "ABC", height: 40_000_101, explorerUrl: "https://www.mintscan.io/juno/tx/ABC" })) }; }
 const submissionScope = { sender: voter, chainId: config.chainId, contract: config.gaugeContract, gaugeId: 0 as const };
+async function openGaugeWorkbench() {
+  await screen.findByRole("heading", { name: "Weighted allocation" });
+  const launcher = screen.queryByRole("button", { name: "Open voting workbench" });
+  if (launcher) await userEvent.click(launcher);
+}
 async function prepareAndSubmit(transactionFlow: GaugeTransactionFlow) {
+  await openGaugeWorkbench();
   await userEvent.click(await screen.findByRole("button", { name: "Prepare ballot revision" }));
   await userEvent.click(await screen.findByRole("button", { name: "Recheck state, then sign" }));
   expect(transactionFlow.submit).toHaveBeenCalledTimes(1);
@@ -30,14 +36,19 @@ describe("gauge voting UI", () => {
     expect(screen.getAllByText("$JUNO 0.001").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/\$JUNO 0\.0005 · 50\.00%/).length).toBeGreaterThan(0);
     expect(screen.getByText(/\$JUNO 0\.0001 power · 25\.00%/)).toBeVisible();
-    expect(screen.getByText(/snapshot power \$JUNO 0\.0001/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Current ballot" })).toBeVisible();
+    expect(screen.getAllByText("$JUNO 0.0001").length).toBeGreaterThan(0);
     expect(screen.getAllByText("do-not-distribute").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Nothing shown here implies automatic rollover/)).toBeVisible();
+    expect(screen.queryByDisplayValue("0.5")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("How retained value and fixed options work"));
+    expect(screen.getByText(/Nothing shown here implies an automatic rollover/)).toBeVisible();
+    await openGaugeWorkbench();
     expect(screen.getByDisplayValue("0.5")).toBeVisible();
   });
   it("shows exact stage-one review and invokes submission only at stage two", async () => {
     const transactionFlow = flow();
     render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     await screen.findByDisplayValue("0.5");
     await userEvent.click(screen.getByRole("button", { name: "Prepare ballot revision" }));
     expect(await screen.findByRole("dialog", { name: "Exact transaction review" })).toHaveTextContent('"place_votes"');
@@ -52,6 +63,7 @@ describe("gauge voting UI", () => {
   it("prepares explicit null ballot removal", async () => {
     const transactionFlow = flow();
     render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     await userEvent.click(await screen.findByRole("button", { name: "Prepare ballot removal" }));
     expect(source.loadActionContext).toHaveBeenCalledWith(voter);
     expect(transactionFlow.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { place_votes: { gauge: 0, votes: null } }, funds: [] }));
@@ -72,6 +84,7 @@ describe("gauge voting UI", () => {
 
     view.unmount();
     render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
     expect(screen.getByRole("link", { name: /transaction evidence GAUGE_KNOWN/ })).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/GAUGE_KNOWN");
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
@@ -87,6 +100,7 @@ describe("gauge voting UI", () => {
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
     view.unmount();
     render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
@@ -100,6 +114,7 @@ describe("gauge voting UI", () => {
 
     view.unmount();
     render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
     expect(screen.getByText(/no transaction hash is available/i)).toHaveTextContent(/do not submit again/i);
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
@@ -113,12 +128,14 @@ describe("gauge voting UI", () => {
     const transactionFlow = flow();
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
     const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     await userEvent.click(await screen.findByRole("button", { name: "Prepare ballot revision" }));
     await userEvent.click(await screen.findByRole("button", { name: "Recheck state, then sign" }));
     expect(transactionFlow.submit).not.toHaveBeenCalled();
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     view.unmount();
     render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     expect(await screen.findByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
@@ -137,6 +154,7 @@ describe("gauge voting UI", () => {
 
     view.unmount();
     render(<GaugeVoting source={source} config={config} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
     expect(screen.getByText(/no transaction hash is available/i)).toHaveTextContent(/do not submit again/i);
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
@@ -162,6 +180,7 @@ describe("gauge voting UI", () => {
 
     view.unmount();
     render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
   });
@@ -183,6 +202,7 @@ describe("gauge voting UI", () => {
 
     view.unmount();
     render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={transactionFlow} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Action: Place votes · Epoch 2/)).toBeVisible();
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
@@ -196,10 +216,12 @@ describe("gauge voting UI", () => {
       sessionStorage.setItem(key, "not json");
     } else vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("storage unavailable"); });
     const view = render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={flow()} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     expect(screen.getByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
     view.unmount();
     render(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={flow()} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Stored gauge submission evidence is malformed or unavailable/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Prepare ballot removal" })).toBeDisabled();
   });
@@ -207,10 +229,12 @@ describe("gauge voting UI", () => {
   it("uses the latest pointer before connection but never applies another sender's record to a connected account", async () => {
     saveGaugeSubmission({ ...submissionScope, version: 1, action: "execute", epoch: 2, status: "unknown" });
     const disconnected = render(<GaugeVoting source={source} config={config} transactionFlow={flow()} />);
+    await openGaugeWorkbench();
     expect(await screen.findByText(/Action: Execute · Epoch 2/)).toBeVisible();
     disconnected.unmount();
     const other = "juno1lk5htm0xu0t340wtp5dnyxq4q38c8n6fphcw0p";
     render(<GaugeVoting source={source} config={config} transactionFlow={flow()} sender={other} />);
+    await openGaugeWorkbench();
     expect(await screen.findByRole("button", { name: "Prepare ballot revision" })).toBeEnabled();
     expect(screen.queryByText(/Action: Execute · Epoch 2/)).not.toBeInTheDocument();
   });

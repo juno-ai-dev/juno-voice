@@ -1,0 +1,35 @@
+.app-shell .app-topbar { height: auto; min-height: 72px; position: relative; z-index: 20; }
+.app-shell .app-topbar .topbar-inner { position: relative; min-height: 72px; gap: 28px; }
+.app-shell .app-topbar nav { position: absolute; top: 0; bottom: 0; left: 50%; align-items: center; transform: translateX(-50%); }
+.app-shell .app-topbar nav button { display: inline-flex; height: 100%; min-width: 68px; align-items: center; justify-content: center; padding: 0 12px; font-size: 12px; }
+.app-shell .shell-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.app-shell .network-chip { display: flex; align-items: center; gap: 7px; color: #d7bda1; font: 10px var(--font-mono, monospace); letter-spacing: .1em; white-space: nowrap; }
+.app-shell .network-chip::before { width: 6px; height: 6px; border-radius: 50%; background: #8fb08a; content: ""; }
+.app-shell .wallet-button { min-height: 40px; max-width: 190px; border: 1px solid #ff9a9b; background: transparent; color: #ffebd2; padding: 0 14px; cursor: pointer; font: 700 11px var(--font-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-shell .wallet-button[data-connected="true"] { border-color: #6f3e40; color: #d7bda1; cursor: default; }
+.app-shell .shell-alert { width: min(1120px, calc(100% - 40px)); margin: 12px auto 0; }
+.app-shell .view-region:focus { outline: 0; }
+.app-shell .app-footer { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(300px, 1.25fr) auto; align-items: center; gap: 48px; width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 40px 0; background: transparent; text-align: left; }
+.app-shell .app-footer p { margin: 4px 0 0; color: #bca58e; font-size: 12px; }
+.app-shell .footer-identity strong { color: #ffebd2; font-size: 17px; letter-spacing: -.01em; }
+.app-shell .footer-network { padding-left: 28px; border-left: 1px solid #553033; }
+.app-shell .footer-network span { color: #ff9a9b; font: 10px var(--font-mono, monospace); letter-spacing: .12em; }
+.app-shell .footer-links { display: flex; align-items: center; justify-content: flex-end; gap: 28px; }
+.app-shell .footer-link { min-height: 44px; display: inline-flex; align-items: center; gap: 12px; color: #ff9a9b; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.app-shell .footer-wrap { border-top: 1px solid #553033; background: #100405; }
+@media (max-width: 900px) {
+  .app-shell .app-topbar .topbar-inner { flex-wrap: wrap; padding: 12px 0; }
+  .app-shell .app-topbar nav { position: static; order: 3; width: 100%; justify-content: center; transform: none; }
+  .app-shell .app-topbar nav button { height: 40px; min-height: 40px; }
+}
+@media (max-width: 600px) {
+  .app-shell .app-topbar .topbar-inner { gap: 8px; }
+  .app-shell .app-topbar nav { overflow-x: auto; justify-content: flex-start; }
+  .app-shell .app-topbar nav button { flex: 1; padding-inline: 7px; }
+  .app-shell .network-chip { display: none; }
+  .app-shell .wallet-button { max-width: 135px; padding-inline: 10px; }
+  .app-shell .app-footer { grid-template-columns: 1fr; align-items: start; gap: 24px; width: calc(100% - 28px); }
+  .app-shell .footer-network { width: 100%; padding: 20px 0 0; border-top: 1px solid #553033; border-left: 0; }
+  .app-shell .footer-links { width: 100%; justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

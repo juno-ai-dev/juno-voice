@@ -170,6 +170,7 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
 test("configured juno-1 artifact proves provenance and renders authoritative live-empty state", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   await expect(page.getByText("No sample or demo records are shown.")).toBeVisible();
   await expect(page.getByText("juno-1", { exact: true })).toBeVisible();
@@ -184,6 +185,7 @@ test("freshness changes to stale in an open browser", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-08-12T12:00:00Z") });
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("Fresh direct-RPC observation")).toBeVisible();
   await page.clock.fastForward(60_002);
   await expect(page.getByText("Stale · retry recommended")).toBeVisible();
@@ -192,6 +194,7 @@ test("freshness changes to stale in an open browser", async ({ page }) => {
 test("RPC errors are explicit and retry recovers", async ({ page }) => {
   await mockMainnet(page, { failures: 1 });
   await gotoDeployableArtifact(page);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("Mainnet data unavailable")).toBeVisible();
   await page.getByRole("button", { name: "Retry query" }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
@@ -200,15 +203,18 @@ test("RPC errors are explicit and retry recovers", async ({ page }) => {
 test("provenance mismatch fails closed", async ({ page }) => {
   await mockMainnet(page, { chain: "uni-7" });
   await gotoDeployableArtifact(page);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText(/expected chain juno-1, observed uni-7/)).toBeVisible();
 });
 
 test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
   const observed = await mockMainnet(page);
   await gotoDeployableArtifact(page);
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   const first = observed.requests();
   await page.reload();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   expect(observed.requests()).toBeGreaterThan(first);
 });
@@ -216,12 +222,28 @@ test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
 test("gauge route verifies the full deployment and renders live-empty safety semantics", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
-  await page.getByRole("button", { name: "Gauge" }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Gauge", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
   await expect(page.getByText("No epoch has opened")).toBeVisible();
-  await expect(page.getByText(/Nothing shown here implies automatic rollover/)).toBeVisible();
+  await page.getByText("How retained value and fixed options work").click();
+  await expect(page.getByText(/Nothing shown here implies an automatic rollover/)).toBeVisible();
+  await page.getByRole("button", { name: "Open voting workbench" }).click();
   await expect(page.getByText(/transaction support is unavailable in this browser/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Prepare open epoch" })).toHaveCount(0);
+});
+
+test("footer opens the dedicated FAQ and the logo returns home", async ({ page }) => {
+  await mockMainnet(page);
+  await gotoDeployableArtifact(page);
+
+  await expect(page.getByText("NEW TO JUNO VOICE?")).toHaveCount(0);
+  await page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: /^FAQ/ }).click();
+  await expect(page).toHaveURL(/#faq$/);
+  await expect(page.getByRole("heading", { name: /Questions, answered plainly/ })).toBeVisible();
+  await page.getByText("What is a project candidate?").click();
+  await expect(page.getByText(/does not register, endorse, approve, or automatically graduate/)).toBeVisible();
+  await page.getByRole("link", { name: "Juno VOICE" }).click();
+  await expect(page.getByRole("heading", { name: /Fund useful work/ })).toBeVisible();
 });
 
 test("mobile public routes do not overflow or emit browser errors", async ({ page }) => {
@@ -230,12 +252,14 @@ test("mobile public routes do not overflow or emit browser errors", async ({ pag
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
 
+  await expect(page.getByRole("heading", { name: /Fund useful work/ })).toBeVisible();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Public bounty ledger" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByRole("button", { name: "Gauge" }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Gauge", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Projects", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Eligible projects" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   expectNoBrowserErrors();
@@ -244,14 +268,16 @@ test("mobile public routes do not overflow or emit browser errors", async ({ pag
 test("keyboard reaches primary navigation and the public retry action", async ({ page }) => {
   await mockMainnet(page, { failures: 1 });
   await gotoDeployableArtifact(page);
-  await expect(page.getByText("Mainnet data unavailable")).toBeVisible();
 
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Juno VOICE" })).toBeFocused();
-  for (const name of ["Gauge", "Projects", "Bounties"]) {
+  const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
+  for (const name of ["Bounties"]) {
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name, exact: true })).toBeFocused();
+    await expect(primaryNavigation.getByRole("button", { name, exact: true })).toBeFocused();
   }
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Mainnet data unavailable")).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Retry query" })).toBeFocused();
   await page.keyboard.press("Enter");
