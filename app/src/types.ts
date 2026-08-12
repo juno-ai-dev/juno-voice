@@ -107,6 +107,25 @@ export interface LedgerData {
   health: Health;
   bounties: Bounty[];
   observationHeight: number;
+  chainTimeNanos: string;
+  fingerprint: string;
   refreshedAt: Date;
   weakConsistency: true;
+}
+export interface Contribution { bounty_id: number; contributor: string; contributor_index: number; current_amount: string; weight_at_round: string | null }
+export interface Claim { bounty_id: number; contributor: string; amount: string; claimed_at: string }
+export interface HistoryEntry { bounty_id: number; sequence: number; actor: string; at: string; action: string | Record<string, unknown> }
+export interface BountyDetail {
+  bounty: Bounty;
+  config: ContractConfig;
+  pause: PauseState;
+  activeRound: Record<string, unknown> | null;
+  moderation: Record<string, unknown> | null;
+  graduation: Record<string, unknown> | null;
+  contributions: Contribution[];
+  claims: Claim[];
+  history: HistoryEntry[];
+  observationHeight: number;
+  chainTimeNanos: string;
+  fingerprint: string;
 }

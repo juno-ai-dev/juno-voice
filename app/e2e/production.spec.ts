@@ -67,6 +67,10 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
       });
       return;
     }
+    if (url.pathname.endsWith("/block")) {
+      await fulfill(route, { result: { block: { header: { time: "2026-08-12T12:00:00.123456789Z" } } } });
+      return;
+    }
     const path = url.searchParams.get("path") ?? "";
     if (path.includes("ContractInfo")) {
       const bytes = QueryContractInfoResponse.encode(

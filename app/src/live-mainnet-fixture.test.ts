@@ -30,6 +30,7 @@ describe("live mainnet fixture contract", () => {
       getHeight: vi
         .fn()
         .mockResolvedValue(fixture.provenance.observation_height),
+      getChainTimeNanos: vi.fn().mockResolvedValue("1700000000000000000"),
       getContract: vi.fn().mockResolvedValue({
         address: fixture.provenance.contract_address,
         codeId: fixture.provenance.code_id,

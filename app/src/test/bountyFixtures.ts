@@ -84,6 +84,8 @@ export const ledger: LedgerData = {
   },
   bounties: [bounty],
   observationHeight: 123456,
+  chainTimeNanos: "1700000000000000000",
+  fingerprint: "ledger:v1",
   refreshedAt: new Date(),
   weakConsistency: true,
 };

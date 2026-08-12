@@ -6,6 +6,7 @@ const base = () => ({
   queryContractSmart: vi.fn(),
   getChainId: vi.fn().mockResolvedValue("juno-1"),
   getHeight: vi.fn().mockResolvedValue(900),
+  getChainTimeNanos: vi.fn().mockResolvedValue("1700000000000000000"),
   getContract: vi
     .fn()
     .mockResolvedValue({ address: config.contract, codeId: 5150 }),
@@ -119,6 +120,37 @@ describe("mainnet bounty client", () => {
       config.contract,
       queries.bounties(50),
     );
+  });
+
+  it("loads complete paginated bounty detail and fingerprints eligibility state", async () => {
+    const rpc = base(), detailBounty = { ...bounty, contributor_count: 51, history_count: 51 };
+    rpc.queryContractSmart.mockImplementation((_address: string, query: Record<string, unknown>) => {
+      if ("config" in query) return Promise.resolve(ledger.config);
+      if ("pause" in query) return Promise.resolve(ledger.pause);
+      if ("bounty" in query) return Promise.resolve({ bounty: detailBounty, active_round: null, moderation: null, graduation: null });
+      if ("contributions" in query) {
+        const cursor = (query.contributions as { start_after: number | null }).start_after;
+        const start = cursor === null ? 1 : 51, count = cursor === null ? 50 : 1;
+        return Promise.resolve({ contributions: Array.from({ length: count }, (_, offset) => ({ bounty_id: 1,
+          contributor: `juno1contributor${start + offset}`, contributor_index: start + offset,
+          current_amount: "1000000", weight_at_round: null })) });
+      }
+      if ("claims" in query) return Promise.resolve({ claims: [], next_start_after: null });
+      if ("history" in query) {
+        const cursor = (query.history as { start_after: number | null }).start_after;
+        const start = cursor === null ? 1 : 51, count = cursor === null ? 50 : 1;
+        return Promise.resolve({ entries: Array.from({ length: count }, (_, offset) => ({ bounty_id: 1,
+          sequence: start + offset, actor: bounty.creator, at: bounty.created_at, action: "contributed" })) });
+      }
+      throw new Error("Unexpected detail query");
+    });
+    const result = await createDataSource(config, vi.fn().mockResolvedValue(rpc)).loadBountyDetail?.(1);
+    expect(result?.contributions).toHaveLength(51);
+    expect(result?.history).toHaveLength(51);
+    expect(result?.config).toEqual(ledger.config);
+    expect(result?.pause).toEqual(ledger.pause);
+    expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.contract, queries.contributions(1, 50));
+    expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.contract, queries.history(1, 50));
   });
 
   it("fails repeated/non-increasing IDs and disconnects", async () => {

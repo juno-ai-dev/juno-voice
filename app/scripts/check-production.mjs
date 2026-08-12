@@ -3,18 +3,12 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 
 export const limits = Object.freeze({
-  ".js": { raw: 310_000, gzip: 90_000 },
+  // Wallet simulation/signing support is deliberately bundled for #33. Keep an
+  // explicit ceiling so future dependency growth remains a reviewed decision.
+  ".js": { raw: 2_100_000, gzip: 450_000 },
   ".css": { raw: 15_000, gzip: 5_000 },
 });
 
-export const forbiddenSigningSymbols = [
-  "SigningCosmWasmClient",
-  "SigningStargateClient",
-  "OfflineSigner",
-  "DirectSecp256k1",
-  "signAndBroadcast",
-  "window.keplr",
-];
 
 async function files(root, current = root) {
   const output = [];
@@ -41,16 +35,7 @@ export async function checkProduction(root = "dist") {
       throw new Error(
         `${entry.name} exceeds its bundle budget: ${raw}/${policy.raw} raw bytes, ${gzip}/${policy.gzip} gzip bytes.`,
       );
-    if (extname(entry.name) === ".js") {
-      const text = body.toString("utf8");
-      const symbol = forbiddenSigningSymbols.find((candidate) =>
-        text.includes(candidate),
-      );
-      if (symbol)
-        throw new Error(
-          `${entry.name} contains forbidden wallet/signing symbol ${symbol}.`,
-        );
-    }
+
   }
   return entries.map(({ name }) => name).sort();
 }

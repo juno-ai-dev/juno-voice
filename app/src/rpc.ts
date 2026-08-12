@@ -12,6 +12,7 @@ export interface RpcClient {
   queryContractSmart(address: string, query: object): Promise<unknown>;
   getChainId(): Promise<string>;
   getHeight(): Promise<number>;
+  getChainTimeNanos(): Promise<string>;
   getContract(address: string): Promise<{ address: string; codeId: number }>;
   getCodeDetails(codeId: number): Promise<{ checksum: string }>;
   disconnect(): void;
@@ -86,6 +87,23 @@ export const connectRpc: Connect = async (rpc) => {
       if (!Number.isSafeInteger(height) || height < 0)
         throw new Error("Malformed height response from RPC.");
       return height;
+    },
+    async getChainTimeNanos() {
+      const body = (await fetchJson("/block")) as {
+        result?: { block?: { header?: { time?: unknown } } };
+      };
+      const value = body.result?.block?.header?.time;
+      if (typeof value !== "string")
+        throw new Error("Malformed block time response from RPC.");
+      const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z$/.exec(value);
+      if (!match) throw new Error("Malformed block time response from RPC.");
+      const milliseconds = Date.parse(`${match[1]}Z`);
+      if (!Number.isSafeInteger(milliseconds))
+        throw new Error("Malformed block time response from RPC.");
+      return (
+        BigInt(milliseconds) * 1_000_000n +
+        BigInt((match[2] ?? "").padEnd(9, "0"))
+      ).toString();
     },
     async getContract(address) {
       const request = QueryContractInfoRequest.encode({ address }).finish();
