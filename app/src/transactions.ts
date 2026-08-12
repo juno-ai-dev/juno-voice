@@ -145,6 +145,10 @@ function validJunoAddress(address: string, lengths: readonly number[]): boolean 
     return decoded.prefix === "juno" && lengths.includes(decoded.data.length);
   } catch { return false; }
 }
+const projectId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9-]{3,64}$/.test(value) && value !== "do-not-distribute";
+const digest = (value: unknown): value is string => typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+const metadataUri = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && new TextEncoder().encode(value).length <= 2_048;
+const account = (value: unknown): value is string => typeof value === "string" && validJunoAddress(value, [20]);
 function objectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return exactDataObject(value, keys);
 }
@@ -154,16 +158,16 @@ const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number
 const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Object.freeze({
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   register_project: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest", "payout_address"]) &&
-    nonBlank(body.project_id) && nonBlank(body.metadata_uri) && nonBlank(body.metadata_digest) && nonBlank(body.payout_address),
+    projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
   update_pending_metadata: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest"]) &&
-    nonBlank(body.project_id) && nonBlank(body.metadata_uri) && nonBlank(body.metadata_digest),
-  propose_payout_address: (body) => objectWithExactKeys(body, ["project_id", "address"]) && nonBlank(body.project_id) && nonBlank(body.address),
-  cancel_payout_address_change: (body) => objectWithExactKeys(body, ["project_id"]) && nonBlank(body.project_id),
-  accept_payout_address: (body) => objectWithExactKeys(body, ["project_id"]) && nonBlank(body.project_id),
-  claim_registration_bond: (body) => objectWithExactKeys(body, ["project_id"]) && nonBlank(body.project_id),
+    projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest),
+  propose_payout_address: (body) => objectWithExactKeys(body, ["project_id", "address"]) && projectId(body.project_id) && account(body.address),
+  cancel_payout_address_change: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
+  accept_payout_address: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
+  claim_registration_bond: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
   retire: (body) => {
-    if (!objectWithExactKeys(body, ["project_id", "reason"]) || !nonBlank(body.project_id) || !objectWithExactKeys(body.reason, ["code", "note"])) return false;
-    return body.reason.code === "voluntary_retirement" && typeof body.reason.note === "string";
+    if (!objectWithExactKeys(body, ["project_id", "reason"]) || !projectId(body.project_id) || !objectWithExactKeys(body.reason, ["code", "note"])) return false;
+    return body.reason.code === "voluntary_retirement" && typeof body.reason.note === "string" && body.reason.note.trim().length > 0 && new TextEncoder().encode(body.reason.note).length <= 2_048;
   },
 });
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {

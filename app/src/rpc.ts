@@ -12,6 +12,7 @@ export interface RpcClient {
   queryContractSmart(address: string, query: object): Promise<unknown>;
   getChainId(): Promise<string>;
   getHeight(): Promise<number>;
+  getChainTimeNanos(): Promise<string>;
   getContract(address: string): Promise<{ address: string; codeId: number }>;
   getCodeDetails(codeId: number): Promise<{ checksum: string }>;
   disconnect(): void;
@@ -38,14 +39,15 @@ export const connectRpc: Connect = async (rpc) => {
     const body = (await fetchJson("/status")) as {
       result?: {
         node_info?: { network?: unknown };
-        sync_info?: { latest_block_height?: unknown };
+        sync_info?: { latest_block_height?: unknown; latest_block_time?: unknown };
       };
     };
     const network = body.result?.node_info?.network;
     const height = body.result?.sync_info?.latest_block_height;
-    if (typeof network !== "string" || typeof height !== "string")
+    const time = body.result?.sync_info?.latest_block_time;
+    if (typeof network !== "string" || typeof height !== "string" || typeof time !== "string")
       throw new Error("Malformed status response from RPC.");
-    return { network, height };
+    return { network, height, time };
   };
   const abci = async (path: string, request: Uint8Array) => {
     const url = endpoint("/abci_query");
@@ -86,6 +88,12 @@ export const connectRpc: Connect = async (rpc) => {
       if (!Number.isSafeInteger(height) || height < 0)
         throw new Error("Malformed height response from RPC.");
       return height;
+    },
+    async getChainTimeNanos() {
+      const milliseconds = Date.parse((await status()).time);
+      if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
+        throw new Error("Malformed chain time response from RPC.");
+      return (BigInt(milliseconds) * 1_000_000n).toString();
     },
     async getContract(address) {
       const request = QueryContractInfoRequest.encode({ address }).finish();

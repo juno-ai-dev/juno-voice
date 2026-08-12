@@ -62,7 +62,10 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
       await fulfill(route, {
         result: {
           node_info: { network: options.chain ?? fixture.provenance.chain_id },
-          sync_info: { latest_block_height: String(fixture.provenance.observation_height) },
+          sync_info: {
+            latest_block_height: String(fixture.provenance.observation_height),
+            latest_block_time: "2026-08-12T12:00:00Z",
+          },
         },
       });
       return;

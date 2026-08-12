@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config";
 import { connectRpc, type Connect } from "./rpc";
+import type { RegistryActionContext } from "./registryActions";
 
 export const REGISTRY_PAGE_LIMIT = 50;
 const U64_MAX = 18446744073709551615n;
@@ -66,7 +67,9 @@ export function mapProject(value: unknown): Project {
 }
 export function mapRegistryConfig(value: unknown): RegistryConfig {
   const x = record(value, "config");
-  return { native_denom: string(x.native_denom, "config"), registration_bond: uint(x.registration_bond, "config"), max_active_projects: integer(x.max_active_projects, "config"), max_metadata_uri_bytes: integer(x.max_metadata_uri_bytes, "config"), max_page_limit: integer(x.max_page_limit, "config"), max_reason_bytes: integer(x.max_reason_bytes, "config"), payout_address_delay_seconds: integer(x.payout_address_delay_seconds, "config"), curator: string(x.curator, "config"), governor: string(x.governor, "config"), version: uint(x.version, "config", U64_MAX) };
+  const config = { native_denom: string(x.native_denom, "config"), registration_bond: uint(x.registration_bond, "config"), max_active_projects: integer(x.max_active_projects, "config"), max_metadata_uri_bytes: integer(x.max_metadata_uri_bytes, "config"), max_page_limit: integer(x.max_page_limit, "config"), max_reason_bytes: integer(x.max_reason_bytes, "config"), payout_address_delay_seconds: integer(x.payout_address_delay_seconds, "config"), curator: string(x.curator, "config"), governor: string(x.governor, "config"), version: uint(x.version, "config", U64_MAX) };
+  if (config.native_denom !== "ujuno" || config.registration_bond === "0" || config.max_active_projects !== 99 || config.max_metadata_uri_bytes < 1 || config.max_metadata_uri_bytes > 2_048 || config.max_page_limit < 1 || config.max_page_limit > 100 || config.max_reason_bytes < 1 || config.max_reason_bytes > 2_048 || config.payout_address_delay_seconds < 1 || config.payout_address_delay_seconds > 7_776_000) bad("config");
+  return config;
 }
 const mapAccounting = (value: unknown): RegistryAccounting => { const x = record(value, "accounting"); return { active_projects: integer(x.active_projects, "accounting"), pending_applications: integer(x.pending_applications, "accounting"), bond_liability: uint(x.bond_liability, "accounting"), lifetime_bonds_received: uint(x.lifetime_bonds_received, "accounting"), lifetime_bonds_refunded: uint(x.lifetime_bonds_refunded, "accounting"), lifetime_bonds_forfeited: uint(x.lifetime_bonds_forfeited, "accounting") }; };
 const mapPause = (value: unknown): RegistryPause => { const x = record(value, "pause"); return { admissions_stopped: boolean(x.admissions_stopped, "pause"), adapter_stopped: boolean(x.adapter_stopped, "pause"), reason: nullable(x.reason, (v) => string(v, "pause")), actor: nullable(x.actor, (v) => string(v, "pause")), changed_at: nullable(x.changed_at, (v) => uint(v, "pause", U64_MAX)) }; };
@@ -94,11 +97,36 @@ async function paginate<T>(query: (cursor: string | number | null) => Promise<un
   }
   throw new Error("Too many registry pages from RPC.");
 }
-export interface RegistryDataSource { loadRegistry(): Promise<RegistryData>; loadProject(projectId: string): Promise<ProjectDetail> }
+export interface RegistryDataSource {
+  loadRegistry(): Promise<RegistryData>;
+  loadProject(projectId: string): Promise<ProjectDetail>;
+  loadActionContext(projectId: string, allowMissing: boolean): Promise<RegistryActionContext>;
+}
 export function createRegistryDataSource(cfg: AppConfig, connector: Connect = connectRpc): RegistryDataSource {
   const connect = async () => { const client = await connector(cfg.rpc); const [chain, contract] = await Promise.all([client.getChainId(), client.getContract(cfg.registryContract)]); if (chain !== cfg.chainId || contract.address !== cfg.registryContract || contract.codeId !== cfg.registryCodeId) { client.disconnect(); throw new Error("Registry deployment mismatch."); } const code = await client.getCodeDetails(cfg.registryCodeId); if (code.checksum.toLowerCase() !== cfg.registryCodeChecksum) { client.disconnect(); throw new Error("Registry deployment mismatch: checksum."); } return client; };
   return {
     async loadRegistry() { const client = await connect(); try { const query = (q: object) => client.queryContractSmart(cfg.registryContract, q); const [rawConfig, rawPause, rawHealth, height] = await Promise.all([query(registryQueries.config()), query(registryQueries.pause()), query(registryQueries.health()), client.getHeight()]); const config = mapRegistryConfig(rawConfig); if (config.native_denom !== "ujuno" || config.max_page_limit < REGISTRY_PAGE_LIMIT) throw new Error("Registry deployment has unsupported live configuration."); const [projects, applications, options] = await Promise.all([paginate((cursor) => query(registryQueries.projects(cursor as string | null)), mapProject, "projects", (item) => item.id), paginate((cursor) => query(registryQueries.applications(cursor as string | null)), mapProject, "projects", (item) => item.id), paginate(async (cursor) => { const x = record(await query(registryQueries.options(cursor as string | null)), "options"); if (!Array.isArray(x.options)) bad("options"); return { projects: x.options }; }, (v) => string(v, "option"), "projects", (item) => item)]); if (!options.includes("do-not-distribute") || projects.some((p) => p.status !== "active") || applications.some((p) => p.status !== "pending")) throw new Error("Registry returned inconsistent project classifications."); return { config, pause: mapPause(rawPause), health: mapHealth(rawHealth), projects, applications, options, observationHeight: integer(height, "height"), refreshedAt: new Date(), weakConsistency: true }; } finally { client.disconnect(); } },
     async loadProject(projectId) { const client = await connect(); try { const query = (q: object) => client.queryContractSmart(cfg.registryContract, q); const project = mapProject(await query(registryQueries.project(projectId))); if (project.id !== projectId) throw new Error("Registry project identity mismatch."); const [statusHistory, addressHistory] = await Promise.all([paginate((cursor) => query(registryQueries.statusHistory(projectId, cursor as number | null)), mapStatus, "entries", (item) => item.sequence), paginate((cursor) => query(registryQueries.addressHistory(projectId, cursor as number | null)), mapAddress, "entries", (item) => item.sequence)]); if (statusHistory.some((x) => x.project_id !== projectId) || addressHistory.some((x) => x.project_id !== projectId)) throw new Error("Registry returned cross-project history."); return { project, statusHistory, addressHistory }; } finally { client.disconnect(); } },
+    async loadActionContext(projectId, allowMissing) {
+      const client = await connect();
+      try {
+        const query = (q: object) => client.queryContractSmart(cfg.registryContract, q);
+        const [rawConfig, rawPause, rawHealth, height, chainTimeNanos] = await Promise.all([
+          query(registryQueries.config()), query(registryQueries.pause()), query(registryQueries.health()), client.getHeight(), client.getChainTimeNanos(),
+        ]);
+        let project: Project | null = null;
+        try { project = mapProject(await query(registryQueries.project(projectId))); }
+        catch (error) {
+          if (!allowMissing || !(error instanceof Error) || !/project not found/i.test(error.message)) throw error;
+        }
+        if (project && project.id !== projectId) throw new Error("Registry project identity mismatch.");
+        const config = mapRegistryConfig(rawConfig), pause = mapPause(rawPause), health = mapHealth(rawHealth);
+        const data: RegistryData = { config, pause, health, projects: project?.status === "active" ? [project] : [], applications: project?.status === "pending" ? [project] : [], options: ["do-not-distribute"], observationHeight: integer(height, "height"), refreshedAt: new Date(), weakConsistency: true };
+        // Height and time are observation metadata, not mutable contract state. Including
+        // either would invalidate an otherwise exact review whenever a new block arrives.
+        const fingerprint = JSON.stringify({ projectId, project, config, pause, health });
+        return { data, project, chainTimeNanos, fingerprint };
+      } finally { client.disconnect(); }
+    },
   };
 }

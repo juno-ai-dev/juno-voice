@@ -117,8 +117,8 @@ describe("exact pre-sign transaction review", () => {
 
 describe("address and centrally-owned execute policy", () => {
   it.each([
-    ["register_project", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: "ab", payout_address: sender }, [{ denom: "ujuno", amount: "1000000" }]],
-    ["update_pending_metadata", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: "ab" }, []],
+    ["register_project", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender }, [{ denom: "ujuno", amount: "1000000" }]],
+    ["update_pending_metadata", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}` }, []],
     ["propose_payout_address", { project_id: "alpha", address: sender }, []],
     ["cancel_payout_address_change", { project_id: "alpha" }, []],
     ["accept_payout_address", { project_id: "alpha" }, []],
