@@ -67,7 +67,7 @@ function canonical(value: unknown, ancestors = new WeakSet<object>()): string {
   if (value === null) return "null";
   switch (typeof value) {
     case "boolean": case "string": return JSON.stringify(value);
-    case "number": if (!Number.isFinite(value)) return invalidJson(); return JSON.stringify(value);
+    case "number": if (!Number.isFinite(value) || Object.is(value, -0)) return invalidJson(); return JSON.stringify(value);
     case "object": break;
     default: return invalidJson();
   }
@@ -75,6 +75,7 @@ function canonical(value: unknown, ancestors = new WeakSet<object>()): string {
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype) return invalidJson();
       const ownKeys = Reflect.ownKeys(value);
       if (ownKeys.length !== value.length + 1 || ownKeys[value.length] !== "length") return invalidJson();
       const encoded: string[] = [];
@@ -89,8 +90,7 @@ function canonical(value: unknown, ancestors = new WeakSet<object>()): string {
         (length.writable !== true && !(length.writable === false && Object.isFrozen(value)))) return invalidJson();
       return `[${encoded.join(",")}]`;
     }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return invalidJson();
+    if (Object.getPrototypeOf(value) !== Object.prototype) return invalidJson();
     const object = value as Record<string, unknown>;
     const keys = Object.keys(object);
     if (Reflect.ownKeys(object).length !== keys.length) return invalidJson();
@@ -123,12 +123,18 @@ function validAmount(amount: unknown, positive: boolean): amount is string {
   if (typeof amount !== "string" || !/^(0|[1-9]\d*)$/.test(amount)) return false;
   const parsed = BigInt(amount); return parsed <= UINT128_MAX && (!positive || parsed > 0n);
 }
+function exactDataObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  const ownKeys = Reflect.ownKeys(value);
+  return ownKeys.length === keys.length && keys.every((key) => ownKeys.includes(key) &&
+    validDataDescriptor(Object.getOwnPropertyDescriptor(value, key), true));
+}
 function exactJunoCoin(coin: Coin | undefined): boolean {
-  return Boolean(coin && coin.denom === "ujuno" && validAmount(coin.amount, true));
+  return exactDataObject(coin, ["denom", "amount"]) && coin.denom === "ujuno" && validAmount(coin.amount, true);
 }
 function validateFee(fee: FeeEstimate): void {
   safeCanonical(fee);
-  if (!fee || !validAmount(fee.gas, true) || BigInt(fee.gas) > MAX_GAS || !Array.isArray(fee.amount) ||
+  if (!exactDataObject(fee, ["gas", "amount"]) || !validAmount(fee.gas, true) || BigInt(fee.gas) > MAX_GAS || !Array.isArray(fee.amount) ||
     fee.amount.length !== 1 || !exactJunoCoin(fee.amount[0]))
     throw new TransactionSafetyError("invalid_transaction", "Fee estimator returned an invalid fee.");
 }
@@ -140,11 +146,9 @@ function validJunoAddress(address: string, lengths: readonly number[]): boolean 
   } catch { return false; }
 }
 function objectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
-  const actual = Object.keys(value as object).sort();
-  return actual.length === keys.length && [...keys].sort().every((key, index) => key === actual[index]);
+  return exactDataObject(value, keys);
 }
-const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0;
+const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 && !Object.is(value, -0);
 // Issue #32 currently approves only the contribution flow. Expanding this map
 // is a security-policy change and requires an exact schema plus dedicated UX.
 const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Object.freeze({

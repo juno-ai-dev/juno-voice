@@ -150,6 +150,8 @@ describe("address and centrally-owned execute policy", () => {
       .rejects.toMatchObject({ code: "message_forbidden" });
     await expect(flow.prepare({ ...intent, executeMessage: { contribute: { bounty_id: "7" } } }))
       .rejects.toMatchObject({ code: "message_forbidden" });
+    await expect(flow.prepare({ ...intent, executeMessage: { contribute: { bounty_id: -0 } } }))
+      .rejects.toMatchObject({ code: "invalid_transaction" });
   });
   it.each([
     ["no funds", []], ["zero", [{ denom: "ujuno", amount: "0" }]],
@@ -185,6 +187,28 @@ describe("address and centrally-owned execute policy", () => {
 });
 
 describe("strict canonical JSON review", () => {
+  it("rejects negative zero and prevents a reviewed zero from being replaced by negative zero", async () => {
+    const fixture = setup(); await fixture.wallet.connect(); const flow = createTransactionFlow(fixture.dependencies);
+    const review = await flow.prepare({ ...intent, executeMessage: { contribute: { bounty_id: 0 } } });
+    const tampered = structuredClone(review) as typeof review;
+    (tampered.executeMessage as { contribute: { bounty_id: number } }).contribute.bounty_id = -0;
+    await expect(flow.submit(tampered)).rejects.toMatchObject({ code: "invalid_review" });
+    expect(fixture.dependencies.signAndBroadcast).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["null object prototype", () => Object.assign(Object.create(null) as object, { contribute: { bounty_id: 7 } })],
+    ["custom object prototype", () => Object.assign(Object.create({ inherited: true }) as object, { contribute: { bounty_id: 7 } })],
+    ["null array prototype", () => { const value = ["disclose"]; Object.setPrototypeOf(value, null); return value; }],
+    ["custom array prototype", () => { const value = ["disclose"]; Object.setPrototypeOf(value, Object.create(Array.prototype)); return value; }],
+  ])("normalizes rejection of a %s", async (_, make) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    const value = make();
+    const candidate = Array.isArray(value)
+      ? { ...intent, consequences: value as string[] }
+      : { ...intent, executeMessage: value as TransactionIntent["executeMessage"] };
+    await expect(createTransactionFlow(dependencies).prepare(candidate))
+      .rejects.toMatchObject({ name: "TransactionSafetyError", code: "invalid_transaction" });
+  });
   it.each([
     ["NaN", { contribute: { bounty_id: Number.NaN } }], ["Infinity", { contribute: { bounty_id: Infinity } }],
     ["BigInt", { contribute: { bounty_id: 7n } }], ["undefined", { contribute: { bounty_id: 7, x: undefined } }],
@@ -226,6 +250,59 @@ describe("strict canonical JSON review", () => {
     const original = globalThis.structuredClone; vi.stubGlobal("structuredClone", () => { throw new DOMException("no", "DataCloneError"); });
     await expect(createTransactionFlow(third.dependencies).prepare(intent)).rejects.toBeInstanceOf(TransactionSafetyError);
     vi.stubGlobal("structuredClone", original);
+  });
+});
+
+describe("exact Coin and FeeEstimate runtime schemas", () => {
+  const coinVariants = () => {
+    const extra = { denom: "ujuno", amount: "1", memo: "hidden" };
+    const symbol = Object.assign({ denom: "ujuno", amount: "1" }, { [Symbol("hidden")]: true });
+    const accessor = Object.defineProperty({ denom: "ujuno" }, "amount", { enumerable: true, configurable: true, get: () => "1" });
+    const nullPrototype = Object.assign(Object.create(null) as object, { denom: "ujuno", amount: "1" });
+    const customPrototype = Object.assign(Object.create({ inherited: true }) as object, { denom: "ujuno", amount: "1" });
+    return [["extra enumerable key", extra], ["symbol key", symbol], ["accessor", accessor],
+      ["null prototype", nullPrototype], ["custom prototype", customPrototype]] as const;
+  };
+
+  it.each(coinVariants())("rejects an intent fund coin with %s", async (_, coin) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, funds: [coin] as never }))
+      .rejects.toMatchObject({ name: "TransactionSafetyError", code: "invalid_transaction" });
+    expect(dependencies.estimateFee).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["extra enumerable key", () => ({ gas: "1", amount: [{ denom: "ujuno", amount: "1" }], note: true })],
+    ["symbol key", () => Object.assign({ gas: "1", amount: [{ denom: "ujuno", amount: "1" }] }, { [Symbol("hidden")]: true })],
+    ["accessor", () => Object.defineProperty({ amount: [{ denom: "ujuno", amount: "1" }] }, "gas", { enumerable: true, configurable: true, get: () => "1" })],
+    ["null prototype", () => Object.assign(Object.create(null) as object, { gas: "1", amount: [{ denom: "ujuno", amount: "1" }] })],
+    ["custom prototype", () => Object.assign(Object.create({ inherited: true }) as object, { gas: "1", amount: [{ denom: "ujuno", amount: "1" }] })],
+  ] as const)("rejects a fee object with %s", async (_, makeFee) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    vi.mocked(dependencies.estimateFee).mockResolvedValueOnce(makeFee() as never);
+    await expect(createTransactionFlow(dependencies).prepare(intent))
+      .rejects.toMatchObject({ name: "TransactionSafetyError", code: "invalid_transaction" });
+  });
+
+  it.each(coinVariants())("rejects a fee coin with %s", async (_, coin) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    vi.mocked(dependencies.estimateFee).mockResolvedValueOnce({ gas: "1", amount: [coin] } as never);
+    await expect(createTransactionFlow(dependencies).prepare(intent))
+      .rejects.toMatchObject({ name: "TransactionSafetyError", code: "invalid_transaction" });
+  });
+
+  it("accepts ordinary JSON values and frozen structured-clone-compatible schemas", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    vi.mocked(dependencies.estimateFee).mockResolvedValueOnce(Object.freeze({ gas: "1",
+      amount: Object.freeze([Object.freeze({ denom: "ujuno", amount: "1" })]) }));
+    const frozenIntent = Object.freeze({ ...intent,
+      executeMessage: Object.freeze({ contribute: Object.freeze({ bounty_id: 7 }) }),
+      funds: Object.freeze([Object.freeze({ denom: "ujuno", amount: "1" })]),
+      consequences: Object.freeze(["disclose"]),
+    });
+    await expect(createTransactionFlow(dependencies).prepare(frozenIntent)).resolves.toMatchObject({
+      funds: [{ denom: "ujuno", amount: "1" }], fee: { gas: "1", amount: [{ denom: "ujuno", amount: "1" }] },
+    });
   });
 });
 
