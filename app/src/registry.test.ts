@@ -32,11 +32,29 @@ describe("registry live schemas", () => {
     const result = await createRegistryDataSource(config, vi.fn().mockResolvedValue(rpc)).loadRegistry();
     expect(result.projects).toHaveLength(50); expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.registryContract, registryQueries.projects("49")); expect(rpc.disconnect).toHaveBeenCalledOnce();
   });
+  it("accepts the complete mixed-status projects response and exposes only active projects plus pending applications", async () => {
+    const rpc = base();
+    const complete = (["active", "pending", "rejected", "retired", "suspended"] as const)
+      .map((status) => ({ ...project, id: status, status }));
+    rpc.queryContractSmart.mockImplementation((_address: string, query: Record<string, unknown>) => {
+      const singleton = singletons(query); if (singleton) return Promise.resolve(singleton);
+      if ("projects" in query) return Promise.resolve({ projects: complete.map(wire) });
+      if ("applications" in query) return Promise.resolve({ projects: [wire(complete[1])] });
+      if ("all_options" in query) return Promise.resolve({ options: ["active", "do-not-distribute"] });
+      throw new Error("unexpected");
+    });
+    const result = await createRegistryDataSource(config, vi.fn().mockResolvedValue(rpc)).loadRegistry();
+    expect(result.projects.map(({ id }) => id)).toEqual(["active"]);
+    expect(result.applications.map(({ id }) => id)).toEqual(["pending"]);
+    expect([...result.projects, ...result.applications].map(({ id }) => id)).toEqual(["active", "pending"]);
+  });
   it("fails closed on deployment, classification, and non-increasing pages", async () => {
     const rpc = base(); rpc.getContract.mockResolvedValue({ address: config.registryContract, codeId: 999 });
     await expect(createRegistryDataSource(config, vi.fn().mockResolvedValue(rpc)).loadRegistry()).rejects.toThrow("deployment mismatch");
     const duplicate = base(); duplicate.queryContractSmart.mockImplementation((_a: string, query: Record<string, unknown>) => Promise.resolve(singletons(query) ?? ("projects" in query ? { projects: [wire(project), wire(project)] } : "applications" in query ? { projects: [] } : { options: ["do-not-distribute"] })));
     await expect(createRegistryDataSource(config, vi.fn().mockResolvedValue(duplicate)).loadRegistry()).rejects.toThrow("Non-increasing");
+    const inconsistent = base(); inconsistent.queryContractSmart.mockImplementation((_a: string, query: Record<string, unknown>) => Promise.resolve(singletons(query) ?? ("projects" in query ? { projects: [wire(project)] } : "applications" in query ? { projects: [wire({ ...project, id: "pending", status: "pending" })] } : { options: ["do-not-distribute"] })));
+    await expect(createRegistryDataSource(config, vi.fn().mockResolvedValue(inconsistent)).loadRegistry()).rejects.toThrow("inconsistent project classifications");
   });
   it("treats only the contract's not-found response as an absent registration ID", async () => {
     const rpc = base();
