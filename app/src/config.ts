@@ -4,7 +4,7 @@ export const DEFAULT_CHAIN_ID = "juno-1" as const;
 export const DEFAULT_BOUNTY_CONTRACT =
   "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw" as const;
 export const DEFAULT_CONTRACT = DEFAULT_BOUNTY_CONTRACT;
-export const DEFAULT_RPC = "https://rpc.cosmos.directory/juno" as const;
+export const DEFAULT_RPC = "https://juno-rpc.publicnode.com:443" as const;
 export const DEFAULT_EXPLORER = "https://www.mintscan.io/juno" as const;
 export const CODE_ID = 5150 as const;
 export const CODE_CHECKSUM =

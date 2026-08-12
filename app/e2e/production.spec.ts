@@ -10,7 +10,7 @@ import {
 import { QueryBalanceResponse } from "cosmjs-types/cosmos/bank/v1beta1/query.js";
 import fixture from "../src/test/live-mainnet-empty.json" with { type: "json" };
 
-const rpc = "https://rpc.cosmos.directory/juno";
+const rpc = "https://juno-rpc.publicnode.com:443";
 const projectPath = "/juno-voice/";
 const releaseCommit = process.env.PLAYWRIGHT_RELEASE_COMMIT;
 const encoder = new TextEncoder();
