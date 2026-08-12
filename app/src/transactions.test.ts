@@ -154,6 +154,13 @@ describe("address and centrally-owned execute policy", () => {
       .rejects.toMatchObject({ code: "invalid_transaction" });
   });
   it.each([
+    ["number", 1], ["null", null], ["object", {}], ["boolean", true], ["empty", ""], ["whitespace", "   "],
+  ])("rejects a %s consequence with a normalized safety error", async (_, consequence) => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, consequences: [consequence] as never }))
+      .rejects.toMatchObject({ name: "TransactionSafetyError", code: "invalid_transaction" });
+  });
+  it.each([
     ["no funds", []], ["zero", [{ denom: "ujuno", amount: "0" }]],
     ["duplicate", [{ denom: "ujuno", amount: "1" }, { denom: "ujuno", amount: "2" }]],
     ["other denom", [{ denom: "uatom", amount: "1" }]],
@@ -307,6 +314,23 @@ describe("exact Coin and FeeEstimate runtime schemas", () => {
 });
 
 describe("broadcast and confirmation outcomes", () => {
+  it.each([
+    ["missing confirmed hash", { status: "confirmed", height: 101 }],
+    ["invalid confirmed height", { status: "confirmed", txHash: "ABC", height: 0 }],
+    ["extra confirmed field", { status: "confirmed", txHash: "ABC", height: 101, extra: true }],
+    ["missing pending hash", { status: "pending" }],
+    ["blank pending hash", { status: "pending", txHash: "  " }],
+    ["missing failed reason", { status: "failed", txHash: "ABC" }],
+    ["invalid failed hash", { status: "failed", txHash: 7, reason: "failed" }],
+    ["extra unknown field", { status: "unknown", reason: "not allowed" }],
+    ["unknown status", { status: "success", txHash: "ABC" }],
+    ["non-object", null],
+  ])("fails closed on malformed adapter response: %s", async (_, response) => {
+    const { dependencies, flow, review } = await prepared();
+    vi.mocked(dependencies.signAndBroadcast).mockResolvedValueOnce(response as never);
+    await expect(flow.submit(review)).resolves.toEqual({ status: "unknown" });
+    expect(dependencies.refreshCanonical).not.toHaveBeenCalled();
+  });
   it.each(["timeout", "disconnect", "post-broadcast"])("maps typed %s transport uncertainty to unknown and preserves hash", async (kind) => {
     const { dependencies, flow, review } = await prepared();
     vi.mocked(dependencies.signAndBroadcast).mockRejectedValueOnce(

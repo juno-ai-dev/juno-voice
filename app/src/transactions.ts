@@ -166,8 +166,30 @@ function validateIntent(intent: TransactionIntent, authorization: WalletAuthoriz
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
-  if (!intent.expectedStateFingerprint || !Array.isArray(intent.consequences) || intent.consequences.length === 0 || intent.consequences.some((item) => !item.trim()))
+  if (!intent.expectedStateFingerprint || !Array.isArray(intent.consequences) || intent.consequences.length === 0 ||
+    intent.consequences.some((item) => typeof item !== "string" || !item.trim()))
     throw new TransactionSafetyError("invalid_transaction", "Canonical state and explicit consequences are required.");
+}
+function nonBlank(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function validateBroadcastResponse(value: unknown): BroadcastResponse | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const status = (value as Record<string, unknown>).status;
+  if (status === "confirmed" && exactDataObject(value, ["status", "txHash", "height"]) &&
+    nonBlank(value.txHash) && Number.isSafeInteger(value.height) && (value.height as number) > 0)
+    return value as Extract<BroadcastResponse, { status: "confirmed" }>;
+  if (status === "pending" && exactDataObject(value, ["status", "txHash"]) && nonBlank(value.txHash))
+    return value as Extract<BroadcastResponse, { status: "pending" }>;
+  if (status === "failed" &&
+    (exactDataObject(value, ["status", "reason"]) || exactDataObject(value, ["status", "txHash", "reason"])) &&
+    nonBlank(value.reason) && (!("txHash" in value) || nonBlank(value.txHash)))
+    return value as Extract<BroadcastResponse, { status: "failed" }>;
+  if (status === "unknown" &&
+    (exactDataObject(value, ["status"]) || exactDataObject(value, ["status", "txHash"])) &&
+    (!("txHash" in value) || nonBlank(value.txHash)))
+    return value as Extract<BroadcastResponse, { status: "unknown" }>;
+  return null;
 }
 
 interface RegisteredReview { readonly flowBinding: string; readonly canonicalReview: string; consumed: boolean }
@@ -243,11 +265,13 @@ export function createTransactionFlow(dependencies: TransactionDependencies) {
         }
         return { status: "unknown" };
       }
-      if (outcome.status !== "confirmed") return outcome;
+      const validatedOutcome = validateBroadcastResponse(outcome);
+      if (!validatedOutcome) return { status: "unknown" };
+      if (validatedOutcome.status !== "confirmed") return validatedOutcome;
       let refreshStatus: "refreshed" | "failed" = "refreshed";
       try { await dependencies.refreshCanonical(); } catch { refreshStatus = "failed"; }
-      return { ...outcome, confirmationStatus: "confirmed", refreshStatus,
-        explorerUrl: `${dependencies.explorerBaseUrl.replace(/\/$/, "")}/tx/${encodeURIComponent(outcome.txHash)}` };
+      return { ...validatedOutcome, confirmationStatus: "confirmed", refreshStatus,
+        explorerUrl: `${dependencies.explorerBaseUrl.replace(/\/$/, "")}/tx/${encodeURIComponent(validatedOutcome.txHash)}` };
     },
   };
 }
