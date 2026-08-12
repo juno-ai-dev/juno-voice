@@ -149,7 +149,9 @@ function objectWithExactKeys(value: unknown, keys: readonly string[]): value is 
   return exactDataObject(value, keys);
 }
 const uint = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 && !Object.is(value, -0);
+const uint32 = (value: unknown) => uint(value) && (value as number) <= 4294967295;
 const digest = (value: unknown) => typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+const text = (value: unknown) => typeof value === "string" && value.trim().length > 0;
 const projectCandidate = (value: unknown) => value === null ||
   (objectWithExactKeys(value, ["project_id", "metadata_uri", "metadata_digest"]) &&
     typeof value.project_id === "string" && /^[a-z0-9-]{3,64}$/.test(value.project_id) &&
@@ -163,19 +165,36 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
     validAmount(body.expires_at, true) &&
     BigInt(body.expires_at as string) <= 18446744073709551615n && projectCandidate(body.project_candidate),
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
+  nominate_payout: (body) => objectWithExactKeys(body, ["bounty_id", "recipient", "evidence_uri", "evidence_digest", "rationale"]) &&
+    uint(body.bounty_id) && typeof body.recipient === "string" && validJunoAddress(body.recipient, [20]) &&
+    text(body.evidence_uri) && digest(body.evidence_digest) && text(body.rationale),
+  confirm_sole_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round"]) && uint(body.bounty_id) && uint32(body.round),
+  decline_sole_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round", "reason"]) &&
+    uint(body.bounty_id) && uint32(body.round) && text(body.reason),
+  vote_payout: (body) => (objectWithExactKeys(body, ["bounty_id", "round", "vote"]) ||
+    objectWithExactKeys(body, ["bounty_id", "round", "vote", "rationale"])) && uint(body.bounty_id) && uint32(body.round) &&
+    (body.vote === "yes" || body.vote === "no") && (!("rationale" in body) || body.rationale === null || text(body.rationale)),
+  finalize_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round"]) && uint(body.bounty_id) && uint32(body.round),
+  cancel_sole_funded: (body) => objectWithExactKeys(body, ["bounty_id", "reason"]) && uint(body.bounty_id) && text(body.reason),
+  expire: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
+  claim_refund: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
 });
+const PAYABLE_ACTIONS = new Set(["create_bounty", "contribute"]);
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
   safeCanonical(intent);
   if (intent.chainId !== "juno-1" || authorization.chainId !== intent.chainId)
     throw new TransactionSafetyError("wrong_chain", "Transaction and wallet must both target juno-1.");
   if (!validJunoAddress(authorization.address, [20]) || !validJunoAddress(intent.contract, [32]) ||
-    intent.contract !== DEFAULT_BOUNTY_CONTRACT || !Array.isArray(intent.funds) ||
-    intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]))
+    intent.contract !== DEFAULT_BOUNTY_CONTRACT || !Array.isArray(intent.funds))
     throw new TransactionSafetyError("invalid_transaction", "Invalid or unapproved contract or funds.");
   const keys = Object.keys(intent.executeMessage);
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
+  if (PAYABLE_ACTIONS.has(action)
+    ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0])
+    : intent.funds.length !== 0)
+    throw new TransactionSafetyError("invalid_transaction", "Attached funds do not match the approved action policy.");
   if (!intent.expectedStateFingerprint || !Array.isArray(intent.consequences) || intent.consequences.length === 0 ||
     intent.consequences.some((item) => typeof item !== "string" || !item.trim()))
     throw new TransactionSafetyError("invalid_transaction", "Canonical state and explicit consequences are required.");

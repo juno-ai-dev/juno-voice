@@ -34,6 +34,8 @@ describe("mainnet bounty client", () => {
     expect(queries.bounties(50)).toEqual({
       bounties: { start_after: 50, limit: 50 },
     });
+    expect(queries.rounds(7)).toEqual({ rounds: { bounty_id: 7, start_after: null, limit: 50 } });
+    expect(queries.receipts(7, 2)).toEqual({ receipts: { bounty_id: 7, round: 2, start_after: null, limit: 50 } });
   });
 
   it("validates uint strings, statuses, refund reasons, projects, and timestamp bounds", () => {
@@ -136,6 +138,7 @@ describe("mainnet bounty client", () => {
           current_amount: "1000000", weight_at_round: null })) });
       }
       if ("claims" in query) return Promise.resolve({ claims: [], next_start_after: null });
+      if ("rounds" in query) return Promise.resolve({ rounds: [] });
       if ("history" in query) {
         const cursor = (query.history as { start_after: number | null }).start_after;
         const start = cursor === null ? 1 : 51, count = cursor === null ? 50 : 1;
@@ -147,6 +150,7 @@ describe("mainnet bounty client", () => {
     const result = await createDataSource(config, vi.fn().mockResolvedValue(rpc)).loadBountyDetail?.(1);
     expect(result?.contributions).toHaveLength(51);
     expect(result?.history).toHaveLength(51);
+    expect(result?.rounds).toEqual([]);
     expect(result?.config).toEqual(ledger.config);
     expect(result?.pause).toEqual(ledger.pause);
     expect(rpc.queryContractSmart).toHaveBeenCalledWith(config.contract, queries.contributions(1, 50));

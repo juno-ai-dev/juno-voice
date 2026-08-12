@@ -14,7 +14,7 @@ vi.mock("@cosmjs/cosmwasm-stargate", () => ({
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
 const detail: BountyDetail = {
   bounty: { ...bounty, creator: sender }, config: ledger.config, pause: ledger.pause,
-  activeRound: null, moderation: null, graduation: null, contributions: [], claims: [], history: [],
+  activeRound: null, rounds: [], receipts: [], moderation: null, graduation: null, contributions: [], claims: [], history: [],
   observationHeight: ledger.observationHeight, chainTimeNanos: ledger.chainTimeNanos, fingerprint: "bounty:1:v1",
 };
 const intent = contributeIntent(detail.bounty, "1000000", sender, [], {
