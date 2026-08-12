@@ -18,6 +18,9 @@ export type StoredRegistrySubmission =
   | { kind: "uncertain"; evidence: RegistrySubmissionEvidence }
   | { kind: "malformed" };
 
+const unavailableSubmissions = new Set<string>();
+const unavailableLatest = new Set<string>();
+
 const key = ({ sender, chainId, contract }: RegistrySubmissionScope) =>
   `${STORAGE_PREFIX}:${encodeURIComponent(chainId)}:${encodeURIComponent(contract)}:${encodeURIComponent(sender)}`;
 const latestKey = ({ chainId, contract }: RegistryContractScope) =>
@@ -44,6 +47,7 @@ function parse(value: string, scope: RegistrySubmissionScope): RegistrySubmissio
 }
 
 export function loadRegistrySubmission(scope: RegistrySubmissionScope): StoredRegistrySubmission | null {
+  if (unavailableSubmissions.has(key(scope))) return { kind: "malformed" };
   try {
     const value = window.sessionStorage.getItem(key(scope));
     if (value === null) return null;
@@ -53,6 +57,7 @@ export function loadRegistrySubmission(scope: RegistrySubmissionScope): StoredRe
 }
 
 export function loadLatestRegistrySubmission(scope: RegistryContractScope): StoredRegistrySubmission | null {
+  if (unavailableLatest.has(latestKey(scope))) return { kind: "malformed" };
   try {
     const value = window.sessionStorage.getItem(latestKey(scope));
     if (value === null) return null;
@@ -64,11 +69,16 @@ export function loadLatestRegistrySubmission(scope: RegistryContractScope): Stor
 }
 
 export function saveRegistrySubmission(evidence: RegistrySubmissionEvidence): boolean {
+  const submissionKey = key(evidence), contractKey = latestKey(evidence);
   try {
     const encoded = JSON.stringify(evidence);
     if (!parse(encoded, evidence)) return false;
-    window.sessionStorage.setItem(key(evidence), encoded);
-    window.sessionStorage.setItem(latestKey(evidence), JSON.stringify({ version: 1, sender: evidence.sender, chainId: evidence.chainId, contract: evidence.contract }));
+    unavailableSubmissions.add(submissionKey);
+    unavailableLatest.add(contractKey);
+    window.sessionStorage.setItem(submissionKey, encoded);
+    window.sessionStorage.setItem(contractKey, JSON.stringify({ version: 1, sender: evidence.sender, chainId: evidence.chainId, contract: evidence.contract }));
+    unavailableSubmissions.delete(submissionKey);
+    unavailableLatest.delete(contractKey);
     return true;
   }
   catch { return false; }
@@ -82,6 +92,8 @@ export function clearRegistrySubmission(scope: RegistrySubmissionScope): void {
       const raw: unknown = JSON.parse(latest);
       if (plain(raw) && raw.sender === scope.sender) window.sessionStorage.removeItem(latestKey(scope));
     }
+    unavailableSubmissions.delete(key(scope));
+    unavailableLatest.delete(latestKey(scope));
   }
   catch { /* A storage failure must never unlock an uncertain action. */ }
 }

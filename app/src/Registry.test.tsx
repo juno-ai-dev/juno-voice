@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Registry } from "./Registry";
 import type { RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
-import { saveRegistrySubmission } from "./registrySubmissionState";
+import { clearRegistrySubmission, saveRegistrySubmission } from "./registrySubmissionState";
 import { config } from "./test/bountyFixtures";
 import type { TransactionReview } from "./transactions";
 
@@ -45,6 +45,7 @@ async function prepareAndSubmit(port: RegistryTransactionFlow) {
 
 describe("registry transaction UI evidence", () => {
   beforeEach(() => sessionStorage.clear());
+  afterEach(() => { vi.restoreAllMocks(); clearRegistrySubmission({ sender, chainId: config.chainId, contract: config.registryContract }); });
 
   it("restores a known-hash pending lock and explorer evidence after unmount and remount", async () => {
     const port = flow(); const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
@@ -77,6 +78,21 @@ describe("registry transaction UI evidence", () => {
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+  });
+
+  it("remains fail-closed after remount when uncertainty cannot be written to session storage", async () => {
+    const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+    const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    await prepareAndSubmit(port);
+    expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
+    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    view.unmount();
+    render(<Registry source={source()} config={config} transactionFlow={port} />);
+    expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+    expect(screen.getByRole("button", { name: "Prepare wallet review" })).toBeDisabled();
+    setItem.mockRestore();
   });
 
   it("keeps confirmed explorer evidence across a canonical-data rerender", async () => {
