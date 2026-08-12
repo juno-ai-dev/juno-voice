@@ -14,7 +14,7 @@ export interface TransactionIntent {
   readonly expectedStateFingerprint: string;
 }
 export interface TransactionReview {
-  readonly reviewId: string; readonly sender: string; readonly chainId: string; readonly contract: string;
+  readonly reviewId: string; readonly flowBinding: string; readonly sender: string; readonly chainId: string; readonly contract: string;
   readonly executeMessage: Readonly<Record<string, unknown>>; readonly funds: readonly Coin[];
   readonly fee: FeeEstimate; readonly consequences: readonly string[]; readonly canonicalState: CanonicalState;
   readonly walletRevision: number;
@@ -39,6 +39,8 @@ export interface TransactionDependencies {
   readonly signAndBroadcast: (request: ExactExecuteRequest) => Promise<BroadcastResponse>;
   readonly refreshCanonical: () => Promise<void>;
   readonly explorerBaseUrl: string;
+  /** Shared for the application lifetime; inject a fresh instance to isolate tests. */
+  readonly reviewRegistry?: TransactionReviewRegistry;
 }
 export type TransactionErrorCode = "wrong_chain" | "stale_state" | "stale_identity" | "message_forbidden" |
   "invalid_review" | "duplicate_broadcast" | "invalid_transaction";
@@ -56,7 +58,12 @@ export class BroadcastDependencyError extends Error {
 function invalidJson(): never {
   throw new TransactionSafetyError("invalid_transaction", "Transaction contains a non-canonical JSON value.");
 }
-function canonical(value: unknown): string {
+function validDataDescriptor(descriptor: PropertyDescriptor | undefined, enumerable: boolean): descriptor is PropertyDescriptor & { value: unknown } {
+  return Boolean(descriptor && "value" in descriptor && descriptor.enumerable === enumerable &&
+    ((descriptor.configurable === true && descriptor.writable === true) ||
+      (descriptor.configurable === false && descriptor.writable === false)));
+}
+function canonical(value: unknown, ancestors = new WeakSet<object>()): string {
   if (value === null) return "null";
   switch (typeof value) {
     case "boolean": case "string": return JSON.stringify(value);
@@ -64,20 +71,39 @@ function canonical(value: unknown): string {
     case "object": break;
     default: return invalidJson();
   }
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index++) if (!Object.hasOwn(value, index)) return invalidJson();
-    return `[${value.map(canonical).join(",")}]`;
+  if (ancestors.has(value)) return invalidJson();
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const ownKeys = Reflect.ownKeys(value);
+      if (ownKeys.length !== value.length + 1 || ownKeys[value.length] !== "length") return invalidJson();
+      const encoded: string[] = [];
+      for (let index = 0; index < value.length; index++) {
+        if (ownKeys[index] !== String(index)) return invalidJson();
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!validDataDescriptor(descriptor, true)) return invalidJson();
+        encoded.push(canonical(descriptor.value, ancestors));
+      }
+      const length = Object.getOwnPropertyDescriptor(value, "length");
+      if (!length || length.enumerable || length.configurable || length.value !== value.length ||
+        (length.writable !== true && !(length.writable === false && Object.isFrozen(value)))) return invalidJson();
+      return `[${encoded.join(",")}]`;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return invalidJson();
+    const object = value as Record<string, unknown>;
+    const keys = Object.keys(object);
+    if (Reflect.ownKeys(object).length !== keys.length) return invalidJson();
+    for (const key of keys) if (!validDataDescriptor(Object.getOwnPropertyDescriptor(object, key), true)) return invalidJson();
+    return `{${keys.sort().map((key) => `${JSON.stringify(key)}:${canonical(Object.getOwnPropertyDescriptor(object, key)?.value, ancestors)}`).join(",")}}`;
+  } finally { ancestors.delete(value); }
+}
+function safeCanonical(value: unknown): string {
+  try { return canonical(value); }
+  catch (error) {
+    if (error instanceof TransactionSafetyError) throw error;
+    throw new TransactionSafetyError("invalid_transaction", "Transaction could not be canonicalized.");
   }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return invalidJson();
-  const object = value as Record<string, unknown>;
-  const keys = Object.keys(object);
-  if (Reflect.ownKeys(object).length !== keys.length) return invalidJson();
-  for (const key of keys) {
-    const descriptor = Object.getOwnPropertyDescriptor(object, key);
-    if (!descriptor?.enumerable || !("value" in descriptor)) return invalidJson();
-  }
-  return `{${keys.sort().map((key) => `${JSON.stringify(key)}:${canonical(object[key])}`).join(",")}}`;
 }
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -85,12 +111,25 @@ function deepFreeze<T>(value: T): T {
   }
   return value;
 }
-function copyFreeze<T>(value: T): T { canonical(value); return deepFreeze(structuredClone(value)); }
-function validCoin(coin: Coin): boolean {
-  return Boolean(coin && /^[a-zA-Z][a-zA-Z0-9/:._-]{1,127}$/.test(coin.denom) && /^(0|[1-9]\d*)$/.test(coin.amount));
+function copyFreeze<T>(value: T): T {
+  safeCanonical(value);
+  try { return deepFreeze(structuredClone(value)); }
+  catch { throw new TransactionSafetyError("invalid_transaction", "Transaction could not be cloned safely."); }
+}
+const UINT128_MAX = 340282366920938463463374607431768211455n;
+// Cosmos gas is an integer; Number.MAX_SAFE_INTEGER is the largest lossless JS domain.
+const MAX_GAS = BigInt(Number.MAX_SAFE_INTEGER);
+function validAmount(amount: unknown, positive: boolean): amount is string {
+  if (typeof amount !== "string" || !/^(0|[1-9]\d*)$/.test(amount)) return false;
+  const parsed = BigInt(amount); return parsed <= UINT128_MAX && (!positive || parsed > 0n);
+}
+function exactJunoCoin(coin: Coin | undefined): boolean {
+  return Boolean(coin && coin.denom === "ujuno" && validAmount(coin.amount, true));
 }
 function validateFee(fee: FeeEstimate): void {
-  if (!fee || !/^[1-9]\d*$/.test(fee.gas) || !Array.isArray(fee.amount) || fee.amount.some((coin) => !validCoin(coin)))
+  safeCanonical(fee);
+  if (!fee || !validAmount(fee.gas, true) || BigInt(fee.gas) > MAX_GAS || !Array.isArray(fee.amount) ||
+    fee.amount.length !== 1 || !exactJunoCoin(fee.amount[0]))
     throw new TransactionSafetyError("invalid_transaction", "Fee estimator returned an invalid fee.");
 }
 function validJunoAddress(address: string, lengths: readonly number[]): boolean {
@@ -112,10 +151,12 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
 });
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
-  canonical(intent);
+  safeCanonical(intent);
   if (intent.chainId !== "juno-1" || authorization.chainId !== intent.chainId)
     throw new TransactionSafetyError("wrong_chain", "Transaction and wallet must both target juno-1.");
-  if (!validJunoAddress(intent.contract, [32]) || intent.contract !== DEFAULT_BOUNTY_CONTRACT || !Array.isArray(intent.funds) || intent.funds.some((coin) => !validCoin(coin)))
+  if (!validJunoAddress(authorization.address, [20]) || !validJunoAddress(intent.contract, [32]) ||
+    intent.contract !== DEFAULT_BOUNTY_CONTRACT || !Array.isArray(intent.funds) ||
+    intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]))
     throw new TransactionSafetyError("invalid_transaction", "Invalid or unapproved contract or funds.");
   const keys = Object.keys(intent.executeMessage);
   const action = keys.length === 1 ? keys[0] : "";
@@ -125,10 +166,26 @@ function validateIntent(intent: TransactionIntent, authorization: WalletAuthoriz
     throw new TransactionSafetyError("invalid_transaction", "Canonical state and explicit consequences are required.");
 }
 
+interface RegisteredReview { readonly flowBinding: string; readonly canonicalReview: string; consumed: boolean }
+export class TransactionReviewRegistry {
+  private readonly reviews = new Map<string, RegisteredReview>();
+  register(reviewId: string, flowBinding: string, canonicalReview: string): void {
+    if (this.reviews.has(reviewId)) throw new TransactionSafetyError("invalid_review", "Review identifier collision.");
+    this.reviews.set(reviewId, { flowBinding, canonicalReview, consumed: false });
+  }
+  consume(reviewId: string, flowBinding: string, canonicalReview: string): void {
+    const entry = this.reviews.get(reviewId);
+    if (!entry || entry.flowBinding !== flowBinding || entry.canonicalReview !== canonicalReview)
+      throw new TransactionSafetyError("invalid_review", "Review is unknown or no longer exact.");
+    if (entry.consumed) throw new TransactionSafetyError("duplicate_broadcast", "This reviewed transaction was already submitted.");
+    entry.consumed = true;
+  }
+}
+const applicationReviewRegistry = new TransactionReviewRegistry();
+
 export function createTransactionFlow(dependencies: TransactionDependencies) {
-  let nextId = 1;
-  const prepared = new Map<string, string>();
-  const consumed = new Set<string>();
+  const flowBinding = crypto.randomUUID();
+  const registry = dependencies.reviewRegistry ?? applicationReviewRegistry;
   const assertExact = (review: TransactionReview, authorization: WalletAuthorization): void => {
     try {
       dependencies.wallet.assertRevision({ ...authorization, address: review.sender, chainId: review.chainId,
@@ -145,6 +202,7 @@ export function createTransactionFlow(dependencies: TransactionDependencies) {
     async prepare(intent: TransactionIntent): Promise<TransactionReview> {
       const authorization = await dependencies.wallet.current(); validateIntent(intent, authorization);
       const canonicalState = await dependencies.readCanonicalState();
+      safeCanonical(canonicalState);
       if (canonicalState.fingerprint !== intent.expectedStateFingerprint)
         throw new TransactionSafetyError("stale_state", "Canonical state changed; reload and review again.");
       if (!Number.isSafeInteger(canonicalState.height) || canonicalState.height <= 0)
@@ -152,15 +210,15 @@ export function createTransactionFlow(dependencies: TransactionDependencies) {
       const unsigned = copyFreeze({ sender: authorization.address, chainId: intent.chainId, contract: intent.contract,
         executeMessage: intent.executeMessage, funds: intent.funds });
       const fee = await dependencies.estimateFee(unsigned); validateFee(fee);
-      const review = copyFreeze({ reviewId: `review-${nextId++}`, ...unsigned, fee, consequences: intent.consequences,
+      const review = copyFreeze({ reviewId: crypto.randomUUID(), flowBinding, ...unsigned, fee, consequences: intent.consequences,
         canonicalState, walletRevision: authorization.revision });
-      prepared.set(review.reviewId, canonical(review)); return review;
+      registry.register(review.reviewId, flowBinding, safeCanonical(review)); return review;
     },
     async submit(review: TransactionReview): Promise<TransactionOutcome> {
-      const expected = prepared.get(review.reviewId);
-      if (!expected || expected !== canonical(review)) throw new TransactionSafetyError("invalid_review", "Review is unknown or no longer exact.");
-      if (consumed.has(review.reviewId)) throw new TransactionSafetyError("duplicate_broadcast", "This reviewed transaction was already submitted.");
-      consumed.add(review.reviewId);
+      let encoded: string;
+      try { encoded = safeCanonical(review); }
+      catch { throw new TransactionSafetyError("invalid_review", "Review is not canonical."); }
+      registry.consume(review.reviewId, flowBinding, encoded);
       await readExact(review);
       const currentState = await dependencies.readCanonicalState();
       if (currentState.fingerprint !== review.canonicalState.fingerprint)
