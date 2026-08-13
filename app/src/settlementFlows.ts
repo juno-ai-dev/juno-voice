@@ -1,5 +1,4 @@
 import { fromBech32 } from "@cosmjs/encoding";
-import { DEFAULT_BOUNTY_CONTRACT } from "./config";
 import type { BountyDetail, PayoutRound, PayoutVote } from "./types";
 import type { TransactionIntent } from "./transactions";
 import { formatJuno } from "./junoAmount";
@@ -33,8 +32,8 @@ function junoAddress(value: string, label: string): string {
   } catch { throw new Error(`${label} must be a valid Juno account address.`); }
   return normalized;
 }
-function base(state: SettlementState, executeMessage: Record<string, unknown>, consequences: string[]): TransactionIntent {
-  return { chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT, executeMessage, funds: [], consequences,
+function base(state: SettlementState, bountyContract: string, executeMessage: Record<string, unknown>, consequences: string[]): TransactionIntent {
+  return { chainId: "juno-1", contract: bountyContract, executeMessage, funds: [], consequences,
     expectedStateFingerprint: state.fingerprint };
 }
 function active(state: SettlementState, round: number): PayoutRound {
@@ -56,7 +55,7 @@ function beforeClose(state: SettlementState, round: PayoutRound, includeExpiry: 
 
 export function nominatePayoutIntent(state: SettlementState, sender: string, input: {
   recipient: string; evidenceUri: string; evidenceDigest: string; rationale: string;
-}): TransactionIntent {
+}, bountyContract: string): TransactionIntent {
   const b = state.bounty;
   if (state.pause.paused) throw new Error("New payout nominations are paused on chain.");
   if (sender !== b.creator) throw new Error("Only the bounty creator may use this public nomination control.");
@@ -70,7 +69,7 @@ export function nominatePayoutIntent(state: SettlementState, sender: string, inp
   const evidenceDigest = digest(input.evidenceDigest);
   const rationale = required(input.rationale, b.terms.max_rationale_bytes, "Nomination rationale");
   const rule = b.contributor_count === 1 ? "sole-contributor confirmation" : "revisable contribution-weighted voting";
-  return base(state, { nominate_payout: { bounty_id: b.id, recipient, evidence_uri: evidenceUri,
+  return base(state, bountyContract, { nominate_payout: { bounty_id: b.id, recipient, evidence_uri: evidenceUri,
     evidence_digest: evidenceDigest, rationale } }, [
     `Nominate ${recipient} to receive the entire ${formatJuno(b.total_contribution)} escrow for bounty #${b.id}.`,
     `This opens round ${b.next_round} under ${rule}; contribution weights are snapshotted when the contract accepts the nomination.`,
@@ -78,32 +77,33 @@ export function nominatePayoutIntent(state: SettlementState, sender: string, inp
   ]);
 }
 
-export function confirmSolePayoutIntent(state: SettlementState, sender: string, roundNumber: number): TransactionIntent {
+export function confirmSolePayoutIntent(state: SettlementState, sender: string, roundNumber: number, bountyContract: string): TransactionIntent {
   const round = active(state, roundNumber);
   if (state.bounty.status !== "single_confirmation" || state.bounty.contributor_count !== 1 || round.rule !== "sole_confirmation")
     throw new Error("This bounty is not awaiting a sole-contributor decision.");
   contributor(state, sender); beforeClose(state, round, true);
-  return base(state, { confirm_sole_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
+  return base(state, bountyContract, { confirm_sole_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
     `Irreversibly approve payment of ${formatJuno(round.total_weight)} to ${round.nomination.recipient}.`,
     `This must land before both close ${round.closes_at} ns and bounty expiry ${state.bounty.expires_at} ns.`,
     "No funds are attached; the contract sends the escrow to the nominated recipient.",
   ]);
 }
 
-export function declineSolePayoutIntent(state: SettlementState, sender: string, roundNumber: number, reason: string): TransactionIntent {
+export function declineSolePayoutIntent(state: SettlementState, sender: string, roundNumber: number, reason: string, bountyContract: string): TransactionIntent {
   const round = active(state, roundNumber);
   if (state.bounty.status !== "single_confirmation" || state.bounty.contributor_count !== 1 || round.rule !== "sole_confirmation")
     throw new Error("This bounty is not awaiting a sole-contributor decision.");
   contributor(state, sender); beforeClose(state, round, true);
   const value = required(reason, state.bounty.terms.max_reason_bytes, "Decline reason");
-  return base(state, { decline_sole_payout: { bounty_id: state.bounty.id, round: roundNumber, reason: value } }, [
+  return base(state, bountyContract, { decline_sole_payout: { bounty_id: state.bounty.id, round: roundNumber, reason: value } }, [
     `Decline payout round ${roundNumber}; the nominated recipient will not be paid by this round.`,
     "The contract reopens another round when time and the round limit permit, otherwise contributor refunds become available.",
     "No funds are attached.",
   ]);
 }
 
-export function votePayoutIntent(state: SettlementState, sender: string, roundNumber: number, vote: PayoutVote, rationale: string): TransactionIntent {
+export function votePayoutIntent(state: SettlementState, sender: string, roundNumber: number, vote: PayoutVote, rationale: string,
+  bountyContract: string): TransactionIntent {
   const round = active(state, roundNumber);
   if (state.bounty.status !== "ratifying" || round.rule !== "contribution_weighted_majority")
     throw new Error("This bounty is not in contribution-weighted voting.");
@@ -112,7 +112,7 @@ export function votePayoutIntent(state: SettlementState, sender: string, roundNu
   if (normalized && utf8(normalized) > state.bounty.terms.max_rationale_bytes)
     throw new Error(`Vote rationale exceeds the snapshotted ${state.bounty.terms.max_rationale_bytes}-byte limit.`);
   const previous = state.receipts.find((item) => item.round === roundNumber && item.voter === sender);
-  return base(state, { vote_payout: { bounty_id: state.bounty.id, round: roundNumber, vote,
+  return base(state, bountyContract, { vote_payout: { bounty_id: state.bounty.id, round: roundNumber, vote,
     rationale: normalized || null } }, [
     `${previous ? "Revise" : "Cast"} a ${vote.toUpperCase()} ballot with immutable round-${roundNumber} weight ${formatJuno(snapshot.weight_at_round!)}.`,
     `Ballots remain revisable until the exact canonical close ${round.closes_at} ns; this submission replaces any prior choice from this account.`,
@@ -120,7 +120,7 @@ export function votePayoutIntent(state: SettlementState, sender: string, roundNu
   ]);
 }
 
-export function finalizePayoutIntent(state: SettlementState, roundNumber: number): TransactionIntent {
+export function finalizePayoutIntent(state: SettlementState, roundNumber: number, bountyContract: string): TransactionIntent {
   const round = active(state, roundNumber), now = chainNow(state);
   if (state.bounty.status !== "ratifying" && state.bounty.status !== "single_confirmation")
     throw new Error("This bounty has no finalizable payout round.");
@@ -130,7 +130,7 @@ export function finalizePayoutIntent(state: SettlementState, roundNumber: number
   const yes = BigInt(round.yes_weight), no = BigInt(round.no_weight);
   const outcome = round.rule === "sole_confirmation" || participating === 0n ? "no-votes"
     : yes === no ? "tie" : yes > no ? "paid" : "no-majority";
-  return base(state, { finalize_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
+  return base(state, bountyContract, { finalize_payout: { bounty_id: state.bounty.id, round: roundNumber } }, [
     `Publicly finalize closed round ${roundNumber}; current canonical weights predict ${outcome}.`,
     outcome === "paid" ? `The contract will send ${formatJuno(round.total_weight)} to ${round.nomination.recipient}.`
       : "No payout occurs; the contract reopens nomination or enters refunds according to expiry and the round limit.",
@@ -138,35 +138,35 @@ export function finalizePayoutIntent(state: SettlementState, roundNumber: number
   ]);
 }
 
-export function cancelSoleFundedIntent(state: SettlementState, sender: string, reason: string): TransactionIntent {
+export function cancelSoleFundedIntent(state: SettlementState, sender: string, reason: string, bountyContract: string): TransactionIntent {
   const b = state.bounty;
   if (sender !== b.creator) throw new Error("Only the bounty creator may cancel a sole-funded bounty.");
   if (b.status !== "open" || b.contributor_count !== 1 || b.active_round !== null)
     throw new Error("Public cancellation is allowed only while a sole-funded bounty is open.");
   const value = required(reason, b.terms.max_reason_bytes, "Cancellation reason");
-  return base(state, { cancel_sole_funded: { bounty_id: b.id, reason: value } }, [
+  return base(state, bountyContract, { cancel_sole_funded: { bounty_id: b.id, reason: value } }, [
     `Cancel bounty #${b.id} and move its entire ${formatJuno(b.total_contribution)} escrow into contributor refunds.`,
     "No funds are attached. The contributor must separately claim the refund exactly once.",
   ]);
 }
 
-export function expireBountyIntent(state: SettlementState): TransactionIntent {
+export function expireBountyIntent(state: SettlementState, bountyContract: string): TransactionIntent {
   const b = state.bounty;
   if (b.status !== "open") throw new Error("Only an open bounty can be publicly expired.");
   if (chainNow(state) < BigInt(b.expires_at)) throw new Error("This bounty has not expired according to canonical chain time.");
-  return base(state, { expire: { bounty_id: b.id } }, [
+  return base(state, bountyContract, { expire: { bounty_id: b.id } }, [
     `Publicly mark bounty #${b.id} expired and move ${formatJuno(b.total_contribution)} into contributor refunds.`,
     "No funds are attached. Each contributor must separately claim exactly once.",
   ]);
 }
 
-export function claimRefundIntent(state: SettlementState, sender: string): TransactionIntent {
+export function claimRefundIntent(state: SettlementState, sender: string, bountyContract: string): TransactionIntent {
   const b = state.bounty, contribution = state.contributions.find((item) => item.contributor === sender);
   if (b.status !== "refunding") throw new Error("This bounty is not currently refundable.");
   if (!contribution || BigInt(contribution.current_amount) === 0n) throw new Error("Only a contributor may claim this refund.");
   if (state.claims.some((item) => item.contributor === sender))
     throw new Error("This contributor refund was already claimed; do not submit again.");
-  return base(state, { claim_refund: { bounty_id: b.id } }, [
+  return base(state, bountyContract, { claim_refund: { bounty_id: b.id } }, [
     `Claim exactly ${formatJuno(contribution.current_amount)} back to the connected contributor account.`,
     "This refund can be claimed exactly once. No funds are attached to the request.",
   ]);

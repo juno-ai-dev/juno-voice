@@ -17,7 +17,7 @@ the protocol rule that unused ballot weight remains in the Program Vault.
 The deployed Program Vault held **0 `ujuno`** and there was no open epoch at the
 point-in-time observation. No loss has occurred through this issue according
 to the observed state. Funding should remain blocked until the gauge is fixed
-and migrated.
+and a separately reviewed v2 composition is freshly deployed.
 
 ## Scope and source identity
 
@@ -367,7 +367,7 @@ JV-02. The deterministic optimizer build was not rerun.
 
 The contracts are **not ready for funded gauge use**. Keep the Program Vault at
 zero and do not open an epoch until JV-01 and JV-02 are corrected, reviewed,
-tested, rebuilt reproducibly, and migrated on chain. Public bounty use should
+tested, rebuilt reproducibly, and deployed as a fresh v2 composition. Public bounty use should
 also wait for a documented decision on JV-03 and JV-04 because both can create
 permanent recovery failures. JV-05 should be fixed in the same registry
 state-machine update.

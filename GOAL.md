@@ -34,10 +34,10 @@ Ship a reviewed Juno Voice contract revision in which:
 5. bounty graduation replay protection is namespaced by the source contract;
 6. every project-status transition preserves its registration-bond invariant;
    and
-7. the deployed empty system is migrated, verified, and independently reviewed
-   before any public use or funding.
+7. a fresh v2 system is deployed, verified, and independently reviewed before
+   any public use or funding; no v1 state is imported.
 
-Completion requires contract code, upstream gauge changes, migrations, schemas,
+Completion requires contract code, upstream gauge changes, fresh-deployment tooling, schemas,
 clients, deployment tooling, deterministic artifacts, tests, live verification,
 and security evidence. A source-only fix is not completion.
 
@@ -217,7 +217,7 @@ stale ballot executable.
 
 Add a bounded execution deadline. After it, anyone may terminally expire an
 otherwise unexecuted epoch with no distribution. Provide a governor-only,
-reasoned abort path for unrecoverable adapter or migration failures. Guardian
+reasoned abort path for unrecoverable adapter or deployment-configuration failures. Guardian
 stop authority remains stop-only and cannot abort, resume, or allocate funds.
 
 All terminal paths advance scheduling exactly once and are idempotently
@@ -350,32 +350,32 @@ settled bond => project is not an active gauge option
 Also cover failed bank-send rollback, repeated terminal actions, reactivation
 before and after claim, and exact active/pending/option counts.
 
-## Workstream E: migration and compatibility
+## Workstream E: fresh deployment and compatibility
 
-### E1. Guarded empty-state migration
+### E1. Guarded fresh deployment
 
 The audited live state contained no bounties, projects, bond liabilities, open
-epoch, or Program Vault funds. Prefer a small, guarded empty-state migration
-over a complex speculative data transformer.
+epoch, or Program Vault funds. Deploy new v2 instances instead of migrating or
+transforming v1 state.
 
-Immediately before migration, independently query and record those conditions.
-Each migration must fail before mutation if its required empty-state predicate
-is false. If any user state or funds appear, stop this plan and design a
-separately reviewed populated-state migration.
+Immediately before cutover, independently query and record those conditions. If
+any user state or funds appear, stop this plan and design a separately reviewed
+recovery and disposition plan. Do not copy that state into v2.
 
-The intended empty-state migration must:
+The fresh deployment must:
 
-- preserve contract addresses and authority relationships;
-- initialize the numeric project counter and new provenance indexes;
-- preserve the immutable retained option under the new option encoding;
-- update bounty candidate/graduation state only after proving there are no
-  existing bounties or pending graduation replies;
-- reject migration with an open gauge epoch;
-- preserve gauge history and configuration not superseded by this goal; and
-- validate exact prior CW2 names and versions.
+- create new contract addresses from reviewed v2 salts and exact checksums;
+- wire and verify every authority relationship explicitly;
+- initialize the numeric project counter and new provenance indexes through
+  normal v2 instantiation;
+- configure the immutable retained option under the new option encoding;
+- prove the new bounty, registry, and epoch state is empty before funding; and
+- record the old and new compositions so clients and operators cannot confuse
+  their addresses or code identities.
 
-Migration is performed through the documented Juno `x/gov` administration
-path. No script may infer an address, code ID, checksum, or prior version.
+Deployment and cutover are performed through the documented Juno `x/gov`
+administration path. No script may infer an address, code ID, checksum, or
+authority.
 
 ### E2. Public interface and clients
 
@@ -408,20 +408,20 @@ Required green checks include:
 - formatting, clippy, schema regeneration, and schema-diff checks;
 - new model/property tests for allocation and registry transitions;
 - root deployment and cross-contract integration suites;
-- migration tests starting from exact deployed v1 code and representative
-  state snapshots;
+- clean-instantiation and cutover tests proving new-state emptiness and explicit
+  old/new address separation;
 - deterministic optimized Wasm builds from a clean recursive clone;
 - `cosmwasm-check`, export allowlists, artifact-size limits, and checksum
   verification; and
 - maximum-bound target-chain gas tests for ballots, options, selected projects,
-  migration, execution, and queries.
+  fresh instantiation, execution, and queries.
 
 Tests must include a red/green regression for every audit finding and every
 new invariant in this goal.
 
 ### F2. Chain evidence
 
-Before mainnet migration:
+Before mainnet deployment:
 
 - deploy exact candidate artifacts to a Juno-compatible testnet;
 - run funded, partial, retained-only, underfunded, expired, and aborted epochs;
@@ -431,7 +431,7 @@ Before mainnet migration:
 - record transactions, balances, events, code identities, admins, and gas; and
 - reconcile emitted plus retained value for every epoch.
 
-Immediately after mainnet migration, query back code IDs, checksums, CW2
+Immediately after mainnet deployment, query back code IDs, checksums, CW2
 versions, admins, authorities, configs, counters, retained option, balances,
 liabilities, project/bounty emptiness, and absence of an open epoch. Publish the
 signed release manifest before funding.
@@ -441,8 +441,8 @@ signed release manifest before funding.
 The remediation is not approved by its implementers alone. Before authorizing
 the canary:
 
-- independently re-review the changed gauge, registry, bounty reply, and
-  migration paths;
+- independently re-review the changed gauge, registry, bounty reply, and fresh
+  deployment/cutover paths;
 - close JV-01 through JV-05 with direct code and test evidence;
 - disposition the retained-option/top-N and epoch-expiry design explicitly;
 - resolve all new critical/high findings and document lower-severity decisions.
@@ -471,10 +471,10 @@ epoch and reconcile it before any production tranche or recurring epoch.
 4. Implement the bounty graduation reply handshake.
 5. Regenerate schemas and update clients, documentation, deployment tooling,
    monitoring, and integration tests.
-6. Implement guarded migrations and rehearse them from exact deployed code.
+6. Rehearse a fresh v2 deployment and explicit client/operator cutover.
 7. Produce deterministic artifacts and complete testnet/gas evidence.
-8. Complete independent remediation review, mainnet migration, post-migration
-   verification, and a low-value canary.
+8. Complete independent remediation review, fresh mainnet deployment,
+   post-deployment verification, and a low-value canary.
 
 Parallel work is acceptable only after step 1 freezes the shared interfaces.
 The Program Vault remains unfunded throughout implementation and review, until
@@ -495,8 +495,8 @@ the separately authorized canary.
 - [ ] Graduation replay keys and provenance include the source contract.
 - [ ] Every project/status/bond combination is accepted or rejected by one
       tested transition table.
-- [ ] Empty-state migration predicates are reverified immediately before use.
-- [ ] Exact deployed-code migrations pass rehearsal and mainnet verification.
+- [ ] Old-state emptiness predicates are reverified immediately before cutover.
+- [ ] Fresh v2 deployment and cutover pass rehearsal and mainnet verification.
 - [ ] Both repositories are clean and pinned to reviewed commits.
 - [ ] Schemas, clients, docs, runbooks, monitoring, and release manifests match
       the new protocol.

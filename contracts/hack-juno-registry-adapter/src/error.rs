@@ -47,6 +47,4 @@ pub enum ContractError {
     WrongDenom,
     #[error("epoch budget exceeds configured ceiling")]
     EpochCeilingExceeded,
-    #[error("supplied available balance is below the epoch budget")]
-    InsufficientAvailableBalance,
 }

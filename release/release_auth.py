@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-NAMESPACE = "juno-voice-release-v1"
+NAMESPACE = "juno-voice-release-v2"
 METHOD = "sshsig"
 
 

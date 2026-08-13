@@ -1,43 +1,50 @@
 ---
 name: juno-voice-mainnet-trial-release
-summary: Safely release, exercise, support, stop, and evidence the public Juno Voice mainnet application.
+summary: Safely exercise, support, stop, and evidence an independently approved Juno Voice v2 mainnet release.
 ---
 
 # Juno Voice mainnet user-trial and release runbook
 
-Use this runbook for a bounded public trial on Juno mainnet and for first-line
-support. It is an operational checklist, not transaction authorization. Reading,
-connecting a wallet, and preparing a review do not sign. **Every click on
-“Recheck state, then sign” is a separate signing/broadcast gate and requires the
-approval recorded beside that step.** Never retry a pending or unknown action.
+**NOT ACTIVE:** Juno Voice v2 is not deployed or authorized for a public trial.
+The historical v1 identities are quarantined and must not be substituted into
+this runbook. Activate this checklist only after fresh v2 deployment,
+independent review, signed release-manifest publication, frontend cutover, and
+separate trial authorization.
+
+Once activated, use this runbook for a bounded public trial on Juno mainnet and
+for first-line support. It is an operational checklist, not transaction
+authorization. Reading, connecting a wallet, and preparing a review do not
+sign. **Every click on “Recheck state, then sign” is a separate
+signing/broadcast gate and requires the approval recorded beside that step.**
+Never retry a pending or unknown action.
 
 ## 1. Fixed release identity and dynamic release record
 
-These identities are source-bound deployment facts. Stop if the application,
-wallet review, explorer, or an independent chain query differs.
+Copy these values from the independently approved v2 release manifest. Do not
+use repository history, a browser bundle, or the historical v1 deployment as
+the source of truth. Stop if the application, wallet review, manifest, explorer,
+or an independent chain query differs.
 
 | Item | Required value |
 |---|---|
 | Chain / native denomination | `juno-1` / `ujuno` |
-| Production URL | <https://juno-ai-dev.github.io/juno-voice/> |
-| Bounty, Code ID, SHA-256 | `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, `5150`, `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1` |
-| Registry, Code ID, SHA-256 | `juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n`, `5151`, `1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf` |
-| Program Vault, Code ID, SHA-256 | `juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg`, `5152`, `bc8b049a03496d3383376a469ccb581996238003532083895f68d4a02990a2da` |
-| Voting module, Code ID, SHA-256 | `juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2`, `5153`, `2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64` |
-| Gauge, Code ID, SHA-256 | `juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn`, `5154`, `524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f` |
-| Deployment source commit | `e606d6071ff4febb2dbe4ca65165223bdfa23e54` |
-| `dao-contracts` source commit | `8f26e510dc89e56576e2dbbd35c96edb45d4b778` |
+| Production URL | `[REQUIRED FROM APPROVED CUTOVER RECORD]` |
+| Bounty, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Registry, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Program Vault, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Voting module, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Gauge, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Deployment source commit | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| `dao-contracts` source commit | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Release-manifest hash/signature | `[REQUIRED AND INDEPENDENTLY VERIFIED]` |
 
-The exact web commit is dynamic: read the 40-character **Release commit** shown
-by the application and compare it with the intended merged `main` commit. On
-2026-08-12, a read-only fetch of the production asset showed
-`b462350313879e0a998500930d02a0574ae5995b`; this is an observation, not a
-promise that the same commit is currently served. A release operator must fill
-and retain this record for each release:
+Read the 40-character **Release commit** shown by the application and compare it
+with the approved cutover commit and signed manifest. A release operator must
+fill and retain this record for each release:
 
 ```text
 release observed at (UTC):  [REQUIRED AT RELEASE]
-production URL:             https://juno-ai-dev.github.io/juno-voice/
+production URL:             [REQUIRED FROM APPROVED CUTOVER RECORD]
 HTTP status / final URL:    [REQUIRED AT RELEASE]
 expected merged main SHA:   [REQUIRED AT RELEASE]
 commit displayed by app:    [REQUIRED AT RELEASE]
@@ -49,19 +56,16 @@ trial approval record:      [REQUIRED BEFORE ANY SIGNATURE]
 incident/support contact:   [REQUIRED BEFORE PUBLIC TRIAL]
 ```
 
-### Funding status and issue #37 boundary
+### Funding boundary
 
-The Program Vault is **unfunded** unless a fresh authoritative `juno-1` bank
-balance query proves otherwise. Bind any release observation to its endpoint,
-UTC time, chain height, raw response, and evidence hash. A query does **not**
-complete funding or an epoch rehearsal.
+The fresh v2 Program Vault is **unfunded** until a separately authorized canary
+transfer is both executed and proved by a fresh authoritative `juno-1` bank
+query. Bind every observation to endpoint, UTC time, chain height, raw response,
+and evidence hash. A query does not authorize funding or an epoch.
 
-The prepared #37 target is 1,000 JUNO, but it is not approved or transferred by
-this runbook. Agent funds must not be used. Governance proposal preparation,
-proposal submission, deposit sourcing/deposit, signing, broadcast, and every
-follow-up transaction are separate approval gates. This runbook authorizes none
-of them. Do not open or execute an epoch while the Vault is unfunded, and do not
-claim #37 complete until its independent evidence and approvals exist.
+Agent funds must not be used. Governance proposal preparation, proposal
+submission, deposit sourcing/deposit, signing, broadcast, and every follow-up
+transaction are separate approval gates. This runbook authorizes none of them.
 
 ## 2. Prerequisites and release gates
 
@@ -72,10 +76,11 @@ each item:
       exact commit, and the app displays the same 40-character SHA.
 - [ ] Hard-refreshing the exact production URL returns the app with no redirect
       to an unexpected host and no console error.
-- [ ] App provenance reports `juno-1`, the fixed contracts/code IDs above, a
+- [ ] App provenance reports `juno-1`, the manifest-bound v2 contracts/code IDs, a
       recent height, and a non-stale direct-RPC observation.
-- [ ] Independent contract-info/code queries match every address, Code ID, and
-      checksum above. Preserve raw responses and endpoint names.
+- [ ] Independent contract-info/code queries match every manifest address, Code
+      ID, checksum, CW2 version, admin, and authority. Preserve raw responses and
+      endpoint names.
 - [ ] Bounty and registry health are fully backed; pause/stop state and any open
       gauge epoch are recorded. Vault balance is recorded, even when zero.
 - [ ] Supported Keplr or Leap is installed, unlocked, set to the intended trial
@@ -183,8 +188,8 @@ funding provenance. Prepare bounded preferences for at most two known options
 (total weight at most 1), verify empty funds, record **Approval G1**, then sign
 once. Save ballot/revision, hash, height, and current option state. Removing or
 revising preferences is another separately approved transaction. Distribution
-and retained-value outcomes are observed only; they are not #37 completion
-without the full approved rehearsal evidence.
+and retained-value outcomes are observed only; they are not canary completion
+without the full approved reconciliation evidence.
 
 ## 5. Query and evidence capture
 
@@ -263,7 +268,7 @@ commit mismatch; wrong chain/address/Code ID/checksum; stale or catching-up RPC;
 under-backed health; unexpected pause/open epoch/Vault balance; attached funds or
 fee above approval; changed sender/sequence/fingerprint; unexpected wallet
 permissions; unknown/pending prior action; missing event/post-state; console or
-provenance error; security/accessibility blocker; or any #37 recipient, amount,
+provenance error; security/accessibility blocker; or any canary recipient, amount,
 deposit, authority, funding-source, or approval mismatch.
 
 ### Rollback
@@ -301,10 +306,10 @@ balances/history.
 ## 9. Final release evidence checklist
 
 - [ ] Dynamic release record complete; exact production URL and displayed commit
-      equal the deployed `main` commit.
+      equal the approved v2 cutover commit and signed manifest.
 - [ ] All five contract addresses, Code IDs, and checksums independently match.
-- [ ] Funding status is a fresh query with endpoint/height/time. #37 remains open
-      unless its separately approved funding and epoch evidence is complete.
+- [ ] Funding status is a fresh query with endpoint/height/time and matches the
+      separately authorized canary record exactly.
 - [ ] Known limitations published: direct-RPC weak consistency; no indexer or
       notification service; transaction finality depends on chain/indexing;
       browser wallet availability; immutable on-chain writes; curator/governance

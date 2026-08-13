@@ -36,8 +36,8 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
+#[serde(deny_unknown_fields)]
 pub struct ProjectCandidate {
-    pub project_id: String,
     pub metadata_uri: String,
     pub metadata_digest: String,
 }
@@ -67,6 +67,7 @@ pub struct ConfigUpdate {
 }
 
 #[cw_serde]
+#[serde(deny_unknown_fields)]
 pub enum ExecuteMsg {
     CreateBounty {
         title: String,
@@ -227,6 +228,11 @@ pub struct ErrorCatalogResponse {
 }
 
 #[cw_serde]
+pub struct IdentityStateResponse {
+    pub next_bounty_id: u64,
+}
+
+#[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(ConfigResponse)]
@@ -239,6 +245,8 @@ pub enum QueryMsg {
     Accounting {},
     #[returns(HealthResponse)]
     Health {},
+    #[returns(IdentityStateResponse)]
+    IdentityState {},
     #[returns(BountyResponse)]
     Bounty { bounty_id: u64 },
     #[returns(BountiesResponse)]
@@ -301,9 +309,14 @@ pub enum QueryMsg {
 pub enum RegistryExecuteMsg {
     Graduate {
         source_bounty_id: u64,
-        project_id: String,
         metadata_uri: String,
         metadata_digest: String,
         payout_address: String,
     },
+}
+
+#[cw_serde]
+pub struct RegistryProjectCreatedResponse {
+    pub response_version: u16,
+    pub project_id: u64,
 }

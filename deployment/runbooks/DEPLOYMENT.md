@@ -1,9 +1,8 @@
 # Deployment runbook
 
-> **Historical testnet procedure:** this runbook targets the pre-mainnet
-> `uni-7` deployment workflow. Do not use it as current mainnet authorization or
-> release status. See
-> [`MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
+> **Fresh v2 procedure:** this runbook creates a new composition with new
+> deterministic addresses. It does not migrate or import v1 state and is not
+> itself public-chain authorization.
 
 ## Preconditions
 
@@ -13,21 +12,26 @@ broadcast, require all of the following:
 - the parent checkout and `deps/dao-contracts` are clean;
 - the submodule HEAD equals the parent gitlink and the accepted upstream review
   commit;
-- `artifacts/v1/build-manifest.json` records two byte-identical clean recursive
+- `artifacts/v2/build-manifest.json` records two byte-identical clean recursive
   clone builds;
 - every configured Wasm path hashes to its declared checksum;
+- the cutover mode is explicit: a new test target declares no prior
+  composition, while `juno-1` supplies all five historical v1
+  address/Code-ID/checksum triples from the independently reviewed record;
 - the current `uni-7` chain ID, RPC, gRPC, `ujuno` denomination, `juno` prefix,
   and Juno `x/gov` module account were independently checked;
 - the bound Agent Operations DAO review records its core, voting, proposal, and
   tagged CW4-group or CW721-roles membership code IDs/checksums, exhaustive
   current membership and power, threshold, and voting duration;
-- snapshot retention covers the full epoch plus the configured operational
-  margin; and
+- snapshot retention covers the voting epoch, execution window, and configured
+  operational margin; and
 - the deployer key is funded only for upload/instantiation fees and contains no
   program tranche.
 
 Do not deploy from a template, branch name, mutable image tag, dirty checkout,
 locally substituted Wasm, or config with a missing evidence value.
+For a historical replacement, stop if any predicted v2 address or reviewed v2
+checksum collides with v1. Uploaded v2 Code IDs must also be disjoint.
 
 ## Dry run
 
@@ -42,8 +46,16 @@ locally substituted Wasm, or config with a missing evidence value.
    use the vault as creator.
 5. Confirm the Program Vault declares exactly one proposal/execution module:
    the snapshot gauge. Its voting module must be `dao-voting-juno-staked`.
-6. Archive the config and plan hashes in the change record. Two reviewers sign
+6. Confirm gauge 0 configures `do-not-distribute` as its retained option and a
+   positive execution window, and that the registry returns only the reserved
+   option before any project admission.
+7. Archive the config and plan hashes in the change record. Two reviewers sign
    the plan before broadcast.
+8. Run `... preflight --output ...`. For a historical replacement, inspect its
+   five identity records and prove the v1 Vault, bounty, and registry balances
+   and liabilities are zero; bounty/project/application pages are empty; the
+   registry exposes only `do-not-distribute`; and gauge 0 has no epoch. The
+   runner repeats these checks before every `apply-next` broadcast.
 
 Use paths under `/secure-work/juno-voice/uni-7/` for mutable state, plans,
 preflight reports, and the initial verification report. Do not write them into
@@ -84,15 +96,22 @@ Run `... verify --state ... --output ...`. The command must pass before any
 test funding. It checks code IDs/checksums, code admins, creators, external DAO
 admin, sole execution module, historical voting source, guardian/owner split,
 all bounty and registry roles, all economic limits, and the bound Agent DAO
-disclosure. The report embeds the exact validated contract-info and smart-query
+disclosure. It also verifies the retained option and execution window. The
+same command rejects a nonzero v2 Vault/bounty/registry balance or liability,
+any bounty/project/application, a bounty or project counter other than one,
+any consumed bounty-source provenance, any option beyond
+`do-not-distribute`, or a current/historical gauge epoch. Its embedded
+preflight is the final historical-v1 observation before client cutover. The
+report embeds the exact validated contract-info and smart-query
 responses and a complete deterministic check profile; preserve those bytes for
 release evidence.
 
 Independently query:
 
 - `dao-dao-core` `DumpState`, `Admin`, `VotingModule`, and active modules;
-- bounty `Config`, `Authorities`, `Health`, and `Pause`;
-- registry `Config`, `Accounting`, `Health`, `Pause`, and `AllOptions`;
+- bounty `Config`, `Authorities`, `Health`, `IdentityState`, `Bounties`, and `Pause`;
+- registry `Config`, `Accounting`, `Health`, `IdentityState`, `Projects`,
+  `Applications`, `Pause`, and `AllOptions`;
 - gauge `Config`, gauge 0, health, epochs, and hooks (which must be empty); and
 - CosmWasm contract info for all five instances.
 
@@ -108,5 +127,5 @@ those exact bytes, and only then run the clean-checkout release gate.
 Uploads are inert and may remain unused. A partially instantiated composition
 must never be repointed by weakening authority checks. If any predicted address,
 role, or module is wrong, abandon the composition, document the code IDs and
-addresses, create new unique salts in a reviewed config, and redeploy. There is
-no v1 state migration or prototype import path.
+addresses, create new v2 salts in a reviewed config, and redeploy. Do not import
+v1 or prototype state into the new composition.

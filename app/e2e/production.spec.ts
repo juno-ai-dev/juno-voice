@@ -9,8 +9,9 @@ import {
 } from "cosmjs-types/cosmwasm/wasm/v1/query.js";
 import { QueryBalanceResponse } from "cosmjs-types/cosmos/bank/v1beta1/query.js";
 import fixture from "../src/test/live-mainnet-empty.json" with { type: "json" };
+import { TEST_DEPLOYMENT_ENV } from "../src/test/deployment";
 
-const rpc = "https://juno-rpc.publicnode.com:443";
+const rpc = TEST_DEPLOYMENT_ENV.VITE_RPC_URL;
 const projectPath = "/juno-voice/";
 const releaseCommit = process.env.PLAYWRIGHT_RELEASE_COMMIT;
 const encoder = new TextEncoder();
@@ -153,7 +154,7 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
       }
       if (request.address === "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn") {
         if (key === "config") response = { owner: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", dao_core: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", voting_powers: "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2", hook_caller: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", power_source: { epoch_snapshot: { guardian: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } } };
-        if (key === "gauge") response = { id: 0, title: "Hack Juno", adapter: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n", epoch_size: 604800, min_percent_selected: "0.01", max_options_selected: 20, max_available_percentage: "0.2", is_stopped: false, next_epoch: 0, reset: null, snapshot_policy: { min_turnout_bps: 1000, epoch_budget: "100000000", denom: "ujuno" }, current_epoch: null };
+        if (key === "gauge") response = { id: 0, title: "Hack Juno", adapter: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n", epoch_size: 604800, min_percent_selected: "0.01", max_options_selected: 20, max_available_percentage: "0.2", is_stopped: false, next_epoch: 0, reset: null, snapshot_policy: { min_turnout_bps: 1000, epoch_budget: "100000000", denom: "ujuno", retained_option: "do-not-distribute", execution_window_seconds: 86400 }, current_epoch: null };
         if (key === "list_epochs") response = { epochs: [] };
       }
       const bytes = QuerySmartContractStateResponse.encode({

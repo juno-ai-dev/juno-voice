@@ -109,7 +109,6 @@ describe("read-only bounty ledger states", () => {
               ...ledger.bounties[0],
               status: "refunding",
               project_candidate: {
-                project_id: "voice-ui",
                 metadata_uri: "https://example.invalid/voice-ui.json",
                 metadata_digest: `sha256:${"ab".repeat(32)}`,
               },
@@ -120,7 +119,7 @@ describe("read-only bounty ledger states", () => {
       />,
     );
     expect(
-      await screen.findByText("Project candidate · voice-ui"),
+      await screen.findByText("Project candidate metadata attached"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Refund: Cancelled · scope changed"),

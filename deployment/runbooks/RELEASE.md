@@ -10,19 +10,19 @@ approval gates, support recovery, stop conditions, and web rollback. The
 Program Vault remains unfunded unless a fresh authoritative query proves
 otherwise; no issue #37 funding or epoch rehearsal is claimed complete.
 
-## Historical candidate construction
+## Candidate construction
 
-The candidate/evidence process below documents the earlier testnet release
-pipeline. References to `uni-7`, canaries, and prototype exclusion are retained
-as history, not as claims about the current mainnet application.
-
-### Candidate construction
+This process constructs a fresh v2 deployment. It does not migrate v1 state or
+preserve v1 contract addresses. Before cutover, query and record that the old
+Program Vault remains unfunded and that no old epoch is open; any unexpected
+funds or user state require a separate recovery decision rather than import
+into v2.
 
 From a clean checkout with a clean, accepted submodule pin, run
 `scripts/build-release.sh`. It clones the repository recursively twice, checks
 schema regeneration, builds the two owned contracts with Rust 1.85.1 and the
 three upstream components with Rust 1.81.0 in the digest-pinned optimizer,
-compares every byte, and validates every Wasm. The v1 manifest never includes
+compares every byte, and validates every Wasm. The v2 manifest never includes
 the prototype `juno_voice.wasm`.
 
 Review `build-tools.txt`, `build-provenance.txt`, sizes, checksums, and
@@ -30,7 +30,7 @@ Review `build-tools.txt`, `build-provenance.txt`, sizes, checksums, and
 dirty source, gitlink mismatch, unexpected export/capability, or validator
 failure rejects the candidate.
 
-### Evidence gates
+## Evidence gates
 
 A testnet release candidate requires all of the following bound to the exact
 build and deployment config:
@@ -39,7 +39,9 @@ build and deployment config:
 - independent security review of bounty, registry, and changed gauge paths,
   with no unresolved critical/high finding;
 - verified `uni-7` code IDs, addresses, admins, roles, and module relationships;
-- all ten end-to-end scenarios with final balances/states/events;
+- all 18 end-to-end scenarios with final balances/states/events, including the
+  v2 partial, retained-only, terminal-liveness, numeric-ID, source-rotation, and
+  bond-transition profiles;
 - historical staking changes across EndBlock and two distinct fixed epochs;
 - observed snapshot activation, retention, and liquid-staking power basis;
 - maximum-bound gas/response evidence for contributors, projects, options,
@@ -67,10 +69,10 @@ scenario, snapshot, canary, rehearsal, or runbook evidence unbound. Preparation
 first runs the complete semantic gate with only the not-yet-created decision
 omitted, so an invalid candidate never reaches the declaration/authorization step.
 
-### Authorization boundary
+## Authorization boundary
 
 The resulting packet authorizes, at most, the reviewed public-testnet/canary
 scope stated in its decision record. Mainnet upload, live admin assignment,
-community-pool transfer, recurring tranche, migration, or prototype-state use
+community-pool transfer, recurring tranche, migration, or old-state import
 requires separate explicit authorization. Retain rejected artifacts and partial
 deployments as historical records; do not overwrite their manifests.

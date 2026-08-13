@@ -1,19 +1,22 @@
 use cosmwasm_std::testing::{
     message_info, mock_dependencies, mock_env, MockApi, MockQuerier, MockStorage,
 };
-use cosmwasm_std::{coin, from_json, Addr, Empty, Env, OwnedDeps, Response, Timestamp, Uint128};
+use cosmwasm_std::{
+    coin, from_json, to_json_binary, Addr, Empty, Env, OwnedDeps, Reply, Response, SubMsgResponse,
+    SubMsgResult, Timestamp, Uint128,
+};
 use proptest::prelude::*;
 
-use crate::contract::{execute, instantiate, query, RATIFICATION_SECONDS};
+use crate::contract::{execute, instantiate, query, reply, RATIFICATION_SECONDS};
 use crate::error::ContractError;
 use crate::msg::{
-    ClaimsResponse, ConfigUpdate, ExecuteMsg, InstantiateMsg, Limits, ModerationOutcome,
-    PayoutVote, ProjectCandidate, QueryMsg,
+    ClaimsResponse, ConfigUpdate, ExecuteMsg, IdentityStateResponse, InstantiateMsg, Limits,
+    ModerationOutcome, PayoutVote, ProjectCandidate, QueryMsg, RegistryProjectCreatedResponse,
 };
 use crate::state::{
     BountyStatus, ClaimRecord, HistoryAction, RefundReason, RoundOutcome, ACCOUNTING, BOUNTIES,
     CLAIMS, CONFIG, CONTRIBUTIONS, CONTRIBUTION_CHECKPOINTS, GRADUATIONS, HISTORY, MODERATIONS,
-    ROUNDS, VOTES,
+    PENDING_GRADUATION, ROUNDS, VOTES,
 };
 
 type TestDeps = OwnedDeps<MockStorage, MockApi, MockQuerier, Empty>;
@@ -109,6 +112,31 @@ fn init() -> (TestDeps, Env) {
 
 fn digest(character: char) -> String {
     format!("sha256:{}", character.to_string().repeat(64))
+}
+
+#[test]
+fn identity_state_exposes_the_fresh_and_monotonic_bounty_counter() {
+    let (mut deps, env) = init();
+    let initial: IdentityStateResponse =
+        from_json(query(deps.as_ref(), env.clone(), QueryMsg::IdentityState {}).unwrap()).unwrap();
+    assert_eq!(initial.next_bounty_id, 1);
+
+    assert_eq!(create(&mut deps, &env, CREATOR, 100, 1_000), 1);
+    let after_create: IdentityStateResponse =
+        from_json(query(deps.as_ref(), env, QueryMsg::IdentityState {}).unwrap()).unwrap();
+    assert_eq!(after_create.next_bounty_id, 2);
+}
+
+#[test]
+fn legacy_candidate_project_id_fails_loudly_at_the_wire_boundary() {
+    assert!(from_json::<ExecuteMsg>(
+        br#"{"create_bounty":{"title":"Current candidate","summary":"Must decode","acceptance_criteria":"Registry assigns identity","content_uri":null,"content_digest":null,"expires_at":"1571797419879305533","project_candidate":{"metadata_uri":"ipfs://candidate","metadata_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#
+    )
+    .is_ok());
+    assert!(from_json::<ExecuteMsg>(
+        br#"{"create_bounty":{"title":"Legacy candidate","summary":"Must not decode","acceptance_criteria":"No caller-selected identity","content_uri":null,"content_digest":null,"expires_at":"1571797419879305533","project_candidate":{"project_id":"caller-chosen","metadata_uri":"ipfs://candidate","metadata_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#
+    )
+    .is_err());
 }
 
 fn create_msg(expires_at: Timestamp) -> ExecuteMsg {
@@ -1130,7 +1158,6 @@ fn paid_project_candidate_graduates_once_through_configured_registry() {
     } = &mut msg
     {
         *project_candidate = Some(ProjectCandidate {
-            project_id: "stable-project-1".into(),
             metadata_uri: "ipfs://bafyproject".into(),
             metadata_digest: digest('c'),
         });
@@ -1179,6 +1206,34 @@ fn paid_project_candidate_graduates_once_through_configured_registry() {
     assert_eq!(response.messages.len(), 1);
     assert_wire_event(
         &response,
+        "juno_voice_bounties.project_graduation_requested",
+        &["bounty_id", "agent", "registry", "payout_address"],
+    );
+    assert!(!GRADUATIONS.has(&deps.storage, 1));
+    #[allow(deprecated)]
+    let response = reply(
+        deps.as_mut(),
+        env.clone(),
+        Reply {
+            id: 1,
+            payload: Default::default(),
+            gas_used: 0,
+            result: SubMsgResult::Ok(SubMsgResponse {
+                events: vec![],
+                data: Some(
+                    to_json_binary(&RegistryProjectCreatedResponse {
+                        response_version: 1,
+                        project_id: 42,
+                    })
+                    .unwrap(),
+                ),
+                msg_responses: vec![],
+            }),
+        },
+    )
+    .unwrap();
+    assert_wire_event(
+        &response,
         "juno_voice_bounties.project_graduated",
         &[
             "bounty_id",
@@ -1189,6 +1244,7 @@ fn paid_project_candidate_graduates_once_through_configured_registry() {
         ],
     );
     let record = GRADUATIONS.load(&deps.storage, 1).unwrap();
+    assert_eq!(record.project_id, 42);
     assert_eq!(record.registry, addr(REGISTRY));
     assert_eq!(record.payout_address, addr(RECIPIENT));
     let err = execute(
@@ -1199,6 +1255,85 @@ fn paid_project_candidate_graduates_once_through_configured_registry() {
     )
     .unwrap_err();
     assert_eq!(err, ContractError::AlreadyGraduated);
+}
+
+#[test]
+fn graduation_reply_rejects_unknown_failed_and_malformed_responses_without_finalizing() {
+    let (mut deps, env) = init();
+    let bounty_id = create(&mut deps, &env, CREATOR, 100, 1_000);
+    let mut bounty = BOUNTIES.load(&deps.storage, bounty_id).unwrap();
+    bounty.status = BountyStatus::Paid;
+    bounty.paid_recipient = Some(addr(RECIPIENT));
+    bounty.project_candidate = Some(ProjectCandidate {
+        metadata_uri: "ipfs://candidate".into(),
+        metadata_digest: digest('c'),
+    });
+    BOUNTIES
+        .save(&mut deps.storage, bounty_id, &bounty)
+        .unwrap();
+
+    assert_eq!(
+        reply(
+            deps.as_mut(),
+            env.clone(),
+            Reply {
+                id: 999,
+                payload: Default::default(),
+                gas_used: 0,
+                result: SubMsgResult::Err("ignored".into()),
+            },
+        )
+        .unwrap_err(),
+        ContractError::UnknownReply(999)
+    );
+    execute(
+        deps.as_mut(),
+        env.clone(),
+        message_info(&addr(AGENT), &[]),
+        ExecuteMsg::GraduateProject { bounty_id },
+    )
+    .unwrap();
+    assert!(PENDING_GRADUATION
+        .may_load(&deps.storage)
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        reply(
+            deps.as_mut(),
+            env.clone(),
+            Reply {
+                id: 1,
+                payload: Default::default(),
+                gas_used: 0,
+                result: SubMsgResult::Err("registry rejected".into()),
+            },
+        )
+        .unwrap_err(),
+        ContractError::GraduationSubmessage("registry rejected".into())
+    );
+    assert!(!GRADUATIONS.has(&deps.storage, bounty_id));
+
+    #[allow(deprecated)]
+    let malformed = Reply {
+        id: 1,
+        payload: Default::default(),
+        gas_used: 0,
+        result: SubMsgResult::Ok(SubMsgResponse {
+            events: vec![],
+            data: Some(to_json_binary(&"not a typed response").unwrap()),
+            msg_responses: vec![],
+        }),
+    };
+    assert_eq!(
+        reply(deps.as_mut(), env, malformed).unwrap_err(),
+        ContractError::MalformedGraduationResponse
+    );
+    assert!(!GRADUATIONS.has(&deps.storage, bounty_id));
+    assert!(BOUNTIES
+        .load(&deps.storage, bounty_id)
+        .unwrap()
+        .graduated_at
+        .is_none());
 }
 
 #[test]

@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
   pull_request:
     paths: ["app/**", "README.md", ".github/workflows/frontend.yml"]
-  push:
-    branches: [main]
-    paths: ["app/**", "README.md", ".github/workflows/frontend.yml"]
 
 permissions:
   contents: read
@@ -17,7 +14,7 @@ concurrency:
 
 jobs:
   gates:
-    name: Frozen install and production gates
+    name: Frozen install and v2 candidate gates
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -43,10 +40,26 @@ jobs:
         run: npm run audit:all
       - name: Production dependency audit
         run: npm run audit:production
-      - name: Build deployable Pages artifact
+      - name: Build test-identity artifact (never published)
         env:
           VITE_BASE_PATH: /juno-voice/
           VITE_RELEASE_COMMIT: ${{ github.sha }}
+          VITE_PROTOCOL_VERSION: v2
+          VITE_BOUNTY_CONTRACT_ADDRESS: juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw
+          VITE_BOUNTY_CODE_ID: "5150"
+          VITE_BOUNTY_CODE_CHECKSUM: f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1
+          VITE_REGISTRY_CONTRACT_ADDRESS: juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n
+          VITE_REGISTRY_CODE_ID: "5151"
+          VITE_REGISTRY_CODE_CHECKSUM: 1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf
+          VITE_VAULT_CONTRACT_ADDRESS: juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg
+          VITE_VAULT_CODE_ID: "5152"
+          VITE_VAULT_CODE_CHECKSUM: bc8b049a03496d3383376a469ccb581996238003532083895f68d4a02990a2da
+          VITE_VOTING_CONTRACT_ADDRESS: juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2
+          VITE_VOTING_CODE_ID: "5153"
+          VITE_VOTING_CODE_CHECKSUM: 2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64
+          VITE_GAUGE_CONTRACT_ADDRESS: juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn
+          VITE_GAUGE_CODE_ID: "5154"
+          VITE_GAUGE_CODE_CHECKSUM: 524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f
         run: npm run build
       - name: Bundle-size and signing-symbol regression gates
         run: npm run check:production
@@ -58,8 +71,8 @@ jobs:
         run: npm run test:e2e
 
   pages-artifact:
-    name: Package reviewed main artifact
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Package explicitly approved v2 artifact
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: gates
     runs-on: ubuntu-24.04
     permissions:
@@ -80,6 +93,22 @@ jobs:
         env:
           VITE_BASE_PATH: /juno-voice/
           VITE_RELEASE_COMMIT: ${{ github.sha }}
+          VITE_PROTOCOL_VERSION: v2
+          VITE_BOUNTY_CONTRACT_ADDRESS: ${{ vars.V2_BOUNTY_CONTRACT_ADDRESS }}
+          VITE_BOUNTY_CODE_ID: ${{ vars.V2_BOUNTY_CODE_ID }}
+          VITE_BOUNTY_CODE_CHECKSUM: ${{ vars.V2_BOUNTY_CODE_CHECKSUM }}
+          VITE_REGISTRY_CONTRACT_ADDRESS: ${{ vars.V2_REGISTRY_CONTRACT_ADDRESS }}
+          VITE_REGISTRY_CODE_ID: ${{ vars.V2_REGISTRY_CODE_ID }}
+          VITE_REGISTRY_CODE_CHECKSUM: ${{ vars.V2_REGISTRY_CODE_CHECKSUM }}
+          VITE_VAULT_CONTRACT_ADDRESS: ${{ vars.V2_VAULT_CONTRACT_ADDRESS }}
+          VITE_VAULT_CODE_ID: ${{ vars.V2_VAULT_CODE_ID }}
+          VITE_VAULT_CODE_CHECKSUM: ${{ vars.V2_VAULT_CODE_CHECKSUM }}
+          VITE_VOTING_CONTRACT_ADDRESS: ${{ vars.V2_VOTING_CONTRACT_ADDRESS }}
+          VITE_VOTING_CODE_ID: ${{ vars.V2_VOTING_CODE_ID }}
+          VITE_VOTING_CODE_CHECKSUM: ${{ vars.V2_VOTING_CODE_CHECKSUM }}
+          VITE_GAUGE_CONTRACT_ADDRESS: ${{ vars.V2_GAUGE_CONTRACT_ADDRESS }}
+          VITE_GAUGE_CODE_ID: ${{ vars.V2_GAUGE_CODE_ID }}
+          VITE_GAUGE_CODE_CHECKSUM: ${{ vars.V2_GAUGE_CODE_CHECKSUM }}
         run: |
           npm ci
           npm run build
@@ -90,8 +119,8 @@ jobs:
           path: app/dist
 
   deploy:
-    name: Deploy reviewed main to Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Deploy explicitly approved v2 artifact to Pages
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: pages-artifact
     runs-on: ubuntu-24.04
     permissions:

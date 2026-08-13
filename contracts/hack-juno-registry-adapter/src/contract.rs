@@ -8,14 +8,16 @@ use cw_storage_plus::Bound;
 use crate::error::ContractError;
 use crate::msg::{
     AllOptionsResponse, CheckOptionResponse, EconomicConfigUpdate, ExecuteMsg, HealthResponse,
-    HistoryResponse, InstantiateMsg, OverrideStatus, ProjectsResponse, QueryMsg, ReviewDecision,
-    ReviewReason, ReviewReasonCode, SampleGaugeMsgsResponse, StopScope,
+    HistoryResponse, IdentityStateResponse, InstantiateMsg, OverrideStatus, ProjectCreatedResponse,
+    ProjectsResponse, QueryMsg, ReviewDecision, ReviewReason, ReviewReasonCode,
+    SampleGaugeMsgsResponse, StopScope,
 };
 use crate::state::{
     AddressAction, AddressHistoryEntry, AdmissionProvenance, BondState, Config, PauseState,
     PendingPayoutAddress, Project, ProjectStatus, RegistrationBond, RegistryAccounting,
-    StatusAction, StatusHistoryEntry, ACCOUNTING, ADDRESS_HISTORY, APPLICATIONS, CONFIG, OPTIONS,
-    PAUSE, PROJECTS, SOURCE_BOUNTIES, STATUS_HISTORY,
+    StatusAction, StatusHistoryEntry, ACCOUNTING, ADDRESS_HISTORY, APPLICATIONS, CONFIG,
+    NEXT_PROJECT_ID, OPTIONS, PAUSE, PROJECTS, SOURCE_BOUNTIES, SOURCE_BOUNTY_COUNT,
+    STATUS_HISTORY,
 };
 
 const CONTRACT_NAME: &str = "crates.io:hack-juno-registry-adapter";
@@ -79,6 +81,8 @@ pub fn instantiate(
             lifetime_bonds_forfeited: Uint128::zero(),
         },
     )?;
+    NEXT_PROJECT_ID.save(deps.storage, &1)?;
+    SOURCE_BOUNTY_COUNT.save(deps.storage, &0)?;
     OPTIONS.save(deps.storage, DO_NOT_DISTRIBUTE, &())?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.instantiated")
@@ -100,7 +104,6 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::RegisterProject {
-            project_id,
             metadata_uri,
             metadata_digest,
             payout_address,
@@ -108,14 +111,12 @@ pub fn execute(
             deps,
             env,
             info,
-            project_id,
             metadata_uri,
             metadata_digest,
             payout_address,
         ),
         ExecuteMsg::Graduate {
             source_bounty_id,
-            project_id,
             metadata_uri,
             metadata_digest,
             payout_address,
@@ -124,7 +125,6 @@ pub fn execute(
             env,
             info,
             source_bounty_id,
-            project_id,
             metadata_uri,
             metadata_digest,
             payout_address,
@@ -187,7 +187,6 @@ fn execute_register(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
     metadata_uri: String,
     metadata_digest: String,
     payout_address: String,
@@ -195,13 +194,12 @@ fn execute_register(
     ensure_admissions_open(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
     exact_bond(&info, &config)?;
-    validate_project_id(&project_id)?;
     validate_metadata(&metadata_uri, &metadata_digest, &config)?;
-    ensure_new_project(deps.storage, &project_id)?;
     let payout_address = deps.api.addr_validate(&payout_address)?;
+    let project_id = allocate_project_id(deps.storage)?;
 
     let mut project = Project {
-        id: project_id.clone(),
+        id: project_id,
         owner: info.sender.clone(),
         metadata_uri,
         metadata_digest,
@@ -232,8 +230,8 @@ fn execute_register(
         &info.sender,
         env.block.time,
     )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
-    APPLICATIONS.save(deps.storage, &project_id, &())?;
+    PROJECTS.save(deps.storage, project_id, &project)?;
+    APPLICATIONS.save(deps.storage, project_id, &())?;
     ACCOUNTING.update(deps.storage, |mut accounting| -> Result<_, ContractError> {
         accounting.pending_applications = accounting
             .pending_applications
@@ -249,13 +247,18 @@ fn execute_register(
             .checked_add(config.registration_bond)?;
         Ok(accounting)
     })?;
-    Ok(Response::new().add_event(
-        Event::new("hack_juno_registry.project_registered")
-            .add_attribute("project_id", project_id)
-            .add_attribute("applicant", info.sender)
-            .add_attribute("payout_address", project.payout_address)
-            .add_attribute("bond", config.registration_bond),
-    ))
+    Ok(Response::new()
+        .set_data(to_json_binary(&ProjectCreatedResponse {
+            response_version: 1,
+            project_id,
+        })?)
+        .add_event(
+            Event::new("hack_juno_registry.project_registered")
+                .add_attribute("project_id", project_id.to_string())
+                .add_attribute("applicant", info.sender)
+                .add_attribute("payout_address", project.payout_address)
+                .add_attribute("bond", config.registration_bond),
+        ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -264,7 +267,6 @@ fn execute_graduate(
     env: Env,
     info: MessageInfo,
     source_bounty_id: u64,
-    project_id: String,
     metadata_uri: String,
     metadata_digest: String,
     payout_address: String,
@@ -275,22 +277,24 @@ fn execute_graduate(
     if info.sender != config.bounty_contract {
         return Err(ContractError::Unauthorized);
     }
-    validate_project_id(&project_id)?;
     validate_metadata(&metadata_uri, &metadata_digest, &config)?;
-    ensure_new_project(deps.storage, &project_id)?;
-    if SOURCE_BOUNTIES.has(deps.storage, source_bounty_id) {
+    if SOURCE_BOUNTIES.has(deps.storage, (&info.sender, source_bounty_id)) {
         return Err(ContractError::DuplicateSourceBounty);
     }
     ensure_active_capacity(deps.storage)?;
     let payout_address = deps.api.addr_validate(&payout_address)?;
+    let project_id = allocate_project_id(deps.storage)?;
     let mut project = Project {
-        id: project_id.clone(),
+        id: project_id,
         owner: payout_address.clone(),
         metadata_uri,
         metadata_digest,
         payout_address,
         pending_payout_address: None,
-        provenance: AdmissionProvenance::GraduatedBounty { source_bounty_id },
+        provenance: AdmissionProvenance::GraduatedBounty {
+            source_bounty_contract: info.sender.clone(),
+            source_bounty_id,
+        },
         status: ProjectStatus::Active,
         bond: None,
         latest_review: None,
@@ -309,23 +313,31 @@ fn execute_graduate(
         &info.sender,
         env.block.time,
     )?;
-    SOURCE_BOUNTIES.save(deps.storage, source_bounty_id, &project_id)?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
-    add_active_option(deps.storage, &project_id)?;
-    Ok(Response::new().add_event(
-        Event::new("hack_juno_registry.bounty_graduated")
-            .add_attribute("project_id", project_id)
-            .add_attribute("source_bounty_id", source_bounty_id.to_string())
-            .add_attribute("bounty_contract", info.sender)
-            .add_attribute("payout_address", project.payout_address),
-    ))
+    SOURCE_BOUNTIES.save(deps.storage, (&info.sender, source_bounty_id), &project_id)?;
+    SOURCE_BOUNTY_COUNT.update(deps.storage, |count| {
+        count.checked_add(1).ok_or(ContractError::InvalidState)
+    })?;
+    PROJECTS.save(deps.storage, project_id, &project)?;
+    add_active_option(deps.storage, project_id)?;
+    Ok(Response::new()
+        .set_data(to_json_binary(&ProjectCreatedResponse {
+            response_version: 1,
+            project_id,
+        })?)
+        .add_event(
+            Event::new("hack_juno_registry.bounty_graduated")
+                .add_attribute("project_id", project_id.to_string())
+                .add_attribute("source_bounty_id", source_bounty_id.to_string())
+                .add_attribute("source_bounty_contract", info.sender)
+                .add_attribute("payout_address", project.payout_address),
+        ))
 }
 
 fn execute_update_pending_metadata(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
     metadata_uri: String,
     metadata_digest: String,
 ) -> Result<Response, ContractError> {
@@ -333,17 +345,17 @@ fn execute_update_pending_metadata(
     ensure_admissions_open(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
     validate_metadata(&metadata_uri, &metadata_digest, &config)?;
-    let mut project = load_project(deps.storage, &project_id)?;
+    let mut project = load_project(deps.storage, project_id)?;
     if project.status != ProjectStatus::Pending || info.sender != project.owner {
         return Err(ContractError::Unauthorized);
     }
     project.metadata_uri = metadata_uri;
     project.metadata_digest = metadata_digest;
     project.updated_at = env.block.time;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
+    PROJECTS.save(deps.storage, project_id, &project)?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.pending_metadata_updated")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("applicant", info.sender),
     ))
 }
@@ -352,95 +364,30 @@ fn execute_review(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
     decision: ReviewDecision,
     reason: ReviewReason,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.curator {
-        return Err(ContractError::Unauthorized);
-    }
-    validate_reason(&reason, &config)?;
-    let mut project = load_project(deps.storage, &project_id)?;
-    if project.status != ProjectStatus::Pending {
-        return Err(ContractError::InvalidState);
-    }
-    if decision == ReviewDecision::HardReject
-        && !matches!(
-            reason.code,
-            ReviewReasonCode::Spam | ReviewReasonCode::PolicyViolation
-        )
-    {
-        return Err(ContractError::InvalidMetadata(
-            "hard rejection requires spam or policy_violation reason".into(),
-        ));
-    }
-
-    let old_status = project.status.clone();
+    let transition = match decision {
+        ReviewDecision::Approve => ProjectTransition::Approve,
+        ReviewDecision::RequestChanges => ProjectTransition::ReviewNoChange,
+        ReviewDecision::SoftReject => ProjectTransition::SoftReject,
+        ReviewDecision::HardReject => ProjectTransition::HardReject,
+    };
+    let result =
+        apply_project_transition(deps, &env, &info, project_id, transition, Some(&reason))?;
     let mut response = Response::new();
-    match decision {
-        ReviewDecision::Approve => {
-            ensure_active_capacity(deps.storage)?;
-            project.status = ProjectStatus::Active;
-            APPLICATIONS.remove(deps.storage, &project_id);
-            ACCOUNTING.update(deps.storage, |mut accounting| -> Result<_, ContractError> {
-                accounting.pending_applications = accounting
-                    .pending_applications
-                    .checked_sub(1)
-                    .ok_or_else(|| {
-                        ContractError::InvalidConfiguration("application underflow".into())
-                    })?;
-                Ok(accounting)
-            })?;
-            add_active_option(deps.storage, &project_id)?;
-        }
-        ReviewDecision::RequestChanges => {}
-        ReviewDecision::SoftReject => {
-            project.status = ProjectStatus::Rejected;
-            APPLICATIONS.remove(deps.storage, &project_id);
-            let (depositor, amount) =
-                dispose_bond(&mut project, BondState::Refunded, deps.storage, false)?;
-            decrement_pending_application(deps.storage)?;
-            response = response.add_message(BankMsg::Send {
-                to_address: depositor.to_string(),
-                amount: vec![Coin::new(amount.u128(), config.native_denom.clone())],
-            });
-        }
-        ReviewDecision::HardReject => {
-            project.status = ProjectStatus::Rejected;
-            APPLICATIONS.remove(deps.storage, &project_id);
-            let (_, amount) = dispose_bond(&mut project, BondState::Forfeited, deps.storage, true)?;
-            decrement_pending_application(deps.storage)?;
-            response = response.add_message(BankMsg::Send {
-                to_address: config.spam_destination.to_string(),
-                amount: vec![Coin::new(amount.u128(), config.native_denom.clone())],
-            });
-        }
+    if let Some(message) = result.transfer {
+        response = response.add_message(message);
     }
-    project.latest_review = Some(reason.clone());
-    project.updated_at = env.block.time;
-    let reviewed_status = project.status.clone();
-    append_status_history(
-        deps.storage,
-        &mut project,
-        Some(old_status),
-        reviewed_status,
-        StatusAction::Reviewed {
-            decision: decision.clone(),
-        },
-        Some(reason.clone()),
-        &info.sender,
-        env.block.time,
-    )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
     Ok(response.add_event(
         Event::new("hack_juno_registry.registration_reviewed")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("curator", info.sender)
             .add_attribute("decision", decision_name(&decision))
             .add_attribute("reason_code", reason_name(&reason.code))
-            .add_attribute("status", status_name(&project.status)),
+            .add_attribute("status", status_name(&result.project.status)),
     ))
 }
 
@@ -448,37 +395,21 @@ fn execute_suspend(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
     reason: ReviewReason,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.curator {
-        return Err(ContractError::Unauthorized);
-    }
-    validate_reason(&reason, &config)?;
-    let mut project = load_project(deps.storage, &project_id)?;
-    if project.status != ProjectStatus::Active {
-        return Err(ContractError::InvalidState);
-    }
-    project.status = ProjectStatus::Suspended;
-    project.latest_review = Some(reason.clone());
-    project.updated_at = env.block.time;
-    remove_active_option(deps.storage, &project_id)?;
-    append_status_history(
-        deps.storage,
-        &mut project,
-        Some(ProjectStatus::Active),
-        ProjectStatus::Suspended,
-        StatusAction::Suspended,
-        Some(reason.clone()),
-        &info.sender,
-        env.block.time,
+    apply_project_transition(
+        deps,
+        &env,
+        &info,
+        project_id,
+        ProjectTransition::CuratorSuspend,
+        Some(&reason),
     )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.project_suspended")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("curator", info.sender)
             .add_attribute("reason_code", reason_name(&reason.code)),
     ))
@@ -488,51 +419,26 @@ fn execute_retire(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
     reason: ReviewReason,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    let mut project = load_project(deps.storage, &project_id)?;
-    if info.sender != config.curator && info.sender != project.owner {
-        return Err(ContractError::Unauthorized);
-    }
-    if info.sender == project.owner && reason.code != ReviewReasonCode::VoluntaryRetirement {
-        return Err(ContractError::InvalidMetadata(
-            "owner retirement requires voluntary_retirement reason".into(),
-        ));
-    }
-    validate_reason(&reason, &config)?;
-    if !matches!(
-        project.status,
-        ProjectStatus::Active | ProjectStatus::Suspended
-    ) {
-        return Err(ContractError::InvalidState);
-    }
-    let old = project.status.clone();
-    if old == ProjectStatus::Active {
-        remove_active_option(deps.storage, &project_id)?;
-    }
-    make_bond_claimable(&mut project)?;
-    project.status = ProjectStatus::Retired;
-    project.latest_review = Some(reason.clone());
-    project.updated_at = env.block.time;
-    append_status_history(
-        deps.storage,
-        &mut project,
-        Some(old),
-        ProjectStatus::Retired,
-        StatusAction::Retired,
-        Some(reason.clone()),
-        &info.sender,
-        env.block.time,
+    let result = apply_project_transition(
+        deps,
+        &env,
+        &info,
+        project_id,
+        ProjectTransition::Retire,
+        Some(&reason),
     )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.project_retired")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("actor", info.sender)
-            .add_attribute("bond_claimable", bond_claimable(&project).to_string()),
+            .add_attribute(
+                "bond_claimable",
+                bond_claimable(&result.project).to_string(),
+            ),
     ))
 }
 
@@ -540,55 +446,30 @@ fn execute_override(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
     target: OverrideStatus,
     reason: ReviewReason,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.governor {
-        return Err(ContractError::Unauthorized);
-    }
-    validate_reason(&reason, &config)?;
-    let mut project = load_project(deps.storage, &project_id)?;
+    let project = load_project(deps.storage, project_id)?;
     let target = override_status(target);
     if project.status == target {
         return Err(ContractError::InvalidState);
     }
     let old = project.status.clone();
-    if target == ProjectStatus::Active {
-        ensure_active_capacity(deps.storage)?;
-    }
-    if old == ProjectStatus::Pending {
-        APPLICATIONS.remove(deps.storage, &project_id);
-        decrement_pending_application(deps.storage)?;
-    }
-    if old == ProjectStatus::Active {
-        remove_active_option(deps.storage, &project_id)?;
-    }
-    if target == ProjectStatus::Active {
-        add_active_option(deps.storage, &project_id)?;
-    }
-    if matches!(target, ProjectStatus::Rejected | ProjectStatus::Retired) {
-        make_bond_claimable(&mut project)?;
-    }
-    project.status = target.clone();
-    project.latest_review = Some(reason.clone());
-    project.updated_at = env.block.time;
-    append_status_history(
-        deps.storage,
-        &mut project,
-        Some(old),
-        target.clone(),
-        StatusAction::GovernorOverride,
-        Some(reason.clone()),
-        &info.sender,
-        env.block.time,
-    )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
+    let transition = match (&old, &target) {
+        (ProjectStatus::Active, ProjectStatus::Suspended) => ProjectTransition::GovernorSuspend,
+        (ProjectStatus::Suspended, ProjectStatus::Active) => ProjectTransition::GovernorResume,
+        (ProjectStatus::Retired, ProjectStatus::Active) => ProjectTransition::GovernorRestore,
+        (ProjectStatus::Active | ProjectStatus::Suspended, ProjectStatus::Retired) => {
+            ProjectTransition::GovernorRetire
+        }
+        _ => return Err(ContractError::InvalidState),
+    };
+    apply_project_transition(deps, &env, &info, project_id, transition, Some(&reason))?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.project_status_overridden")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("governor", info.sender)
             .add_attribute("status", status_name(&target))
             .add_attribute("reason_code", reason_name(&reason.code)),
@@ -599,12 +480,12 @@ fn execute_propose_address(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
     address: String,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
     let config = CONFIG.load(deps.storage)?;
-    let mut project = load_project(deps.storage, &project_id)?;
+    let mut project = load_project(deps.storage, project_id)?;
     ensure_address_controller(&project, &info.sender)?;
     if !matches!(
         project.status,
@@ -642,10 +523,10 @@ fn execute_propose_address(
         &info.sender,
         env.block.time,
     )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
+    PROJECTS.save(deps.storage, project_id, &project)?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.payout_address_proposed")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("actor", info.sender)
             .add_attribute("proposed_address", address)
             .add_attribute("executable_at", executable_at.nanos().to_string()),
@@ -656,10 +537,10 @@ fn execute_cancel_address(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let mut project = load_project(deps.storage, &project_id)?;
+    let mut project = load_project(deps.storage, project_id)?;
     ensure_address_controller(&project, &info.sender)?;
     let pending = project
         .pending_payout_address
@@ -674,10 +555,10 @@ fn execute_cancel_address(
         &info.sender,
         env.block.time,
     )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
+    PROJECTS.save(deps.storage, project_id, &project)?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.payout_address_cancelled")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("actor", info.sender)
             .add_attribute("cancelled_address", pending.address),
     ))
@@ -687,10 +568,10 @@ fn execute_accept_address(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let mut project = load_project(deps.storage, &project_id)?;
+    let mut project = load_project(deps.storage, project_id)?;
     let pending = project
         .pending_payout_address
         .clone()
@@ -714,10 +595,10 @@ fn execute_accept_address(
         &info.sender,
         env.block.time,
     )?;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
+    PROJECTS.save(deps.storage, project_id, &project)?;
     Ok(Response::new().add_event(
         Event::new("hack_juno_registry.payout_address_accepted")
-            .add_attribute("project_id", project_id)
+            .add_attribute("project_id", project_id.to_string())
             .add_attribute("old_address", old)
             .add_attribute("new_address", pending.address),
     ))
@@ -727,42 +608,33 @@ fn execute_claim_bond(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    project_id: String,
+    project_id: u64,
 ) -> Result<Response, ContractError> {
     nonpayable(&info)?;
-    let config = CONFIG.load(deps.storage)?;
-    let mut project = load_project(deps.storage, &project_id)?;
-    let bond = project
+    let result = apply_project_transition(
+        deps,
+        &env,
+        &info,
+        project_id,
+        ProjectTransition::Claim,
+        None,
+    )?;
+    let bond = result
+        .project
         .bond
-        .as_mut()
+        .as_ref()
         .ok_or(ContractError::BondNotClaimable)?;
-    if info.sender != bond.depositor {
-        return Err(ContractError::Unauthorized);
-    }
-    if bond.state != BondState::Claimable {
-        return Err(ContractError::BondNotClaimable);
-    }
     let amount = bond.amount;
-    bond.state = BondState::Claimed;
-    project.updated_at = env.block.time;
-    PROJECTS.save(deps.storage, &project_id, &project)?;
-    ACCOUNTING.update(deps.storage, |mut accounting| -> Result<_, ContractError> {
-        accounting.bond_liability = accounting.bond_liability.checked_sub(amount)?;
-        accounting.lifetime_bonds_refunded =
-            accounting.lifetime_bonds_refunded.checked_add(amount)?;
-        Ok(accounting)
-    })?;
-    Ok(Response::new()
-        .add_message(BankMsg::Send {
-            to_address: info.sender.to_string(),
-            amount: vec![Coin::new(amount.u128(), config.native_denom)],
-        })
-        .add_event(
-            Event::new("hack_juno_registry.registration_bond_claimed")
-                .add_attribute("project_id", project_id)
-                .add_attribute("depositor", info.sender)
-                .add_attribute("amount", amount),
-        ))
+    let mut response = Response::new();
+    if let Some(message) = result.transfer {
+        response = response.add_message(message);
+    }
+    Ok(response.add_event(
+        Event::new("hack_juno_registry.registration_bond_claimed")
+            .add_attribute("project_id", project_id.to_string())
+            .add_attribute("depositor", info.sender)
+            .add_attribute("amount", amount),
+    ))
 }
 
 fn execute_stop(
@@ -910,6 +782,10 @@ fn query_inner(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractEr
         QueryMsg::Config {} => Ok(to_json_binary(&CONFIG.load(deps.storage)?)?),
         QueryMsg::Pause {} => Ok(to_json_binary(&PAUSE.load(deps.storage)?)?),
         QueryMsg::Accounting {} => Ok(to_json_binary(&ACCOUNTING.load(deps.storage)?)?),
+        QueryMsg::IdentityState {} => Ok(to_json_binary(&IdentityStateResponse {
+            next_project_id: NEXT_PROJECT_ID.load(deps.storage)?,
+            consumed_source_bounties: SOURCE_BOUNTY_COUNT.load(deps.storage)?,
+        })?),
         QueryMsg::Health {} => {
             let config = CONFIG.load(deps.storage)?;
             let accounting = ACCOUNTING.load(deps.storage)?;
@@ -924,10 +800,10 @@ fn query_inner(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractEr
             })?)
         }
         QueryMsg::Project { project_id } => {
-            Ok(to_json_binary(&load_project(deps.storage, &project_id)?)?)
+            Ok(to_json_binary(&load_project(deps.storage, project_id)?)?)
         }
         QueryMsg::Projects { start_after, limit } => {
-            let start = start_after.as_deref().map(Bound::exclusive);
+            let start = start_after.map(Bound::exclusive);
             let projects = PROJECTS
                 .range(deps.storage, start, None, Order::Ascending)
                 .take(page_limit(deps.storage, limit)?)
@@ -936,13 +812,13 @@ fn query_inner(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractEr
             Ok(to_json_binary(&ProjectsResponse { projects })?)
         }
         QueryMsg::Applications { start_after, limit } => {
-            let start = start_after.as_deref().map(Bound::exclusive);
+            let start = start_after.map(Bound::exclusive);
             let projects = APPLICATIONS
                 .range(deps.storage, start, None, Order::Ascending)
                 .take(page_limit(deps.storage, limit)?)
                 .map(|item| {
                     let (id, _) = item?;
-                    PROJECTS.load(deps.storage, &id)
+                    PROJECTS.load(deps.storage, id)
                 })
                 .collect::<StdResult<Vec<_>>>()?;
             Ok(to_json_binary(&ProjectsResponse { projects })?)
@@ -952,9 +828,9 @@ fn query_inner(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractEr
             start_after,
             limit,
         } => {
-            load_project(deps.storage, &project_id)?;
+            load_project(deps.storage, project_id)?;
             let entries = STATUS_HISTORY
-                .prefix(project_id.as_str())
+                .prefix(project_id)
                 .range(
                     deps.storage,
                     start_after.map(Bound::exclusive),
@@ -971,9 +847,9 @@ fn query_inner(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractEr
             start_after,
             limit,
         } => {
-            load_project(deps.storage, &project_id)?;
+            load_project(deps.storage, project_id)?;
             let entries = ADDRESS_HISTORY
-                .prefix(project_id.as_str())
+                .prefix(project_id)
                 .range(
                     deps.storage,
                     start_after.map(Bound::exclusive),
@@ -1019,7 +895,7 @@ pub(crate) fn sample_gauge_messages(
     storage: &dyn Storage,
     selected: Vec<(String, Decimal)>,
     epoch_budget: Uint128,
-    available_balance: Uint128,
+    _available_balance: Uint128,
     denom: String,
 ) -> Result<SampleGaugeMsgsResponse, ContractError> {
     let config = CONFIG.load(storage)?;
@@ -1031,9 +907,6 @@ pub(crate) fn sample_gauge_messages(
     }
     if epoch_budget > config.epoch_ceiling {
         return Err(ContractError::EpochCeilingExceeded);
-    }
-    if available_balance < epoch_budget {
-        return Err(ContractError::InsufficientAvailableBalance);
     }
     if selected.len() > config.max_selected_projects as usize + 1 {
         return Err(ContractError::InvalidAllocation(
@@ -1076,8 +949,9 @@ pub(crate) fn sample_gauge_messages(
         if option == DO_NOT_DISTRIBUTE {
             continue;
         }
+        let project_id = decode_project_option(&option)?;
         let project = PROJECTS
-            .may_load(storage, &option)?
+            .may_load(storage, project_id)?
             .ok_or_else(|| ContractError::InvalidAllocation(format!("unknown option: {option}")))?;
         if project.status != ProjectStatus::Active {
             continue;
@@ -1136,20 +1010,50 @@ fn validate_config(config: &Config) -> Result<(), ContractError> {
     Ok(())
 }
 
-fn validate_project_id(id: &str) -> Result<(), ContractError> {
-    if id == DO_NOT_DISTRIBUTE
-        || id.len() < 3
-        || id.len() > 64
-        || !id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-    {
-        return Err(ContractError::InvalidMetadata(
-            "project id must be 3-64 lowercase ASCII letters, digits, or hyphens and not reserved"
-                .into(),
+fn allocate_project_id(storage: &mut dyn Storage) -> Result<u64, ContractError> {
+    let project_id = NEXT_PROJECT_ID.load(storage)?;
+    if project_id == 0 {
+        return Err(ContractError::InvalidConfiguration(
+            "next project id must be positive".into(),
         ));
     }
-    Ok(())
+    let next = project_id
+        .checked_add(1)
+        .ok_or_else(|| ContractError::InvalidConfiguration("project id space exhausted".into()))?;
+    NEXT_PROJECT_ID.save(storage, &next)?;
+    Ok(project_id)
+}
+
+pub fn encode_project_option(id: u64) -> Result<String, ContractError> {
+    if id == 0 {
+        return Err(ContractError::InvalidMetadata(
+            "project id must be positive".into(),
+        ));
+    }
+    Ok(format!("project:{id}"))
+}
+
+pub fn decode_project_option(option: &str) -> Result<u64, ContractError> {
+    let raw = option
+        .strip_prefix("project:")
+        .ok_or_else(|| ContractError::InvalidAllocation("malformed project option".into()))?;
+    if raw.is_empty()
+        || (raw.len() > 1 && raw.starts_with('0'))
+        || !raw.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(ContractError::InvalidAllocation(
+            "malformed project option".into(),
+        ));
+    }
+    let id = raw
+        .parse::<u64>()
+        .map_err(|_| ContractError::InvalidAllocation("malformed project option".into()))?;
+    if encode_project_option(id)? != option {
+        return Err(ContractError::InvalidAllocation(
+            "malformed project option".into(),
+        ));
+    }
+    Ok(id)
 }
 
 fn validate_metadata(uri: &str, digest: &str, config: &Config) -> Result<(), ContractError> {
@@ -1213,9 +1117,329 @@ fn ensure_admissions_open(storage: &dyn Storage) -> Result<(), ContractError> {
     Ok(())
 }
 
-fn ensure_new_project(storage: &dyn Storage, id: &str) -> Result<(), ContractError> {
-    if PROJECTS.has(storage, id) {
-        return Err(ContractError::DuplicateProject);
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum ProjectTransition {
+    ReviewNoChange,
+    Approve,
+    SoftReject,
+    HardReject,
+    CuratorSuspend,
+    GovernorSuspend,
+    GovernorResume,
+    Retire,
+    GovernorRetire,
+    GovernorRestore,
+    Claim,
+}
+
+struct ProjectTransitionResult {
+    project: Project,
+    transfer: Option<BankMsg>,
+}
+
+/// The only mutation path for an existing project's status, bond, option
+/// membership, pending/active counts, and bond liability. It validates caller
+/// authority and the typed reason before checking the complete stored-state
+/// invariant and applying the requested transition atomically.
+fn apply_project_transition(
+    deps: DepsMut,
+    env: &Env,
+    info: &MessageInfo,
+    project_id: u64,
+    transition: ProjectTransition,
+    reason: Option<&ReviewReason>,
+) -> Result<ProjectTransitionResult, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let mut project = load_project(deps.storage, project_id)?;
+
+    match transition {
+        ProjectTransition::ReviewNoChange
+        | ProjectTransition::Approve
+        | ProjectTransition::SoftReject
+        | ProjectTransition::HardReject
+        | ProjectTransition::CuratorSuspend => {
+            if info.sender != config.curator {
+                return Err(ContractError::Unauthorized);
+            }
+        }
+        ProjectTransition::Retire => {
+            if info.sender != config.curator && info.sender != project.owner {
+                return Err(ContractError::Unauthorized);
+            }
+        }
+        ProjectTransition::GovernorSuspend
+        | ProjectTransition::GovernorResume
+        | ProjectTransition::GovernorRetire
+        | ProjectTransition::GovernorRestore => {
+            if info.sender != config.governor {
+                return Err(ContractError::Unauthorized);
+            }
+        }
+        ProjectTransition::Claim => {
+            let bond = project
+                .bond
+                .as_ref()
+                .ok_or(ContractError::BondNotClaimable)?;
+            if info.sender != bond.depositor {
+                return Err(ContractError::Unauthorized);
+            }
+            if bond.state != BondState::Claimable {
+                return Err(ContractError::BondNotClaimable);
+            }
+        }
+    }
+
+    if transition == ProjectTransition::Claim {
+        if reason.is_some() {
+            return Err(ContractError::InvalidState);
+        }
+    } else {
+        let reason = reason.ok_or(ContractError::InvalidState)?;
+        validate_reason(reason, &config)?;
+        if transition == ProjectTransition::HardReject
+            && !matches!(
+                reason.code,
+                ReviewReasonCode::Spam | ReviewReasonCode::PolicyViolation
+            )
+        {
+            return Err(ContractError::InvalidMetadata(
+                "hard rejection requires spam or policy_violation reason".into(),
+            ));
+        }
+        if transition == ProjectTransition::Retire
+            && info.sender == project.owner
+            && reason.code != ReviewReasonCode::VoluntaryRetirement
+        {
+            return Err(ContractError::InvalidMetadata(
+                "owner retirement requires voluntary_retirement reason".into(),
+            ));
+        }
+    }
+
+    validate_project_transition(deps.as_ref(), env, &project, transition)?;
+
+    let old_status = project.status.clone();
+    let mut transfer = None;
+    let history_action = match transition {
+        ProjectTransition::ReviewNoChange => Some(StatusAction::Reviewed {
+            decision: ReviewDecision::RequestChanges,
+        }),
+        ProjectTransition::Approve => {
+            APPLICATIONS.remove(deps.storage, project_id);
+            decrement_pending_application(deps.storage)?;
+            add_active_option(deps.storage, project_id)?;
+            project.status = ProjectStatus::Active;
+            Some(StatusAction::Reviewed {
+                decision: ReviewDecision::Approve,
+            })
+        }
+        ProjectTransition::SoftReject => {
+            APPLICATIONS.remove(deps.storage, project_id);
+            let (depositor, amount) =
+                dispose_bond(&mut project, BondState::Refunded, deps.storage, false)?;
+            decrement_pending_application(deps.storage)?;
+            project.status = ProjectStatus::Rejected;
+            transfer = Some(BankMsg::Send {
+                to_address: depositor.to_string(),
+                amount: vec![Coin::new(amount.u128(), config.native_denom.clone())],
+            });
+            Some(StatusAction::Reviewed {
+                decision: ReviewDecision::SoftReject,
+            })
+        }
+        ProjectTransition::HardReject => {
+            APPLICATIONS.remove(deps.storage, project_id);
+            let (_, amount) = dispose_bond(&mut project, BondState::Forfeited, deps.storage, true)?;
+            decrement_pending_application(deps.storage)?;
+            project.status = ProjectStatus::Rejected;
+            transfer = Some(BankMsg::Send {
+                to_address: config.spam_destination.to_string(),
+                amount: vec![Coin::new(amount.u128(), config.native_denom.clone())],
+            });
+            Some(StatusAction::Reviewed {
+                decision: ReviewDecision::HardReject,
+            })
+        }
+        ProjectTransition::CuratorSuspend | ProjectTransition::GovernorSuspend => {
+            remove_active_option(deps.storage, project_id)?;
+            project.status = ProjectStatus::Suspended;
+            Some(if transition == ProjectTransition::CuratorSuspend {
+                StatusAction::Suspended
+            } else {
+                StatusAction::GovernorOverride
+            })
+        }
+        ProjectTransition::GovernorResume => {
+            add_active_option(deps.storage, project_id)?;
+            project.status = ProjectStatus::Active;
+            Some(StatusAction::GovernorOverride)
+        }
+        ProjectTransition::Retire | ProjectTransition::GovernorRetire => {
+            if project.status == ProjectStatus::Active {
+                remove_active_option(deps.storage, project_id)?;
+            }
+            make_bond_claimable(&mut project)?;
+            project.status = ProjectStatus::Retired;
+            Some(if transition == ProjectTransition::Retire {
+                StatusAction::Retired
+            } else {
+                StatusAction::GovernorOverride
+            })
+        }
+        ProjectTransition::GovernorRestore => {
+            if let Some(bond) = project.bond.as_mut() {
+                bond.state = BondState::Deposited;
+            }
+            add_active_option(deps.storage, project_id)?;
+            project.status = ProjectStatus::Active;
+            Some(StatusAction::GovernorOverride)
+        }
+        ProjectTransition::Claim => {
+            let bond = project
+                .bond
+                .as_mut()
+                .ok_or(ContractError::BondNotClaimable)?;
+            let amount = bond.amount;
+            bond.state = BondState::Claimed;
+            ACCOUNTING.update(deps.storage, |mut accounting| -> Result<_, ContractError> {
+                accounting.bond_liability = accounting.bond_liability.checked_sub(amount)?;
+                accounting.lifetime_bonds_refunded =
+                    accounting.lifetime_bonds_refunded.checked_add(amount)?;
+                Ok(accounting)
+            })?;
+            transfer = Some(BankMsg::Send {
+                to_address: info.sender.to_string(),
+                amount: vec![Coin::new(amount.u128(), config.native_denom)],
+            });
+            None
+        }
+    };
+
+    project.updated_at = env.block.time;
+    if let Some(action) = history_action {
+        let reason = reason.cloned().ok_or(ContractError::InvalidState)?;
+        project.latest_review = Some(reason.clone());
+        let new_status = project.status.clone();
+        append_status_history(
+            deps.storage,
+            &mut project,
+            Some(old_status),
+            new_status,
+            action,
+            Some(reason),
+            &info.sender,
+            env.block.time,
+        )?;
+    }
+    PROJECTS.save(deps.storage, project_id, &project)?;
+
+    Ok(ProjectTransitionResult { project, transfer })
+}
+
+/// Stored-state invariant gate used only by `apply_project_transition`.
+pub(crate) fn validate_project_transition(
+    deps: Deps,
+    env: &Env,
+    project: &Project,
+    transition: ProjectTransition,
+) -> Result<(), ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let accounting = ACCOUNTING.load(deps.storage)?;
+    let actual_balance = deps
+        .querier
+        .query_balance(env.contract.address.clone(), config.native_denom)?
+        .amount;
+    if accounting.bond_liability > actual_balance {
+        return Err(ContractError::InvalidState);
+    }
+
+    let bonded_state = match (&project.provenance, &project.bond) {
+        (AdmissionProvenance::BondedRegistration { .. }, Some(bond)) => Some(&bond.state),
+        (AdmissionProvenance::GraduatedBounty { .. }, None) => None,
+        _ => return Err(ContractError::InvalidState),
+    };
+    let option = encode_project_option(project.id)?;
+    let option_present = OPTIONS.has(deps.storage, &option);
+    let application_present = APPLICATIONS.has(deps.storage, project.id);
+    if option_present != (project.status == ProjectStatus::Active)
+        || application_present != (project.status == ProjectStatus::Pending)
+    {
+        return Err(ContractError::InvalidState);
+    }
+    if matches!(
+        project.status,
+        ProjectStatus::Active | ProjectStatus::Suspended
+    ) && bonded_state.is_some_and(|state| *state != BondState::Deposited)
+    {
+        return Err(ContractError::InvalidState);
+    }
+
+    let valid = matches!(
+        (transition, &project.status, bonded_state),
+        (
+            ProjectTransition::ReviewNoChange,
+            ProjectStatus::Pending,
+            Some(BondState::Deposited)
+        ) | (
+            ProjectTransition::Approve,
+            ProjectStatus::Pending,
+            Some(BondState::Deposited)
+        ) | (
+            ProjectTransition::SoftReject,
+            ProjectStatus::Pending,
+            Some(BondState::Deposited)
+        ) | (
+            ProjectTransition::HardReject,
+            ProjectStatus::Pending,
+            Some(BondState::Deposited)
+        ) | (
+            ProjectTransition::CuratorSuspend | ProjectTransition::GovernorSuspend,
+            ProjectStatus::Active,
+            Some(BondState::Deposited)
+        ) | (
+            ProjectTransition::CuratorSuspend | ProjectTransition::GovernorSuspend,
+            ProjectStatus::Active,
+            None
+        ) | (
+            ProjectTransition::GovernorResume,
+            ProjectStatus::Suspended,
+            Some(BondState::Deposited)
+        ) | (
+            ProjectTransition::GovernorResume,
+            ProjectStatus::Suspended,
+            None
+        ) | (
+            ProjectTransition::Retire | ProjectTransition::GovernorRetire,
+            ProjectStatus::Active | ProjectStatus::Suspended,
+            Some(BondState::Deposited),
+        ) | (
+            ProjectTransition::Retire | ProjectTransition::GovernorRetire,
+            ProjectStatus::Active | ProjectStatus::Suspended,
+            None
+        ) | (
+            ProjectTransition::GovernorRestore,
+            ProjectStatus::Retired,
+            Some(BondState::Claimable)
+        ) | (
+            ProjectTransition::GovernorRestore,
+            ProjectStatus::Retired,
+            None
+        ) | (
+            ProjectTransition::Claim,
+            ProjectStatus::Retired,
+            Some(BondState::Claimable)
+        )
+    );
+    if !valid {
+        return Err(ContractError::InvalidState);
+    }
+    if matches!(
+        transition,
+        ProjectTransition::Approve
+            | ProjectTransition::GovernorResume
+            | ProjectTransition::GovernorRestore
+    ) {
+        ensure_active_capacity(deps.storage)?;
     }
     Ok(())
 }
@@ -1228,9 +1452,10 @@ fn ensure_active_capacity(storage: &dyn Storage) -> Result<(), ContractError> {
     Ok(())
 }
 
-fn add_active_option(storage: &mut dyn Storage, id: &str) -> Result<(), ContractError> {
+fn add_active_option(storage: &mut dyn Storage, id: u64) -> Result<(), ContractError> {
     ensure_active_capacity(storage)?;
-    OPTIONS.save(storage, id, &())?;
+    let option = encode_project_option(id)?;
+    OPTIONS.save(storage, &option, &())?;
     ACCOUNTING.update(storage, |mut accounting| -> Result<_, ContractError> {
         accounting.active_projects = accounting
             .active_projects
@@ -1241,8 +1466,9 @@ fn add_active_option(storage: &mut dyn Storage, id: &str) -> Result<(), Contract
     Ok(())
 }
 
-fn remove_active_option(storage: &mut dyn Storage, id: &str) -> Result<(), ContractError> {
-    OPTIONS.remove(storage, id);
+fn remove_active_option(storage: &mut dyn Storage, id: u64) -> Result<(), ContractError> {
+    let option = encode_project_option(id)?;
+    OPTIONS.remove(storage, &option);
     ACCOUNTING.update(storage, |mut accounting| -> Result<_, ContractError> {
         accounting.active_projects = accounting
             .active_projects
@@ -1253,7 +1479,7 @@ fn remove_active_option(storage: &mut dyn Storage, id: &str) -> Result<(), Contr
     Ok(())
 }
 
-fn load_project(storage: &dyn Storage, id: &str) -> Result<Project, ContractError> {
+fn load_project(storage: &dyn Storage, id: u64) -> Result<Project, ContractError> {
     PROJECTS
         .may_load(storage, id)?
         .ok_or(ContractError::NotFound)
@@ -1332,9 +1558,9 @@ fn append_status_history(
         .ok_or_else(|| ContractError::InvalidConfiguration("history overflow".into()))?;
     STATUS_HISTORY.save(
         storage,
-        (project.id.as_str(), project.status_history_count),
+        (project.id, project.status_history_count),
         &StatusHistoryEntry {
-            project_id: project.id.clone(),
+            project_id: project.id,
             sequence: project.status_history_count,
             from,
             to,
@@ -1382,9 +1608,9 @@ fn append_address_history_with_old(
         .ok_or_else(|| ContractError::InvalidConfiguration("address history overflow".into()))?;
     ADDRESS_HISTORY.save(
         storage,
-        (project.id.as_str(), project.address_history_count),
+        (project.id, project.address_history_count),
         &AddressHistoryEntry {
-            project_id: project.id.clone(),
+            project_id: project.id,
             sequence: project.address_history_count,
             action,
             old_address,

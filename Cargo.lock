@@ -661,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "hack-juno-registry-adapter"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -670,6 +670,7 @@ dependencies = [
  "cw2",
  "juno-voice-bounties",
  "proptest",
+ "serde",
  "thiserror 1.0.69",
 ]
 
@@ -745,12 +746,13 @@ dependencies = [
 
 [[package]]
 name = "juno-voice-bounties"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
  "cw-storage-plus",
+ "cw-utils",
  "cw2",
  "proptest",
  "thiserror 1.0.69",

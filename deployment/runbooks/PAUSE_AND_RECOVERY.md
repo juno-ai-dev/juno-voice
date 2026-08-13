@@ -31,15 +31,21 @@ epoch, or migrate code.
 ## Failed epoch or adapter
 
 Do not mutate tallies, top up an epoch beyond its configured budget, or manually
-pay selected recipients. If execution failed atomically, preserve the open epoch
-and diagnose the voting-source query, current project eligibility, vault
-balance, and adapter response. Suspend a bad project or stop the gauge if
-necessary. Resume/retry only after the Program Vault governance path has
-approved the specific recovery and all preconditions query cleanly.
+pay selected recipients. If an adapter error leaves the epoch open, diagnose the
+voting-source query, current project eligibility, Vault balance, and adapter
+response. A safe transient failure may be retried only through the normal public
+execute path and only through `execution_deadline`. At the deadline anyone may
+expire the epoch. For an unrecoverable adapter or code fault, Program Vault
+governance may abort before the deadline with a recorded reason. The guardian
+cannot abort.
 
 Failed turnout is terminal. It is not an incident requiring retry: record the
 no-distribution outcome and retained vault balance. Never roll it into the next
 epoch.
+
+Execution-time balance below actual `emitted_value` is also terminal and sends
+nothing. A later top-up must not make that epoch executable. Record the
+`required` and `available` values and reconcile the full budget as retained.
 
 ## Governor recovery
 
@@ -53,6 +59,6 @@ epoch.
 6. Record the decision, proposal and transaction references, reviewers, and any
    monitoring changes.
 
-Changing immutable terms, bypassing contributor ratification, migrating v1
+Changing immutable terms, bypassing contributor ratification, importing old
 state, or replacing code requires a new specification and release review, not
 an emergency shortcut.

@@ -40,7 +40,7 @@ def load_transcript(path: Path) -> dict[str, Any]:
         value = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise CaptureError(f"cannot read transcript {path}: {error}") from error
-    if value.get("schema_version") != "juno-voice/uni7-scenario-transcript/v1":
+    if value.get("schema_version") != "juno-voice/uni7-scenario-transcript/v2":
         raise CaptureError("transcript schema is invalid")
     if value.get("passed") is True:
         raise CaptureError("finalized transcript is immutable")
@@ -277,7 +277,7 @@ def command_init(args: argparse.Namespace, config: dict[str, Any], state: dict[s
     if not isinstance(verification, dict) or "sha256" not in verification:
         raise CaptureError("deployment state is not chain-verified")
     transcript = {
-        "schema_version": "juno-voice/uni7-scenario-transcript/v1",
+        "schema_version": "juno-voice/uni7-scenario-transcript/v2",
         "scenario_id": args.scenario,
         "chain_id": config["chain"]["chain_id"],
         "config_sha256": deploy.config_hash(config),

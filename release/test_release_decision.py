@@ -64,7 +64,7 @@ class ReleaseDecisionTests(unittest.TestCase):
         signature_path.unlink(missing_ok=True)
         message.write_text(prepared["signed_payload_sha256"] + "\n")
         subprocess.run(
-            ["ssh-keygen", "-Y", "sign", "-q", "-f", str(self.key), "-n", "juno-voice-release-v1", str(message)],
+            ["ssh-keygen", "-Y", "sign", "-q", "-f", str(self.key), "-n", "juno-voice-release-v2", str(message)],
             check=True,
         )
         signature = message.with_suffix(message.suffix + ".sig").read_text()
@@ -72,7 +72,7 @@ class ReleaseDecisionTests(unittest.TestCase):
             "identity": "release-authority",
             "payload_sha256": prepared["signed_payload_sha256"],
             "method": "sshsig",
-            "namespace": "juno-voice-release-v1",
+            "namespace": "juno-voice-release-v2",
             "signature": signature,
         }
 

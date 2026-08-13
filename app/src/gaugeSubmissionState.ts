@@ -3,7 +3,7 @@ import { GAUGE_ID } from "./gauge";
 import type { GaugeAction } from "./gaugeActions";
 
 const STORAGE_PREFIX = "juno-voice:gauge-submission:v1";
-const actions = new Set<GaugeAction>(["open_epoch", "place_votes", "remove_votes", "execute"]);
+const actions = new Set<GaugeAction>(["open_epoch", "place_votes", "remove_votes", "execute", "expire_epoch"]);
 
 export interface GaugeSubmissionScope { sender: string; chainId: string; contract: string; gaugeId: typeof GAUGE_ID }
 export type GaugeContractScope = Omit<GaugeSubmissionScope, "sender">;
@@ -112,7 +112,7 @@ export function gaugeActionFromReview(message: Readonly<Record<string, unknown>>
   if (fields.length !== 1) return null;
   const field = fields[0], body = message[field];
   if (!plain(body) || body.gauge !== GAUGE_ID) return null;
-  if ((field === "open_epoch" || field === "execute") && exact(body, ["gauge"])) return field;
+  if ((field === "open_epoch" || field === "execute" || field === "expire_epoch") && exact(body, ["gauge"])) return field;
   if (field !== "place_votes" || !exact(body, ["gauge", "votes"])) return null;
   if (body.votes === null) return "remove_votes";
   return Array.isArray(body.votes) ? "place_votes" : null;

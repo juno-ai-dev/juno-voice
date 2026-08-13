@@ -34,7 +34,7 @@ export function confirmGaugeMutation({ action, events, refreshed, before, sender
   sender: string; executeMessage: Readonly<Record<string, unknown>>; funds: readonly Coin[];
 }) {
   if (funds.length !== 0) throw new Error("Gauge actions must not attach funds.");
-  const expectedAction = action === "open_epoch" ? "open_snapshot_epoch" : action === "execute" ? "execute_snapshot_epoch" : "place_snapshot_vote";
+  const expectedAction = action === "open_epoch" ? "open_snapshot_epoch" : action === "execute" ? "execute_snapshot_epoch" : action === "expire_epoch" ? "expire_snapshot_epoch" : "place_snapshot_vote";
   const matchingEvents = events.filter((item) => attribute(item, "action") === expectedAction);
   const event = matchingEvents.length === 1 ? matchingEvents[0] : undefined;
   if (!event || attribute(event, "gauge_id") !== String(GAUGE_ID) || attribute(event, "sender") !== sender) throw new Error("Gauge event mismatch.");
@@ -46,10 +46,15 @@ export function confirmGaugeMutation({ action, events, refreshed, before, sender
   }
   const epoch = refreshed.data.current;
   if (!epoch || epoch.epochId !== before.data.current?.epochId || attribute(event, "epoch_id") !== String(epoch.epochId)) throw new Error("Canonical epoch identity changed after gauge mutation.");
-  if (action === "execute") {
+  if (action === "execute" || action === "expire_epoch") {
     if (epoch.outcome === "open") throw new Error("Epoch execution is not canonically terminal.");
+    if (action === "expire_epoch" && epoch.outcome !== "expired") throw new Error("Epoch expiry was not canonically recorded.");
     const expected = epoch.outcome === "distributed" ? "distributed" : epoch.outcome;
-    if (attribute(event, "outcome") !== expected) throw new Error("Epoch execution outcome did not match canonical state.");
+    if (attribute(event, "outcome") !== expected || attribute(event, "participating_power") !== epoch.participatingPower ||
+      attribute(event, "allocated_power") !== epoch.allocatedPower || attribute(event, "unallocated_power") !== epoch.unallocatedPower ||
+      attribute(event, "selected_project_power") !== epoch.selectedProjectPower || attribute(event, "emitted_value") !== epoch.emittedValue ||
+      attribute(event, "retained_value") !== epoch.retainedValue || attribute(event, "execution_deadline") !== String(epoch.executionDeadline))
+      throw new Error("Epoch execution outcome did not match canonical state.");
     return;
   }
   const body = messageBody(executeMessage, "place_votes"), votes = body.votes;

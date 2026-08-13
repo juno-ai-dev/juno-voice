@@ -37,6 +37,14 @@ function structuredTxHash(error: unknown): string | undefined {
   return [value.txId, value.txHash, value.transactionHash]
     .find((candidate): candidate is string => typeof candidate === "string" && candidate.trim().length > 0);
 }
+function registryProjectId(events: readonly { type: string; attributes: readonly { key: string; value: string }[] }[], action: RegistryAction): number {
+  const name = `hack_juno_registry.${action === "register_project" ? "project_registered" : action === "update_pending_metadata" ? "pending_metadata_updated" : action === "propose_payout_address" ? "payout_address_proposed" : action === "cancel_payout_address_change" ? "payout_address_cancelled" : action === "accept_payout_address" ? "payout_address_accepted" : action === "retire" ? "project_retired" : "registration_bond_claimed"}`;
+  const matches = events.filter((event) => event.type === name || event.type === `wasm-${name}`);
+  const raw = matches[0]?.attributes.find((item) => item.key === "project_id")?.value;
+  const id = typeof raw === "string" && /^[1-9]\d*$/.test(raw) ? Number(raw) : NaN;
+  if (matches.length !== 1 || !Number.isSafeInteger(id)) throw new Error("Canonical registry project ID is unavailable.");
+  return id;
+}
 
 export type BrowserTransactionAccess = BountyTransactionAccess & RegistryTransactionFlow & GaugeTransactionFlow;
 
@@ -81,17 +89,18 @@ export function createBrowserTransactionAccess(
     if (expectedIntent.contract === config.registryContract) {
       if (!registrySource) throw new Error("Canonical registry state is unavailable.");
       const body = expectedIntent.executeMessage[action];
-      const projectId = body && typeof body === "object" && !Array.isArray(body)
+      const rawProjectId = body && typeof body === "object" && !Array.isArray(body)
         ? (body as { project_id?: unknown }).project_id
         : undefined;
-      if (typeof projectId !== "string") throw new Error("Registry project identity is unavailable.");
-      const context = await registrySource.loadActionContext(projectId, action === "register_project");
+      const projectId = action === "register_project" ? null : rawProjectId;
+      if (projectId !== null && (!Number.isSafeInteger(projectId) || (projectId as number) <= 0)) throw new Error("Registry project identity is unavailable.");
+      const context = await registrySource.loadActionContext(projectId as number | null);
       const sender = wallet.snapshot().identity?.address;
       if (!sender) throw new Error("Wallet identity is unavailable for canonical authorization.");
       const value = body as Record<string, unknown>;
       const input: RegistryActionInput = {
         action: action as RegistryAction,
-        projectId,
+        projectId: projectId as number | null,
         metadataUri: typeof value.metadata_uri === "string" ? value.metadata_uri : "",
         metadataDigest: typeof value.metadata_digest === "string" ? value.metadata_digest : "",
         address: typeof value.payout_address === "string" ? value.payout_address : typeof value.address === "string" ? value.address : "",
@@ -117,6 +126,7 @@ export function createBrowserTransactionAccess(
   };
   const client = async () => SigningCosmWasmClient.connectWithSigner(config.rpc, extension.getOfflineSigner(config.chainId));
   const flow = createTransactionFlow({
+    contracts: config,
     wallet, readCanonicalState,
     estimateFee: async (request) => {
       const signing = await client();
@@ -145,8 +155,9 @@ export function createBrowserTransactionAccess(
           if (!registrySource) throw new Error("Canonical registry state is unavailable.");
           const registryAction = action as RegistryAction;
           const body = request.executeMessage[registryAction] as { project_id?: unknown } | undefined;
-          if (typeof body?.project_id !== "string") throw new Error("Canonical registry project could not be refreshed.");
-          const refreshed = await registrySource.loadActionContext(body.project_id, false);
+          const projectId = registryAction === "register_project" ? registryProjectId(events, registryAction) : body?.project_id;
+          if (!Number.isSafeInteger(projectId) || (projectId as number) <= 0) throw new Error("Canonical registry project could not be refreshed.");
+          const refreshed = await registrySource.loadActionContext(projectId as number);
           confirmRegistryMutation({ action: registryAction, events, refreshed, sender: request.sender,
            executeMessage: request.executeMessage, funds: request.funds });
           return { status: "confirmed" as const, txHash, height: result.height };
@@ -189,8 +200,11 @@ export function createBrowserTransactionAccess(
         if (!registrySource) throw new Error("Canonical registry state is unavailable.");
         const action = Object.keys(expectedIntent.executeMessage)[0];
         const body = expectedIntent.executeMessage[action] as { project_id?: unknown } | undefined;
-        if (typeof body?.project_id !== "string") throw new Error("Registry project identity is unavailable.");
-        await registrySource.loadActionContext(body.project_id, false);
+        if (action === "register_project") await registrySource.loadRegistry();
+        else {
+          if (!Number.isSafeInteger(body?.project_id) || (body?.project_id as number) <= 0) throw new Error("Registry project identity is unavailable.");
+          await registrySource.loadActionContext(body?.project_id as number);
+        }
       } else if (expectedIntent?.contract === config.gaugeContract) {
         if (!gaugeSource) throw new Error("Canonical gauge state is unavailable.");
         const sender = wallet.snapshot().identity?.address;

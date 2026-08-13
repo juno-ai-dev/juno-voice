@@ -15,8 +15,9 @@ export interface BountyTransactionAccess {
 }
 type ReviewState = { review: TransactionReview; submitting: boolean } | null;
 
-export function BountyActions({ canonical, access, stale, bounty, contributions = [], settlement }: {
+export function BountyActions({ canonical, access, stale, bountyContract, bounty, contributions = [], settlement }: {
   canonical: EligibilityState; access?: BountyTransactionAccess; stale: boolean;
+  bountyContract: string;
   bounty?: Bounty; contributions?: readonly Contribution[]; settlement?: SettlementState;
 }) {
   const [creating, setCreating] = useState(false);
@@ -70,9 +71,9 @@ export function BountyActions({ canonical, access, stale, bounty, contributions 
     <p className="eyebrow">OPTIONAL WALLET ACTION · READ BEFORE SIGNING</p>
     {bounty ? <>{bounty.status === "open" && BigInt(canonical.chainTimeNanos) < BigInt(bounty.expires_at) &&
       <ContributeForm bounty={bounty} disabled={submissionLocked} onPrepare={(value) => act((sender) =>
-        contributeIntent(bounty, value, sender, contributions.map((item) => item.contributor), canonical))} />}
-      {settlement && <SettlementControls state={settlement} disabled={submissionLocked} onPrepare={(make) => act(make)} />}</> :
-      <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical))} />}
+        contributeIntent(bounty, value, sender, contributions.map((item) => item.contributor), canonical, bountyContract))} />}
+      {settlement && <SettlementControls state={settlement} bountyContract={bountyContract} disabled={submissionLocked} onPrepare={(make) => act(make)} />}</> :
+      <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical, bountyContract))} />}
     {bounty && <p className="chain-time">Deadlines are checked against Juno network time.</p>}
     {!access && <p>Wallet actions are unavailable in this environment. Browsing does not require a wallet.</p>}
     {message && <p role="status" className="notice">{message}</p>}
@@ -108,8 +109,8 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
     const f = new FormData(event.currentTarget); onPrepare({
     title: String(f.get("title")), summary: String(f.get("summary")), acceptanceCriteria: String(f.get("criteria")),
     contentUri: String(f.get("uri")), contentDigest: String(f.get("digest")), expiresAtNanos: exactExpiry, initialJuno: String(f.get("amount")),
-    ...(["projectId", "projectUri", "projectDigest"].some((name) => String(f.get(name)).trim()) ? { projectCandidate: {
-      projectId: String(f.get("projectId")), metadataUri: String(f.get("projectUri")), metadataDigest: String(f.get("projectDigest")),
+    ...(["projectUri", "projectDigest"].some((name) => String(f.get(name)).trim()) ? { projectCandidate: {
+      metadataUri: String(f.get("projectUri")), metadataDigest: String(f.get("projectDigest")),
     } } : {}),
   }); }}>
     <h2 id="create-title">Create a bounty</h2>
@@ -145,10 +146,9 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
       <summary>Propose a project candidate <span>Optional</span></summary>
       <div className="disclosure-help">
         <strong>What is a project candidate?</strong>
-        <p>It links this bounty to a proposed project identity and metadata. A candidate is only a proposal: creating the bounty does not register, endorse, or graduate the project. Graduation is a separate authorized action after the relevant checks.</p>
+        <p>It links this bounty to proposed project metadata. A candidate is only a proposal: creating the bounty does not allocate a registry ID, endorse, or graduate the project. Graduation is a separate authorized action; the registry assigns the numeric ID atomically.</p>
       </div>
       <div className="action-grid">
-        <label>Project ID<span className="field-hint">3–64 lowercase letters, numbers, or hyphens</span><input name="projectId" pattern="[a-z0-9-]{3,64}" placeholder="developer-quickstart" /></label>
         <label>Project metadata URI<span className="field-hint">HTTPS or IPFS; required with a candidate</span><input name="projectUri" type="url" placeholder="ipfs://… or https://…" /></label>
         <div className="wide"><HashDigestField name="projectDigest" label="Project metadata SHA-256 digest" fileLabel="Calculate project metadata digest from file" /></div>
       </div>
@@ -212,8 +212,9 @@ function ContributeForm({ bounty, disabled, onPrepare }: { bounty: Bounty; disab
     <button className="button" type="submit" disabled={disabled}>Connect and review contribution</button>
   </form>;
 }
-function SettlementControls({ state, disabled, onPrepare }: {
-  state: SettlementState; disabled: boolean; onPrepare: (make: (sender: string) => TransactionIntent) => void;
+function SettlementControls({ state, bountyContract, disabled, onPrepare }: {
+  state: SettlementState; bountyContract: string; disabled: boolean;
+  onPrepare: (make: (sender: string) => TransactionIntent) => void;
 }) {
   const b = state.bounty, round = state.activeRound, now = BigInt(state.chainTimeNanos);
   const closed = Boolean(round?.closes_at && now >= BigInt(round.closes_at));
@@ -222,7 +223,7 @@ function SettlementControls({ state, disabled, onPrepare }: {
     <p>All actor, state, round, and deadline checks use the canonical detail shown below and are rechecked immediately before signing.</p>
     {b.status === "open" && now < BigInt(b.expires_at) && <form onSubmit={(event) => { event.preventDefault(); const f = new FormData(event.currentTarget);
       onPrepare((sender) => nominatePayoutIntent(state, sender, { recipient: String(f.get("recipient")),
-        evidenceUri: String(f.get("evidenceUri")), evidenceDigest: String(f.get("evidenceDigest")), rationale: String(f.get("nominationRationale")) })); }}>
+        evidenceUri: String(f.get("evidenceUri")), evidenceDigest: String(f.get("evidenceDigest")), rationale: String(f.get("nominationRationale")) }, bountyContract)); }}>
       <h3>Nominate payout</h3><p>The public control is creator-only; no agent or governor controls are exposed.</p>
       <div className="action-grid">
         <label>Recipient Juno address<input name="recipient" required /></label>
@@ -232,23 +233,23 @@ function SettlementControls({ state, disabled, onPrepare }: {
       </div><button className="button" type="submit" disabled={disabled}>Review payout nomination</button>
     </form>}
     {b.status === "open" && b.contributor_count === 1 && <ReasonForm label="Cancel sole-funded bounty" field="cancelReason"
-      button="Review cancellation" disabled={disabled} onSubmit={(reason) => onPrepare((sender) => cancelSoleFundedIntent(state, sender, reason))} />}
+      button="Review cancellation" disabled={disabled} onSubmit={(reason) => onPrepare((sender) => cancelSoleFundedIntent(state, sender, reason, bountyContract))} />}
     {b.status === "open" && now >= BigInt(b.expires_at) && <button className="button" disabled={disabled}
-      onClick={() => onPrepare(() => expireBountyIntent(state))}>Review public expiry</button>}
+      onClick={() => onPrepare(() => expireBountyIntent(state, bountyContract))}>Review public expiry</button>}
     {b.status === "single_confirmation" && round && <section aria-labelledby="sole-decision-title">
       <h3 id="sole-decision-title">Sole-contributor decision · round {round.number}</h3>
       <p className="chain-time">Confirm or decline before close {round.closes_at} ns and expiry {b.expires_at} ns. Equality is closed.</p>
       {!closed && now < BigInt(b.expires_at) && <><button className="button" disabled={disabled}
-        onClick={() => onPrepare((sender) => confirmSolePayoutIntent(state, sender, round.number))}>Review sole payout confirmation</button>
+        onClick={() => onPrepare((sender) => confirmSolePayoutIntent(state, sender, round.number, bountyContract))}>Review sole payout confirmation</button>
         <ReasonForm label="Decline nominated payout" field="declineReason" button="Review decline" disabled={disabled}
-          onSubmit={(reason) => onPrepare((sender) => declineSolePayoutIntent(state, sender, round.number, reason))} /></>}
+          onSubmit={(reason) => onPrepare((sender) => declineSolePayoutIntent(state, sender, round.number, reason, bountyContract))} /></>}
     </section>}
     {b.status === "ratifying" && round && <section aria-labelledby="ballot-title">
       <h3 id="ballot-title">Weighted ballot · round {round.number}</h3>
       <p>YES {formatJuno(round.yes_weight)} · NO {formatJuno(round.no_weight)} · {round.voter_count} voter(s).</p>
       <p className="chain-time">Ballots close at exactly {round.closes_at} ns. Equality is closed; weights are snapshotted and revisions replace the prior ballot.</p>
       {!closed && <form onSubmit={(event) => { event.preventDefault(); const f = new FormData(event.currentTarget);
-        onPrepare((sender) => votePayoutIntent(state, sender, round.number, String(f.get("vote")) as "yes" | "no", String(f.get("voteRationale")))); }}>
+        onPrepare((sender) => votePayoutIntent(state, sender, round.number, String(f.get("vote")) as "yes" | "no", String(f.get("voteRationale")), bountyContract)); }}>
         <fieldset><legend>Ballot choice</legend><label><input type="radio" name="vote" value="yes" required /> YES</label>{" "}
           <label><input type="radio" name="vote" value="no" required /> NO</label></fieldset>
         <label>Ballot rationale (optional)<textarea name="voteRationale" /></label>
@@ -256,9 +257,9 @@ function SettlementControls({ state, disabled, onPrepare }: {
       </form>}
     </section>}
     {(b.status === "ratifying" || b.status === "single_confirmation") && round && closed && <button className="button" disabled={disabled}
-      onClick={() => onPrepare(() => finalizePayoutIntent(state, round.number))}>Review public finalization</button>}
+      onClick={() => onPrepare(() => finalizePayoutIntent(state, round.number, bountyContract))}>Review public finalization</button>}
     {b.status === "refunding" && <button className="button" disabled={disabled}
-      onClick={() => onPrepare((sender) => claimRefundIntent(state, sender))}>Review contributor refund claim</button>}
+      onClick={() => onPrepare((sender) => claimRefundIntent(state, sender, bountyContract))}>Review contributor refund claim</button>}
     {b.status === "paid" && <p>Settlement is complete: the nominated payout was paid.</p>}
     {b.status === "refunded" && <p>Settlement is complete: all contributor refunds were claimed.</p>}
   </div>;

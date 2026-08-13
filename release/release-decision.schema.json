@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://juno-voice.invalid/schema/release-decision-v1.json",
-  "title": "Juno Voice testnet release decision v1",
+  "$id": "https://juno-voice.invalid/schema/release-decision-v2.json",
+  "title": "Juno Voice v2 testnet release decision",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,7 +10,7 @@
     "decided_at", "signed_payload_sha256", "reviewer_declarations", "authorization_record"
   ],
   "properties": {
-    "schema_version": {"const": "juno-voice/release-decision/v1"},
+    "schema_version": {"const": "juno-voice/release-decision/v2"},
     "status": {"const": "approved_testnet_candidate"},
     "authorization": {"const": "testnet_release_candidate_only"},
     "production_authorized": {"const": false},
@@ -99,7 +99,7 @@
         "identity": {"$ref": "#/$defs/nonempty"},
         "payload_sha256": {"$ref": "#/$defs/sha256"},
         "method": {"const": "sshsig"},
-        "namespace": {"const": "juno-voice-release-v1"},
+        "namespace": {"const": "juno-voice-release-v2"},
         "signature": {"type": "string", "pattern": "^-----BEGIN SSH SIGNATURE-----"}
       }
     }

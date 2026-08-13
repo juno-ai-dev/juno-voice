@@ -3,12 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { toBech32 } from "@cosmjs/encoding";
 import { describe, expect, it, vi } from "vitest";
 import { BountyActions, type BountyTransactionAccess } from "./BountyActions";
-import { ledger, bounty } from "./test/bountyFixtures";
+import { config, ledger, bounty } from "./test/bountyFixtures";
 import type { TransactionReview } from "./transactions";
 import type { BountyDetail, PayoutRound } from "./types";
 const canonical = { config: ledger.config, pause: ledger.pause, chainTimeNanos: ledger.chainTimeNanos, fingerprint: ledger.fingerprint };
 const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender: bounty.creator, chainId: "juno-1",
-  contract: "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw",
+  contract: config.contract,
   executeMessage: { contribute: { bounty_id: 1 } }, funds: [{ denom: "ujuno", amount: "1000000" }],
   fee: { gas: "180000", amount: [{ denom: "ujuno", amount: "4500" }] }, consequences: ["Exact consequence"],
   canonicalState: { fingerprint: ledger.fingerprint, height: 123 }, walletRevision: 1 };
@@ -17,7 +17,7 @@ const access = (): BountyTransactionAccess => ({ connect: vi.fn(async () => ({ a
     confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, explorerUrl: "https://example/tx/ABC" })) });
 describe("bounty action UI", () => {
   it("keeps read-only access and explains unavailable wallet support", async () => {
-    render(<BountyActions canonical={canonical} stale={false} />);
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} />);
     expect(screen.queryByRole("textbox", { name: /^Title/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
     expect(screen.queryByText(/Eligibility uses canonical chain time/)).not.toBeInTheDocument();
@@ -25,7 +25,7 @@ describe("bounty action UI", () => {
     expect(screen.getByRole("button", { name: /Connect wallet and review bounty/ })).toBeInTheDocument();
   });
   it("constructs exact create message/funds from accessible controls and discloses review", async () => {
-    const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} />);
+    const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} />);
     await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
     await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
     await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
@@ -40,26 +40,25 @@ describe("bounty action UI", () => {
     expect(screen.getByText("$JUNO 1")).toBeInTheDocument();
   });
   it("makes optional project-candidate semantics explicit and reviews the exact metadata", async () => {
-    const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} />);
+    const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} />);
     await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
     await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
     await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
     await userEvent.type(screen.getByLabelText(/^Acceptance criteria/), "Tests pass");
     await userEvent.click(screen.getByText("Propose a project candidate"));
-    await userEvent.type(screen.getByLabelText(/^Project ID/), "tooling-1");
     await userEvent.type(screen.getByLabelText(/^Project metadata URI/), "ipfs://bafyproject");
     await userEvent.type(screen.getByLabelText(/^Project metadata SHA-256 digest/), `sha256:${"ab".repeat(32)}`);
     await userEvent.click(screen.getByRole("button", { name: /Connect wallet and review bounty/ }));
     expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { create_bounty: expect.objectContaining({
-      project_candidate: { project_id: "tooling-1", metadata_uri: "ipfs://bafyproject", metadata_digest: `sha256:${"ab".repeat(32)}` },
+      project_candidate: { metadata_uri: "ipfs://bafyproject", metadata_digest: `sha256:${"ab".repeat(32)}` },
     }) } }));
-    expect(screen.getByText(/does not register, endorse, or graduate/)).toBeInTheDocument();
+    expect(screen.getByText(/does not allocate a registry ID/)).toBeInTheDocument();
   });
   it("calculates a lowercase SHA-256 digest locally from a selected metadata file", async () => {
     const digestBytes = new Uint8Array(32).fill(0xab);
     vi.stubGlobal("crypto", { subtle: { digest: vi.fn(async () => digestBytes.buffer) } });
     try {
-      render(<BountyActions canonical={canonical} stale={false} access={access()} />);
+      render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={access()} />);
       await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
       await userEvent.click(screen.getByText("Add supporting content"));
       const file = new File(["metadata"], "metadata.json", { type: "application/json" });
@@ -72,14 +71,14 @@ describe("bounty action UI", () => {
     }
   });
   it("blocks stale preparation before wallet access", async () => {
-    const port = access(); render(<BountyActions canonical={canonical} stale access={port} bounty={bounty} />);
+    const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     expect(await screen.findByRole("status")).toHaveTextContent(/stale/);
     expect(port.connect).not.toHaveBeenCalled(); expect(port.prepare).not.toHaveBeenCalled();
   });
   it("converts a decimal $JUNO contribution to exact ujuno only at intent construction", async () => {
-    const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1.000001");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({
@@ -88,7 +87,7 @@ describe("bounty action UI", () => {
     }));
   });
   it("submits only the reviewed object through the shared lifecycle", async () => {
-    const port = access(); render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
@@ -99,7 +98,7 @@ describe("bounty action UI", () => {
     const port = access();
     vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown", txHash: "KNOWN",
       explorerUrl: "https://example/tx/KNOWN" });
-    const view = render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    const view = render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
@@ -107,13 +106,13 @@ describe("bounty action UI", () => {
     const evidence = screen.getByRole("link", { name: /transaction evidence KNOWN/ });
     expect(evidence).toHaveAttribute("href", "https://example/tx/KNOWN");
     expect(screen.getByRole("button", { name: /review contribution/ })).toBeDisabled();
-    view.rerender(<BountyActions canonical={{ ...canonical, chainTimeNanos: "1700000001000000000" }}
+    view.rerender(<BountyActions bountyContract={config.contract} canonical={{ ...canonical, chainTimeNanos: "1700000001000000000" }}
       stale={false} access={port} bounty={bounty} />);
     expect(evidence).toBeInTheDocument();
   });
   it("discloses hashless post-sign uncertainty without explorer evidence or a retry action", async () => {
     const port = access(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
-    render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
@@ -130,7 +129,7 @@ describe("bounty action UI", () => {
       moderation: null, graduation: null, contributions: [{ bounty_id: 1, contributor: bounty.creator, contributor_index: 1,
         current_amount: "2500000", weight_at_round: null }], claims: [], history: [], observationHeight: 1,
       chainTimeNanos: ledger.chainTimeNanos, fingerprint: ledger.fingerprint };
-    render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty}
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty}
       contributions={settlement.contributions} settlement={settlement} />);
     await userEvent.type(screen.getByLabelText("Recipient Juno address"), recipient);
     await userEvent.type(screen.getByLabelText("Evidence URI (HTTPS/IPFS)"), "ipfs://evidence");
@@ -152,18 +151,18 @@ describe("bounty action UI", () => {
     const state: BountyDetail = { bounty: { ...bounty, status: "ratifying", active_round: 1 }, config: ledger.config,
       pause: ledger.pause, activeRound: round, rounds: [round], receipts: [], moderation: null, graduation: null,
       contributions: [], claims: [], history: [], observationHeight: 1, chainTimeNanos: "1749999999999999999", fingerprint: "vote" };
-    const view = render(<BountyActions canonical={{ ...canonical, chainTimeNanos: state.chainTimeNanos }} stale={false}
+    const view = render(<BountyActions bountyContract={config.contract} canonical={{ ...canonical, chainTimeNanos: state.chainTimeNanos }} stale={false}
       bounty={state.bounty} settlement={state} />);
     expect(screen.getByText(/Ballots close at exactly 1750000000000000000 ns/)).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "YES" })).toBeInTheDocument();
-    view.rerender(<BountyActions canonical={{ ...canonical, chainTimeNanos: round.closes_at! }} stale={false}
+    view.rerender(<BountyActions bountyContract={config.contract} canonical={{ ...canonical, chainTimeNanos: round.closes_at! }} stale={false}
       bounty={state.bounty} settlement={{ ...state, chainTimeNanos: round.closes_at! }} />);
     expect(screen.queryByRole("radio", { name: "YES" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review public finalization" })).toBeInTheDocument();
   });
   it("preserves a raw chain failure and adds defensive retry guidance", async () => {
     const port = access(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "failed", reason: "Error parsing into type: WrongRound" });
-    render(<BountyActions canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));

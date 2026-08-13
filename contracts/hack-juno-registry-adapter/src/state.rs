@@ -44,8 +44,13 @@ pub enum ProjectStatus {
 
 #[cw_serde]
 pub enum AdmissionProvenance {
-    GraduatedBounty { source_bounty_id: u64 },
-    BondedRegistration { applicant: Addr },
+    GraduatedBounty {
+        source_bounty_contract: Addr,
+        source_bounty_id: u64,
+    },
+    BondedRegistration {
+        applicant: Addr,
+    },
 }
 
 #[cw_serde]
@@ -74,7 +79,7 @@ pub struct PendingPayoutAddress {
 
 #[cw_serde]
 pub struct Project {
-    pub id: String,
+    pub id: u64,
     pub owner: Addr,
     pub metadata_uri: String,
     pub metadata_digest: String,
@@ -102,7 +107,7 @@ pub enum StatusAction {
 
 #[cw_serde]
 pub struct StatusHistoryEntry {
-    pub project_id: String,
+    pub project_id: u64,
     pub sequence: u64,
     pub from: Option<ProjectStatus>,
     pub to: ProjectStatus,
@@ -122,7 +127,7 @@ pub enum AddressAction {
 
 #[cw_serde]
 pub struct AddressHistoryEntry {
-    pub project_id: String,
+    pub project_id: u64,
     pub sequence: u64,
     pub action: AddressAction,
     pub old_address: Addr,
@@ -144,9 +149,11 @@ pub struct RegistryAccounting {
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const PAUSE: Item<PauseState> = Item::new("pause");
 pub const ACCOUNTING: Item<RegistryAccounting> = Item::new("accounting");
-pub const PROJECTS: Map<&str, Project> = Map::new("projects");
+pub const NEXT_PROJECT_ID: Item<u64> = Item::new("next_project_id");
+pub const SOURCE_BOUNTY_COUNT: Item<u64> = Item::new("source_bounty_count_v2");
+pub const PROJECTS: Map<u64, Project> = Map::new("projects_v2");
 pub const OPTIONS: Map<&str, ()> = Map::new("options");
-pub const APPLICATIONS: Map<&str, ()> = Map::new("applications");
-pub const SOURCE_BOUNTIES: Map<u64, String> = Map::new("source_bounties");
-pub const STATUS_HISTORY: Map<(&str, u64), StatusHistoryEntry> = Map::new("status_history");
-pub const ADDRESS_HISTORY: Map<(&str, u64), AddressHistoryEntry> = Map::new("address_history");
+pub const APPLICATIONS: Map<u64, ()> = Map::new("applications_v2");
+pub const SOURCE_BOUNTIES: Map<(&Addr, u64), u64> = Map::new("source_bounties_v2");
+pub const STATUS_HISTORY: Map<(u64, u64), StatusHistoryEntry> = Map::new("status_history_v2");
+pub const ADDRESS_HISTORY: Map<(u64, u64), AddressHistoryEntry> = Map::new("address_history_v2");

@@ -1,6 +1,5 @@
 import type { Bounty, ContractConfig, PauseState } from "./types";
 import type { TransactionIntent } from "./transactions";
-import { DEFAULT_BOUNTY_CONTRACT } from "./config";
 import { formatJuno, parseJuno } from "./junoAmount";
 
 const U64_MAX = 18446744073709551615n;
@@ -23,7 +22,7 @@ const optionalPair = (uri: string, digest: string, max: number, label: string) =
 export interface CreateBountyInput {
   title: string; summary: string; acceptanceCriteria: string;
   contentUri: string; contentDigest: string; expiresAtNanos: string; initialJuno: string;
-  projectCandidate?: { projectId: string; metadataUri: string; metadataDigest: string };
+  projectCandidate?: { metadataUri: string; metadataDigest: string };
 }
 export interface EligibilityState {
   config: ContractConfig; pause: PauseState; chainTimeNanos: string; fingerprint: string;
@@ -34,7 +33,7 @@ function assertConfig(state: EligibilityState) {
   if (!/^\d+$/.test(state.chainTimeNanos) || BigInt(state.chainTimeNanos) > U64_MAX)
     throw new Error("Canonical chain time is unavailable.");
 }
-export function createBountyIntent(input: CreateBountyInput, state: EligibilityState): TransactionIntent {
+export function createBountyIntent(input: CreateBountyInput, state: EligibilityState, bountyContract: string): TransactionIntent {
   assertConfig(state);
   const initialUjuno = parseJuno(input.initialJuno);
   const initial = BigInt(initialUjuno);
@@ -48,19 +47,16 @@ export function createBountyIntent(input: CreateBountyInput, state: EligibilityS
   const content = optionalPair(input.contentUri, input.contentDigest, state.config.limits.max_uri_bytes, "Content");
   let project_candidate = null;
   if (input.projectCandidate) {
-    const projectId = input.projectCandidate.projectId.trim();
-    if (!/^[a-z0-9-]{3,64}$/.test(projectId))
-      throw new Error("Project ID must be 3-64 lowercase letters, digits, or hyphens.");
     const metadata = optionalPair(input.projectCandidate.metadataUri, input.projectCandidate.metadataDigest,
       state.config.limits.max_uri_bytes, "Project metadata");
     if (metadata.uri === null || metadata.digest === null)
       throw new Error("Project metadata URI and digest are required for a project candidate.");
     project_candidate = {
-      project_id: projectId, metadata_uri: metadata.uri, metadata_digest: metadata.digest,
+      metadata_uri: metadata.uri, metadata_digest: metadata.digest,
     };
   }
   return {
-    chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
+    chainId: "juno-1", contract: bountyContract,
     executeMessage: { create_bounty: {
       title: required(input.title, state.config.limits.max_title_bytes, "Title"),
       summary: required(input.summary, state.config.limits.max_summary_bytes, "Summary"),
@@ -76,7 +72,7 @@ export function createBountyIntent(input: CreateBountyInput, state: EligibilityS
   };
 }
 export function contributeIntent(bounty: Bounty, juno: string, contributor: string | null,
-  knownContributors: readonly string[], state: EligibilityState): TransactionIntent {
+  knownContributors: readonly string[], state: EligibilityState, bountyContract: string): TransactionIntent {
   assertConfig(state);
   const ujuno = parseJuno(juno);
   const value = BigInt(ujuno);
@@ -89,7 +85,7 @@ export function contributeIntent(bounty: Bounty, juno: string, contributor: stri
   if (!existing && bounty.contributor_count >= bounty.terms.max_contributors)
     throw new Error("This bounty has reached its snapshotted contributor cap.");
   return {
-    chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
+    chainId: "juno-1", contract: bountyContract,
     executeMessage: { contribute: { bounty_id: bounty.id } }, funds: [{ denom: "ujuno", amount: ujuno }],
     consequences: [`Add exactly ${formatJuno(ujuno)} to bounty #${bounty.id}; escrowed funds may only leave through contract rules.`,
       `Eligibility uses canonical chain time and the bounty's snapshotted caps.`],

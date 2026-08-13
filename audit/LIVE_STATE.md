@@ -63,4 +63,4 @@ documented Juno governance module account
 
 Keep the Vault unfunded and do not open an epoch. Re-query the Vault balance,
 current epoch, gauge stop state, registry options, code identities, and admins
-immediately before any recovery or migration transaction.
+immediately before any v2 deployment or client-cutover transaction.

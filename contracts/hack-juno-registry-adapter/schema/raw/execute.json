@@ -13,8 +13,7 @@
           "required": [
             "metadata_digest",
             "metadata_uri",
-            "payout_address",
-            "project_id"
+            "payout_address"
           ],
           "properties": {
             "metadata_digest": {
@@ -24,9 +23,6 @@
               "type": "string"
             },
             "payout_address": {
-              "type": "string"
-            },
-            "project_id": {
               "type": "string"
             }
           },
@@ -47,7 +43,6 @@
             "metadata_digest",
             "metadata_uri",
             "payout_address",
-            "project_id",
             "source_bounty_id"
           ],
           "properties": {
@@ -58,9 +53,6 @@
               "type": "string"
             },
             "payout_address": {
-              "type": "string"
-            },
-            "project_id": {
               "type": "string"
             },
             "source_bounty_id": {
@@ -95,7 +87,9 @@
               "type": "string"
             },
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           },
           "additionalProperties": false
@@ -121,7 +115,9 @@
               "$ref": "#/definitions/ReviewDecision"
             },
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "reason": {
               "$ref": "#/definitions/ReviewReason"
@@ -146,7 +142,9 @@
           ],
           "properties": {
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "reason": {
               "$ref": "#/definitions/ReviewReason"
@@ -171,7 +169,9 @@
           ],
           "properties": {
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "reason": {
               "$ref": "#/definitions/ReviewReason"
@@ -197,7 +197,9 @@
           ],
           "properties": {
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "reason": {
               "$ref": "#/definitions/ReviewReason"
@@ -228,7 +230,9 @@
               "type": "string"
             },
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           },
           "additionalProperties": false
@@ -249,7 +253,9 @@
           ],
           "properties": {
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           },
           "additionalProperties": false
@@ -270,7 +276,9 @@
           ],
           "properties": {
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           },
           "additionalProperties": false
@@ -291,7 +299,9 @@
           ],
           "properties": {
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           },
           "additionalProperties": false

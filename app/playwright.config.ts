@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { TEST_DEPLOYMENT_ENV } from "./src/test/deployment";
 
 const releaseCommit = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
@@ -23,6 +24,7 @@ export default defineConfig({
   webServer: {
     command: "npm run build && npm run preview -- --host 127.0.0.1",
     env: {
+      ...TEST_DEPLOYMENT_ENV,
       VITE_BASE_PATH: "/juno-voice/",
       VITE_RELEASE_COMMIT: releaseCommit,
     },

@@ -28,3 +28,15 @@ test("browser smoke builds and exercises the deployable Pages artifact", async (
   assert.match(spec, /resourceType\(\)/);
   assert.match(spec, /\["script", "stylesheet", "image"\]/);
 });
+
+test("production packaging is manual and requires the complete v2 deployment identity", async () => {
+  const workflow = await read("../.github/workflows/frontend.yml");
+  assert.doesNotMatch(workflow, /\n {2}push:/);
+  assert.match(workflow, /pages-artifact:[\s\S]*github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /VITE_PROTOCOL_VERSION:\s*v2/);
+  for (const component of ["BOUNTY", "REGISTRY", "VAULT", "VOTING", "GAUGE"]) {
+    assert.match(workflow, new RegExp(`vars\\.V2_${component}_CONTRACT_ADDRESS`));
+    assert.match(workflow, new RegExp(`vars\\.V2_${component}_CODE_ID`));
+    assert.match(workflow, new RegExp(`vars\\.V2_${component}_CODE_CHECKSUM`));
+  }
+});

@@ -70,6 +70,19 @@
     {
       "type": "object",
       "required": [
+        "identity_state"
+      ],
+      "properties": {
+        "identity_state": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "bounty"
       ],
       "properties": {

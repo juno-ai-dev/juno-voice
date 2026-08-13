@@ -52,7 +52,9 @@
           "$ref": "#/definitions/Addr"
         },
         "project_id": {
-          "type": "string"
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "proposed_address": {
           "anyOf": [

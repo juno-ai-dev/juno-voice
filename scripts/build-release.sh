@@ -2,7 +2,7 @@
 set -o errexit -o nounset -o pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-OUTPUT_DIR=${1:-"$ROOT/artifacts/v1"}
+OUTPUT_DIR=${1:-"$ROOT/artifacts/v2"}
 OPTIMIZER_IMAGE='cosmwasm/optimizer@sha256:7e0b9229c1a4118d0c9a2af2e7f5d95a91f264c26a2ce5681c779926e74d7f85'
 COSMWASM_CHECK_V3=${COSMWASM_CHECK_V3:-cosmwasm-check-v3}
 COSMWASM_CHECK_V1=${COSMWASM_CHECK_V1:-cosmwasm-check-v1}
@@ -92,7 +92,7 @@ check_schemas() {
   )
   (
     cd "$source/deps/dao-contracts/contracts/gauges/gauge"
-    cargo +1.81.0 run --locked -p gauge-orchestrator@2.8.0-alpha.2 --example gauge-orchestrator-schema
+    cargo +1.81.0 run --locked -p gauge-orchestrator@2.8.0-alpha.3 --example gauge-orchestrator-schema
     rm -rf schema/raw
   )
   (
@@ -141,7 +141,7 @@ build_clone() {
       cargo +1.81.0 build --locked --release --lib --target wasm32-unknown-unknown \
         -p dao-dao-core@2.8.0-alpha.2 \
         -p dao-voting-juno-staked@2.8.0-alpha.2 \
-        -p gauge-orchestrator@2.8.0-alpha.2
+        -p gauge-orchestrator@2.8.0-alpha.3
 
       wasm-opt -Oz /target-juno-voice/wasm32-unknown-unknown/release/juno_voice_bounties.wasm \
         -o /out/juno_voice_bounties.wasm
@@ -178,7 +178,7 @@ done
 for artifact in dao_dao_core.wasm dao_voting_juno_staked.wasm gauge_orchestrator.wasm; do
   "$COSMWASM_CHECK_V1" "$WORK/out-a/$artifact"
 done
-"$ROOT/scripts/validate-v1-wasm.sh" "$WORK/out-a"
+"$ROOT/scripts/validate-v2-wasm.sh" "$WORK/out-a"
 cmp "$WORK/out-a/build-tools.txt" "$WORK/out-b/build-tools.txt"
 
 mkdir -p "$OUTPUT_DIR"
@@ -218,4 +218,4 @@ python3 "$ROOT/scripts/generate-build-manifest.py" \
   --dao-contracts-commit "$PINNED_SUBMODULE" \
   --optimizer-image "$OPTIMIZER_IMAGE"
 
-echo "wrote deterministic Juno Voice v1 artifacts to $OUTPUT_DIR"
+echo "wrote deterministic Juno Voice v2 artifacts to $OUTPUT_DIR"

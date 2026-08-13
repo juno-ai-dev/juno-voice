@@ -11,7 +11,7 @@ import { gaugeContext, gaugeData, voter } from "./test/gaugeFixtures";
 import type { TransactionOutcome } from "./transactions";
 
 const source: GaugeDataSource = { loadGauge: vi.fn(async () => gaugeData), loadActionContext: vi.fn(async () => gaugeContext) };
-const review = { reviewId: "review", flowBinding: "flow", sender: voter, chainId: "juno-1", contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }] } }, funds: [], fee: { gas: "100000", amount: [{ denom: "ujuno", amount: "7500" }] }, consequences: ["Replace ballot"], canonicalState: { fingerprint: gaugeContext.fingerprint, height: 40_000_100 }, walletRevision: 1 } as const;
+const review = { reviewId: "review", flowBinding: "flow", sender: voter, chainId: "juno-1", contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "project:1", weight: "0.5" }] } }, funds: [], fee: { gas: "100000", amount: [{ denom: "ujuno", amount: "7500" }] }, consequences: ["Replace ballot"], canonicalState: { fingerprint: gaugeContext.fingerprint, height: 40_000_100 }, walletRevision: 1 } as const;
 function flow(): GaugeTransactionFlow { return { connect: vi.fn(async () => ({ address: voter })), prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "confirmed" as const, confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, txHash: "ABC", height: 40_000_101, explorerUrl: "https://www.mintscan.io/juno/tx/ABC" })) }; }
 const submissionScope = { sender: voter, chainId: config.chainId, contract: config.gaugeContract, gaugeId: 0 as const };
 async function openGaugeWorkbench() {
@@ -35,7 +35,7 @@ describe("gauge voting UI", () => {
     expect(screen.getByText("40,000,002")).toBeVisible();
     expect(screen.getAllByText("$JUNO 0.001").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/\$JUNO 0\.0005 · 50\.00%/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/\$JUNO 0\.0001 power · 25\.00%/)).toBeVisible();
+    expect(screen.getByText(/\$JUNO 0\.0001 power · 20\.00%/)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Current ballot" })).toBeVisible();
     expect(screen.getAllByText("$JUNO 0.0001").length).toBeGreaterThan(0);
     expect(screen.getAllByText("do-not-distribute").length).toBeGreaterThan(0);

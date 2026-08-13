@@ -64,16 +64,20 @@ class DeploymentPlannerTests(unittest.TestCase):
             "artifacts": artifacts,
             "deployment": {
                 "code_admin": address(1),
-                "program_vault_salt": "juno-voice-v1-vault",
-                "program_vault_label": "juno-voice-v1-vault",
-                "voting_module_salt": "juno-voice-v1-voting",
-                "voting_module_label": "juno-voice-v1-voting",
-                "gauge_salt": "juno-voice-v1-gauge",
-                "gauge_label": "juno-voice-v1-gauge",
-                "bounty_salt": "juno-voice-v1-bounty",
-                "bounty_label": "juno-voice-v1-bounty",
-                "registry_salt": "juno-voice-v1-registry",
-                "registry_label": "juno-voice-v1-registry",
+                "program_vault_salt": "juno-voice-v2-vault",
+                "program_vault_label": "juno-voice-v2-vault",
+                "voting_module_salt": "juno-voice-v2-voting",
+                "voting_module_label": "juno-voice-v2-voting",
+                "gauge_salt": "juno-voice-v2-gauge",
+                "gauge_label": "juno-voice-v2-gauge",
+                "bounty_salt": "juno-voice-v2-bounty",
+                "bounty_label": "juno-voice-v2-bounty",
+                "registry_salt": "juno-voice-v2-registry",
+                "registry_label": "juno-voice-v2-registry",
+            },
+            "cutover": {
+                "mode": "no_prior_composition",
+                "historical_v1": None,
             },
             "agent_operations": {
                 "mode": "bind_reviewed",
@@ -145,6 +149,8 @@ class DeploymentPlannerTests(unittest.TestCase):
                 "epoch_size_seconds": 604_800,
                 "min_turnout_bps": 100,
                 "epoch_budget": "1000000000",
+                "retained_option": "do-not-distribute",
+                "execution_window_seconds": 86_400,
                 "min_percent_selected": "0.01",
                 "max_available_percentage": "0.20",
                 "max_options_selected": 20,
@@ -175,6 +181,151 @@ class DeploymentPlannerTests(unittest.TestCase):
             deploy.decode_address(value, "juno", name)
         self.assertEqual(addresses, deploy.derive_addresses(self.config))
         self.assertNotEqual(addresses["program_vault"], addresses["bounty"])
+
+    def test_mainnet_cutover_requires_explicit_disjoint_historical_composition(self):
+        config = copy.deepcopy(self.config)
+        config["environment"] = "juno-mainnet"
+        config["chain"]["chain_id"] = "juno-1"
+        with self.assertRaisesRegex(deploy.ValidationError, "historical v1 composition"):
+            deploy.validate_config(config, self.root)
+
+        components = ("bounty", "registry", "program_vault", "voting_module", "gauge")
+        config["cutover"] = {
+            "mode": "replace_historical_v1",
+            "historical_v1": {
+                component: {
+                    "address": address(20 + index),
+                    "code_id": str(5_150 + index),
+                    "checksum": f"{40 + index:02x}" * 32,
+                }
+                for index, component in enumerate(components)
+            },
+        }
+        deploy.validate_config(config, self.root)
+
+        collision = copy.deepcopy(config)
+        collision["cutover"]["historical_v1"]["bounty"]["address"] = (
+            deploy.derive_addresses(collision)["bounty"]
+        )
+        with self.assertRaisesRegex(deploy.ValidationError, "addresses collide"):
+            deploy.validate_config(collision, self.root)
+
+        checksum_reuse = copy.deepcopy(config)
+        checksum_reuse["cutover"]["historical_v1"]["bounty"]["checksum"] = (
+            checksum_reuse["artifacts"]["gauge_orchestrator"]["sha256"]
+        )
+        with self.assertRaisesRegex(deploy.ValidationError, "checksums must be disjoint"):
+            deploy.validate_config(checksum_reuse, self.root)
+
+        code_ids = {
+            name: 100 + index
+            for index, name in enumerate(deploy.REQUIRED_ARTIFACTS, start=1)
+        }
+        code_ids["juno_voice_bounties"] = 5_150
+        with self.assertRaisesRegex(deploy.ValidationError, "reuses a historical v1 code ID"):
+            deploy.verify_code_ids(config, code_ids, object())
+
+    def test_historical_cutover_observation_rejects_nonempty_or_substituted_v1(self):
+        config = copy.deepcopy(self.config)
+        components = ("bounty", "registry", "program_vault", "voting_module", "gauge")
+        config["cutover"] = {
+            "mode": "replace_historical_v1",
+            "historical_v1": {
+                component: {
+                    "address": address(20 + index),
+                    "code_id": 5_150 + index,
+                    "checksum": f"{40 + index:02x}" * 32,
+                }
+                for index, component in enumerate(components)
+            },
+        }
+        deploy.validate_config(config, self.root)
+        historical = config["cutover"]["historical_v1"]
+        observation = {
+            "mode": "replace_historical_v1",
+            "historical_v1": {
+                "contract_info": {
+                    component: {
+                        "code_id": identity["code_id"],
+                        "admin": config["chain"]["xgov_module_account"],
+                    }
+                    for component, identity in historical.items()
+                },
+                "code_checksums": {
+                    component: identity["checksum"]
+                    for component, identity in historical.items()
+                },
+                "balances": {"program_vault": "0", "bounty": "0", "registry": "0"},
+                "bounty_health": {
+                    "accounting": {
+                        "active_escrow": "0",
+                        "outstanding_refunds": "0",
+                        "pending_payout_liabilities": "0",
+                        "lifetime_received": "0",
+                        "lifetime_paid": "0",
+                        "lifetime_refunded": "0",
+                    },
+                    "actual_native_balance": "0",
+                    "liabilities": "0",
+                    "fully_backed": True,
+                },
+                "bounty_page": {"bounties": []},
+                "registry_health": {
+                    "accounting": {
+                        "active_projects": 0,
+                        "pending_applications": 0,
+                        "bond_liability": "0",
+                        "lifetime_bonds_received": "0",
+                        "lifetime_bonds_refunded": "0",
+                        "lifetime_bonds_forfeited": "0",
+                    },
+                    "actual_native_balance": "0",
+                    "fully_backed": True,
+                },
+                "registry_projects": {"projects": []},
+                "registry_applications": {"projects": []},
+                "registry_options": {"options": ["do-not-distribute"]},
+                "gauge_state": {"current_epoch": None},
+                "gauge_epochs": {"epochs": []},
+            },
+        }
+        deploy.validate_cutover_observation(config, observation)
+
+        for label, mutate in (
+            (
+                "funded vault",
+                lambda value: value["historical_v1"]["balances"].__setitem__(
+                    "program_vault", "1"
+                ),
+            ),
+            (
+                "existing bounty",
+                lambda value: value["historical_v1"].__setitem__(
+                    "bounty_page", {"bounties": [{"id": 1}]}
+                ),
+            ),
+            (
+                "open epoch",
+                lambda value: value["historical_v1"]["gauge_state"].__setitem__(
+                    "current_epoch", 1
+                ),
+            ),
+            (
+                "omitted epoch state",
+                lambda value: value["historical_v1"]["gauge_state"].pop("current_epoch"),
+            ),
+            (
+                "substituted code",
+                lambda value: value["historical_v1"]["contract_info"]["gauge"].__setitem__(
+                    "code_id", 99
+                ),
+            ),
+        ):
+            with self.subTest(label=label):
+                wrong = copy.deepcopy(observation)
+                mutate(wrong)
+                with self.assertRaises(deploy.ValidationError):
+                    deploy.validate_cutover_observation(config, wrong)
 
     def test_source_checkout_must_equal_reviewed_parent_not_a_descendant(self):
         repository = self.root / "source"
@@ -220,6 +371,7 @@ class DeploymentPlannerTests(unittest.TestCase):
             "builder",
             "artifacts",
             "deployment",
+            "cutover",
             "agent_operations",
             "bounty",
             "registry",
@@ -295,6 +447,21 @@ class DeploymentPlannerTests(unittest.TestCase):
             deploy.validate_config(wrong, self.root)
 
         wrong = copy.deepcopy(self.config)
+        wrong["gauge"]["retained_option"] = "project:1"
+        with self.assertRaisesRegex(deploy.ValidationError, "retained_option"):
+            deploy.validate_config(wrong, self.root)
+
+        wrong = copy.deepcopy(self.config)
+        wrong["gauge"]["execution_window_seconds"] = 0
+        with self.assertRaisesRegex(deploy.ValidationError, "execution_window_seconds"):
+            deploy.validate_config(wrong, self.root)
+
+        wrong = copy.deepcopy(self.config)
+        wrong["gauge"]["execution_window_seconds"] = 2**64
+        with self.assertRaisesRegex(deploy.ValidationError, "must fit u64"):
+            deploy.validate_config(wrong, self.root)
+
+        wrong = copy.deepcopy(self.config)
         wrong["registry"]["implicit_governor"] = address(9)
         with self.assertRaisesRegex(deploy.ValidationError, "unexpected keys"):
             deploy.validate_config(wrong, self.root)
@@ -327,6 +494,14 @@ class DeploymentPlannerTests(unittest.TestCase):
         self.assertEqual(messages["addresses"]["registry"], nested_gauge["gauges"][0]["adapter"])
         self.assertEqual("", nested_gauge["hook_caller"])
         self.assertEqual("ujuno", nested_gauge["gauges"][0]["snapshot_policy"]["denom"])
+        self.assertEqual(
+            "do-not-distribute",
+            nested_gauge["gauges"][0]["snapshot_policy"]["retained_option"],
+        )
+        self.assertEqual(
+            86_400,
+            nested_gauge["gauges"][0]["snapshot_policy"]["execution_window_seconds"],
+        )
 
     def test_state_is_bound_to_config_and_addresses(self):
         state_path = self.root / "state.json"
@@ -787,6 +962,11 @@ class DeploymentPlannerTests(unittest.TestCase):
                     return {"code_id": code_id, "creator": creator, "admin": xgov}
                 return {"code_id": agent_contracts[contract_address], "admin": ""}
 
+            def balance(self, contract_address, denom):
+                if contract_address != addresses["program_vault"] or denom != "ujuno":
+                    raise AssertionError((contract_address, denom))
+                return "0"
+
             def smart(self, contract_address, query):
                 if contract_address == addresses["program_vault"]:
                     return {
@@ -797,8 +977,45 @@ class DeploymentPlannerTests(unittest.TestCase):
                 if contract_address == addresses["voting_module"]:
                     return addresses["program_vault"]
                 if contract_address == addresses["bounty"]:
+                    if "identity_state" in query:
+                        return {"next_bounty_id": 1}
+                    if "bounties" in query:
+                        return {"bounties": []}
+                    if "health" in query:
+                        return {
+                            "accounting": {
+                                "active_escrow": "0",
+                                "outstanding_refunds": "0",
+                                "pending_payout_liabilities": "0",
+                                "lifetime_received": "0",
+                                "lifetime_paid": "0",
+                                "lifetime_refunded": "0",
+                            },
+                            "actual_native_balance": "0",
+                            "liabilities": "0",
+                            "fully_backed": True,
+                        }
                     return {**messages["bounty"], "ratification_seconds": 259_200, "version": 1}
                 if contract_address == addresses["registry"]:
+                    if "identity_state" in query:
+                        return {"next_project_id": 1, "consumed_source_bounties": 0}
+                    if "projects" in query or "applications" in query:
+                        return {"projects": []}
+                    if "all_options" in query:
+                        return {"options": ["do-not-distribute"]}
+                    if "health" in query:
+                        return {
+                            "accounting": {
+                                "active_projects": 0,
+                                "pending_applications": 0,
+                                "bond_liability": "0",
+                                "lifetime_bonds_received": "0",
+                                "lifetime_bonds_refunded": "0",
+                                "lifetime_bonds_forfeited": "0",
+                            },
+                            "actual_native_balance": "0",
+                            "fully_backed": True,
+                        }
                     return {**messages["registry"], "max_active_projects": 99, "version": 1}
                 if contract_address == addresses["gauge"] and "config" in query:
                     return {
@@ -809,7 +1026,14 @@ class DeploymentPlannerTests(unittest.TestCase):
                         "power_source": {"epoch_snapshot": {"guardian": addresses["agent_operations"]}},
                     }
                 if contract_address == addresses["gauge"]:
-                    return {"id": 0, **messages["gauge_inner"]["gauges"][0]}
+                    if "list_epochs" in query:
+                        return {"epochs": []}
+                    return {
+                        "id": 0,
+                        **messages["gauge_inner"]["gauges"][0],
+                        "is_stopped": False,
+                        "current_epoch": None,
+                    }
                 if contract_address == agent["core_address"]:
                     return {
                         "voting_module": agent["voting_module_address"],
@@ -855,11 +1079,16 @@ class DeploymentPlannerTests(unittest.TestCase):
             "catching_up": False,
             "staking_bond_denom": self.config["chain"]["native_denom"],
             "xgov_module_account": self.config["chain"]["xgov_module_account"],
+            "cutover": {
+                "mode": "no_prior_composition",
+                "historical_v1": None,
+            },
             "checks": [
                 "chain_id",
                 "rpc_synced",
                 "staking_bond_denom",
                 "xgov_module_account",
+                "cutover",
             ],
         }
         chain = FakeChain()

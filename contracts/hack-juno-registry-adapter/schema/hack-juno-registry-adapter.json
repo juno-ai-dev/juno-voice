@@ -1,6 +1,6 @@
 {
   "contract_name": "hack-juno-registry-adapter",
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -103,8 +103,7 @@
             "required": [
               "metadata_digest",
               "metadata_uri",
-              "payout_address",
-              "project_id"
+              "payout_address"
             ],
             "properties": {
               "metadata_digest": {
@@ -114,9 +113,6 @@
                 "type": "string"
               },
               "payout_address": {
-                "type": "string"
-              },
-              "project_id": {
                 "type": "string"
               }
             },
@@ -137,7 +133,6 @@
               "metadata_digest",
               "metadata_uri",
               "payout_address",
-              "project_id",
               "source_bounty_id"
             ],
             "properties": {
@@ -148,9 +143,6 @@
                 "type": "string"
               },
               "payout_address": {
-                "type": "string"
-              },
-              "project_id": {
                 "type": "string"
               },
               "source_bounty_id": {
@@ -185,7 +177,9 @@
                 "type": "string"
               },
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -211,7 +205,9 @@
                 "$ref": "#/definitions/ReviewDecision"
               },
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               },
               "reason": {
                 "$ref": "#/definitions/ReviewReason"
@@ -236,7 +232,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               },
               "reason": {
                 "$ref": "#/definitions/ReviewReason"
@@ -261,7 +259,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               },
               "reason": {
                 "$ref": "#/definitions/ReviewReason"
@@ -287,7 +287,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               },
               "reason": {
                 "$ref": "#/definitions/ReviewReason"
@@ -318,7 +320,9 @@
                 "type": "string"
               },
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -339,7 +343,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -360,7 +366,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -381,7 +389,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -695,6 +705,19 @@
       {
         "type": "object",
         "required": [
+          "identity_state"
+        ],
+        "properties": {
+          "identity_state": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
           "project"
         ],
         "properties": {
@@ -705,7 +728,9 @@
             ],
             "properties": {
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -732,9 +757,11 @@
               },
               "start_after": {
                 "type": [
-                  "string",
+                  "integer",
                   "null"
-                ]
+                ],
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -761,9 +788,11 @@
               },
               "start_after": {
                 "type": [
-                  "string",
+                  "integer",
                   "null"
-                ]
+                ],
+                "format": "uint64",
+                "minimum": 0.0
               }
             },
             "additionalProperties": false
@@ -792,7 +821,9 @@
                 "minimum": 0.0
               },
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               },
               "start_after": {
                 "type": [
@@ -829,7 +860,9 @@
                 "minimum": 0.0
               },
               "project_id": {
-                "type": "string"
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               },
               "start_after": {
                 "type": [
@@ -1054,7 +1087,9 @@
               "$ref": "#/definitions/Addr"
             },
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "proposed_address": {
               "anyOf": [
@@ -1137,9 +1172,13 @@
                 "graduated_bounty": {
                   "type": "object",
                   "required": [
+                    "source_bounty_contract",
                     "source_bounty_id"
                   ],
                   "properties": {
+                    "source_bounty_contract": {
+                      "$ref": "#/definitions/Addr"
+                    },
                     "source_bounty_id": {
                       "type": "integer",
                       "format": "uint64",
@@ -1243,7 +1282,9 @@
               "$ref": "#/definitions/Timestamp"
             },
             "id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "latest_review": {
               "anyOf": [
@@ -1550,6 +1591,28 @@
         }
       }
     },
+    "identity_state": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "IdentityStateResponse",
+      "type": "object",
+      "required": [
+        "consumed_source_bounties",
+        "next_project_id"
+      ],
+      "properties": {
+        "consumed_source_bounties": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "next_project_id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "pause": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "PauseState",
@@ -1649,7 +1712,9 @@
           "$ref": "#/definitions/Timestamp"
         },
         "id": {
-          "type": "string"
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "latest_review": {
           "anyOf": [
@@ -1715,9 +1780,13 @@
                 "graduated_bounty": {
                   "type": "object",
                   "required": [
+                    "source_bounty_contract",
                     "source_bounty_id"
                   ],
                   "properties": {
+                    "source_bounty_contract": {
+                      "$ref": "#/definitions/Addr"
+                    },
                     "source_bounty_id": {
                       "type": "integer",
                       "format": "uint64",
@@ -1894,9 +1963,13 @@
                 "graduated_bounty": {
                   "type": "object",
                   "required": [
+                    "source_bounty_contract",
                     "source_bounty_id"
                   ],
                   "properties": {
+                    "source_bounty_contract": {
+                      "$ref": "#/definitions/Addr"
+                    },
                     "source_bounty_id": {
                       "type": "integer",
                       "format": "uint64",
@@ -2000,7 +2073,9 @@
               "$ref": "#/definitions/Timestamp"
             },
             "id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "latest_review": {
               "anyOf": [
@@ -2596,7 +2671,9 @@
               ]
             },
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "reason": {
               "anyOf": [

@@ -31,15 +31,15 @@ export interface RegistryPause { admissions_stopped: boolean; adapter_stopped: b
 export interface RegistryAccounting { active_projects: number; pending_applications: number; bond_liability: string; lifetime_bonds_received: string; lifetime_bonds_refunded: string; lifetime_bonds_forfeited: string }
 export interface RegistryHealth { accounting: RegistryAccounting; actual_native_balance: string; fully_backed: boolean }
 export interface Project {
-  id: string; owner: string; payout_address: string; metadata_uri: string; metadata_digest: string; status: ProjectStatus;
+  id: number; owner: string; payout_address: string; metadata_uri: string; metadata_digest: string; status: ProjectStatus;
   created_at: string; updated_at: string; status_history_count: number; address_history_count: number;
-  provenance: { kind: "bonded_registration"; applicant: string } | { kind: "graduated_bounty"; source_bounty_id: number };
+  provenance: { kind: "bonded_registration"; applicant: string } | { kind: "graduated_bounty"; source_bounty_contract: string; source_bounty_id: number };
   bond: { amount: string; depositor: string; state: BondState } | null;
   pending_payout_address: { address: string; proposed_at: string; executable_at: string; proposed_by: string } | null;
   latest_review: { code: string; note: string } | null;
 }
-export interface StatusHistory { sequence: number; project_id: string; from: ProjectStatus | null; to: ProjectStatus; action: string; actor: string; at: string; reason: { code: string; note: string } | null }
-export interface AddressHistory { sequence: number; project_id: string; action: "proposed" | "replaced" | "cancelled" | "accepted"; actor: string; at: string; old_address: string; proposed_address: string | null }
+export interface StatusHistory { sequence: number; project_id: number; from: ProjectStatus | null; to: ProjectStatus; action: string; actor: string; at: string; reason: { code: string; note: string } | null }
+export interface AddressHistory { sequence: number; project_id: number; action: "proposed" | "replaced" | "cancelled" | "accepted"; actor: string; at: string; old_address: string; proposed_address: string | null }
 export interface ProjectDetail { project: Project; statusHistory: StatusHistory[]; addressHistory: AddressHistory[] }
 export interface RegistryData { config: RegistryConfig; pause: RegistryPause; health: RegistryHealth; projects: Project[]; applications: Project[]; options: string[]; observationHeight: number; refreshedAt: Date; weakConsistency: true }
 
@@ -57,13 +57,13 @@ export function mapProject(value: unknown): Project {
     const body = record(provenanceRaw.bonded_registration, "provenance"); exactKeys(body, ["applicant"]);
     provenance = { kind: "bonded_registration", applicant: string(body.applicant, "provenance") };
   } else if ("graduated_bounty" in provenanceRaw && Object.keys(provenanceRaw).length === 1) {
-    const body = record(provenanceRaw.graduated_bounty, "provenance"); exactKeys(body, ["source_bounty_id"]);
-    provenance = { kind: "graduated_bounty", source_bounty_id: integer(body.source_bounty_id, "provenance") };
+    const body = record(provenanceRaw.graduated_bounty, "provenance"); exactKeys(body, ["source_bounty_contract", "source_bounty_id"]);
+    provenance = { kind: "graduated_bounty", source_bounty_contract: string(body.source_bounty_contract, "provenance"), source_bounty_id: integer(body.source_bounty_id, "provenance") };
   } else bad("provenance");
   if (!provenance) return bad("provenance");
   const bond = nullable(x.bond, (item) => { const body = record(item, "bond"); exactKeys(body, ["amount", "depositor", "state"]); const state = string(body.state, "bond") as BondState; if (!bonds.has(state)) bad("bond"); return { amount: uint(body.amount, "bond"), depositor: string(body.depositor, "bond"), state }; });
   const pending = nullable(x.pending_payout_address, (item) => { const body = record(item, "pending payout"); exactKeys(body, ["address", "proposed_at", "executable_at", "proposed_by"]); return { address: string(body.address, "pending payout"), proposed_at: uint(body.proposed_at, "pending payout", U64_MAX), executable_at: uint(body.executable_at, "pending payout", U64_MAX), proposed_by: string(body.proposed_by, "pending payout") }; });
-  return { id: string(x.id, "project"), owner: string(x.owner, "project"), payout_address: string(x.payout_address, "project"), metadata_uri: string(x.metadata_uri, "project"), metadata_digest: string(x.metadata_digest, "project"), status, created_at: uint(x.created_at, "project", U64_MAX), updated_at: uint(x.updated_at, "project", U64_MAX), status_history_count: integer(x.status_history_count, "project"), address_history_count: integer(x.address_history_count, "project"), provenance: provenance as Project["provenance"], bond, pending_payout_address: pending, latest_review: review(x.latest_review) };
+  return { id: integer(x.id, "project"), owner: string(x.owner, "project"), payout_address: string(x.payout_address, "project"), metadata_uri: string(x.metadata_uri, "project"), metadata_digest: string(x.metadata_digest, "project"), status, created_at: uint(x.created_at, "project", U64_MAX), updated_at: uint(x.updated_at, "project", U64_MAX), status_history_count: integer(x.status_history_count, "project"), address_history_count: integer(x.address_history_count, "project"), provenance: provenance as Project["provenance"], bond, pending_payout_address: pending, latest_review: review(x.latest_review) };
 }
 export function mapRegistryConfig(value: unknown): RegistryConfig {
   const x = record(value, "config");
@@ -76,17 +76,17 @@ const mapPause = (value: unknown): RegistryPause => { const x = record(value, "p
 const mapHealth = (value: unknown): RegistryHealth => { const x = record(value, "health"); return { accounting: mapAccounting(x.accounting), actual_native_balance: uint(x.actual_native_balance, "health"), fully_backed: boolean(x.fully_backed, "health") }; };
 const list = (value: unknown, key: "projects" | "entries") => { const x = record(value, key); if (!Array.isArray(x[key])) bad(key); return x[key] as unknown[]; };
 const actionLabel = (value: unknown) => typeof value === "string" ? value : (() => { const x = record(value, "status action"); if (Object.keys(x).length !== 1 || !("reviewed" in x)) bad("status action"); const y = record(x.reviewed, "status action"); exactKeys(y, ["decision"]); return `reviewed:${string(y.decision, "status action")}`; })();
-const mapStatus = (value: unknown): StatusHistory => { const x = record(value, "status history"); const from = nullable(x.from, (v) => string(v, "status history") as ProjectStatus), to = string(x.to, "status history") as ProjectStatus; if ((from && !statuses.has(from)) || !statuses.has(to)) bad("status history"); return { sequence: integer(x.sequence, "status history"), project_id: string(x.project_id, "status history"), from, to, action: actionLabel(x.action), actor: string(x.actor, "status history"), at: uint(x.at, "status history", U64_MAX), reason: review(x.reason) }; };
+const mapStatus = (value: unknown): StatusHistory => { const x = record(value, "status history"); const from = nullable(x.from, (v) => string(v, "status history") as ProjectStatus), to = string(x.to, "status history") as ProjectStatus; if ((from && !statuses.has(from)) || !statuses.has(to)) bad("status history"); return { sequence: integer(x.sequence, "status history"), project_id: integer(x.project_id, "status history"), from, to, action: actionLabel(x.action), actor: string(x.actor, "status history"), at: uint(x.at, "status history", U64_MAX), reason: review(x.reason) }; };
 const addressActions = new Set(["proposed", "replaced", "cancelled", "accepted"] as const);
-const mapAddress = (value: unknown): AddressHistory => { const x = record(value, "address history"), action = string(x.action, "address history") as AddressHistory["action"]; if (!addressActions.has(action)) bad("address history"); return { sequence: integer(x.sequence, "address history"), project_id: string(x.project_id, "address history"), action, actor: string(x.actor, "address history"), at: uint(x.at, "address history", U64_MAX), old_address: string(x.old_address, "address history"), proposed_address: nullable(x.proposed_address, (v) => string(v, "address history")) }; };
+const mapAddress = (value: unknown): AddressHistory => { const x = record(value, "address history"), action = string(x.action, "address history") as AddressHistory["action"]; if (!addressActions.has(action)) bad("address history"); return { sequence: integer(x.sequence, "address history"), project_id: integer(x.project_id, "address history"), action, actor: string(x.actor, "address history"), at: uint(x.at, "address history", U64_MAX), old_address: string(x.old_address, "address history"), proposed_address: nullable(x.proposed_address, (v) => string(v, "address history")) }; };
 
 export const registryQueries = {
-  config: () => ({ config: {} }), pause: () => ({ pause: {} }), health: () => ({ health: {} }), project: (projectId: string) => ({ project: { project_id: projectId } }),
-  projects: (startAfter: string | null = null) => ({ projects: { start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
-  applications: (startAfter: string | null = null) => ({ applications: { start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
+  config: () => ({ config: {} }), pause: () => ({ pause: {} }), health: () => ({ health: {} }), project: (projectId: number) => ({ project: { project_id: projectId } }),
+  projects: (startAfter: number | null = null) => ({ projects: { start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
+  applications: (startAfter: number | null = null) => ({ applications: { start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
   options: (startAfter: string | null = null) => ({ all_options: { start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
-  statusHistory: (projectId: string, startAfter: number | null = null) => ({ status_history: { project_id: projectId, start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
-  addressHistory: (projectId: string, startAfter: number | null = null) => ({ address_history: { project_id: projectId, start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
+  statusHistory: (projectId: number, startAfter: number | null = null) => ({ status_history: { project_id: projectId, start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
+  addressHistory: (projectId: number, startAfter: number | null = null) => ({ address_history: { project_id: projectId, start_after: startAfter, limit: REGISTRY_PAGE_LIMIT } }),
 } as const;
 async function paginate<T>(query: (cursor: string | number | null) => Promise<unknown>, map: (value: unknown) => T, key: "projects" | "entries", cursorOf: (item: T) => string | number): Promise<T[]> {
   const output: T[] = []; let cursor: string | number | null = null;
@@ -99,26 +99,22 @@ async function paginate<T>(query: (cursor: string | number | null) => Promise<un
 }
 export interface RegistryDataSource {
   loadRegistry(): Promise<RegistryData>;
-  loadProject(projectId: string): Promise<ProjectDetail>;
-  loadActionContext(projectId: string, allowMissing: boolean): Promise<RegistryActionContext>;
+  loadProject(projectId: number): Promise<ProjectDetail>;
+  loadActionContext(projectId: number | null): Promise<RegistryActionContext>;
 }
 export function createRegistryDataSource(cfg: AppConfig, connector: Connect = connectRpc): RegistryDataSource {
   const connect = async () => { const client = await connector(cfg.rpc); const [chain, contract] = await Promise.all([client.getChainId(), client.getContract(cfg.registryContract)]); if (chain !== cfg.chainId || contract.address !== cfg.registryContract || contract.codeId !== cfg.registryCodeId) { client.disconnect(); throw new Error("Registry deployment mismatch."); } const code = await client.getCodeDetails(cfg.registryCodeId); if (code.checksum.toLowerCase() !== cfg.registryCodeChecksum) { client.disconnect(); throw new Error("Registry deployment mismatch: checksum."); } return client; };
   return {
-    async loadRegistry() { const client = await connect(); try { const query = (q: object) => client.queryContractSmart(cfg.registryContract, q); const [rawConfig, rawPause, rawHealth, height] = await Promise.all([query(registryQueries.config()), query(registryQueries.pause()), query(registryQueries.health()), client.getHeight()]); const config = mapRegistryConfig(rawConfig); if (config.native_denom !== "ujuno" || config.max_page_limit < REGISTRY_PAGE_LIMIT) throw new Error("Registry deployment has unsupported live configuration."); const [completeProjects, applications, options] = await Promise.all([paginate((cursor) => query(registryQueries.projects(cursor as string | null)), mapProject, "projects", (item) => item.id), paginate((cursor) => query(registryQueries.applications(cursor as string | null)), mapProject, "projects", (item) => item.id), paginate(async (cursor) => { const x = record(await query(registryQueries.options(cursor as string | null)), "options"); if (!Array.isArray(x.options)) bad("options"); return { projects: x.options }; }, (v) => string(v, "option"), "projects", (item) => item)]); const completeById = new Map(completeProjects.map((project) => [project.id, project])); if (!options.includes("do-not-distribute") || applications.some((application) => application.status !== "pending" || JSON.stringify(completeById.get(application.id)) !== JSON.stringify(application))) throw new Error("Registry returned inconsistent project classifications."); const projects = completeProjects.filter((project) => project.status === "active"); return { config, pause: mapPause(rawPause), health: mapHealth(rawHealth), projects, applications, options, observationHeight: integer(height, "height"), refreshedAt: new Date(), weakConsistency: true }; } finally { client.disconnect(); } },
+    async loadRegistry() { const client = await connect(); try { const query = (q: object) => client.queryContractSmart(cfg.registryContract, q); const [rawConfig, rawPause, rawHealth, height] = await Promise.all([query(registryQueries.config()), query(registryQueries.pause()), query(registryQueries.health()), client.getHeight()]); const config = mapRegistryConfig(rawConfig); if (config.native_denom !== "ujuno" || config.max_page_limit < REGISTRY_PAGE_LIMIT) throw new Error("Registry deployment has unsupported live configuration."); const [completeProjects, applications, options] = await Promise.all([paginate((cursor) => query(registryQueries.projects(cursor as number | null)), mapProject, "projects", (item) => item.id), paginate((cursor) => query(registryQueries.applications(cursor as number | null)), mapProject, "projects", (item) => item.id), paginate(async (cursor) => { const x = record(await query(registryQueries.options(cursor as string | null)), "options"); if (!Array.isArray(x.options)) bad("options"); return { projects: x.options }; }, (v) => string(v, "option"), "projects", (item) => item)]); const completeById = new Map(completeProjects.map((project) => [project.id, project])); const projects = completeProjects.filter((project) => project.status === "active"); const expectedOptions = ["do-not-distribute", ...projects.map((project) => `project:${project.id}`)].sort(); if (applications.some((application) => application.status !== "pending" || JSON.stringify(completeById.get(application.id)) !== JSON.stringify(application)) || JSON.stringify(options) !== JSON.stringify(expectedOptions)) throw new Error("Registry returned inconsistent project classifications."); return { config, pause: mapPause(rawPause), health: mapHealth(rawHealth), projects, applications, options, observationHeight: integer(height, "height"), refreshedAt: new Date(), weakConsistency: true }; } finally { client.disconnect(); } },
     async loadProject(projectId) { const client = await connect(); try { const query = (q: object) => client.queryContractSmart(cfg.registryContract, q); const project = mapProject(await query(registryQueries.project(projectId))); if (project.id !== projectId) throw new Error("Registry project identity mismatch."); const [statusHistory, addressHistory] = await Promise.all([paginate((cursor) => query(registryQueries.statusHistory(projectId, cursor as number | null)), mapStatus, "entries", (item) => item.sequence), paginate((cursor) => query(registryQueries.addressHistory(projectId, cursor as number | null)), mapAddress, "entries", (item) => item.sequence)]); if (statusHistory.some((x) => x.project_id !== projectId) || addressHistory.some((x) => x.project_id !== projectId)) throw new Error("Registry returned cross-project history."); return { project, statusHistory, addressHistory }; } finally { client.disconnect(); } },
-    async loadActionContext(projectId, allowMissing) {
+    async loadActionContext(projectId) {
       const client = await connect();
       try {
         const query = (q: object) => client.queryContractSmart(cfg.registryContract, q);
         const [rawConfig, rawPause, rawHealth, height, chainTimeNanos] = await Promise.all([
           query(registryQueries.config()), query(registryQueries.pause()), query(registryQueries.health()), client.getHeight(), client.getChainTimeNanos(),
         ]);
-        let project: Project | null = null;
-        try { project = mapProject(await query(registryQueries.project(projectId))); }
-        catch (error) {
-          if (!allowMissing || !(error instanceof Error) || !/project not found/i.test(error.message)) throw error;
-        }
+        const project = projectId === null ? null : mapProject(await query(registryQueries.project(projectId)));
         if (project && project.id !== projectId) throw new Error("Registry project identity mismatch.");
         const config = mapRegistryConfig(rawConfig), pause = mapPause(rawPause), health = mapHealth(rawHealth);
         const data: RegistryData = { config, pause, health, projects: project?.status === "active" ? [project] : [], applications: project?.status === "pending" ? [project] : [], options: ["do-not-distribute"], observationHeight: integer(height, "height"), refreshedAt: new Date(), weakConsistency: true };

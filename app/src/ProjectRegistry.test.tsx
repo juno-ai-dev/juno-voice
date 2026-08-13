@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Registry } from "./ProjectRegistry";
 import { digestMetadataFile } from "./metadataDigest";
-import type { RegistryDataSource } from "./registry";
+import type { Project, RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
 import { clearRegistrySubmission, saveRegistrySubmission } from "./registrySubmissionState";
 import { config } from "./test/bountyFixtures";
@@ -25,7 +25,7 @@ const source = (): RegistryDataSource => ({
   loadActionContext: vi.fn(async () => ({ data, project: null, chainTimeNanos: "10", fingerprint: "registry" })),
 });
 const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender, chainId: "juno-1",
-  contract: config.registryContract, executeMessage: { register_project: { project_id: "alpha", metadata_uri: "ipfs://alpha",
+  contract: config.registryContract, executeMessage: { register_project: { metadata_uri: "ipfs://alpha",
     metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender } }, funds: [{ denom: "ujuno", amount: "1000000" }],
   fee: { gas: "180000", amount: [{ denom: "ujuno", amount: "4500" }] }, consequences: ["Register"],
   canonicalState: { fingerprint: "registry", height: 100 }, walletRevision: 1 };
@@ -39,7 +39,6 @@ async function openProjectWorkbench() {
 async function prepareAndSubmit(port: RegistryTransactionFlow) {
   await screen.findByText("Eligible projects");
   await openProjectWorkbench();
-  await userEvent.type(screen.getByLabelText("Project ID"), "alpha");
   await userEvent.type(screen.getByLabelText("Metadata URI"), "ipfs://alpha");
   await userEvent.type(screen.getByLabelText("SHA-256 metadata digest"), `sha256:${"a".repeat(64)}`);
   await userEvent.type(screen.getByLabelText("Payout address"), sender);
@@ -56,6 +55,24 @@ async function prepareAndSubmit(port: RegistryTransactionFlow) {
 describe("registry transaction UI evidence", () => {
   beforeEach(() => sessionStorage.clear());
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); clearRegistrySubmission({ sender, chainId: config.chainId, contract: config.registryContract }); });
+
+  it("uses project metadata as the primary label and keeps the numeric ID secondary", async () => {
+    const project: Project = {
+      id: 7, owner: sender, payout_address: sender, metadata_uri: "ipfs://alpha-project",
+      metadata_digest: `sha256:${"a".repeat(64)}`, status: "active", created_at: "1",
+      updated_at: "1", status_history_count: 1, address_history_count: 0,
+      provenance: { kind: "bonded_registration", applicant: sender },
+      bond: { amount: "1000000", depositor: sender, state: "deposited" },
+      pending_payout_address: null, latest_review: null,
+    };
+    const populated = source();
+    vi.mocked(populated.loadRegistry).mockResolvedValue({ ...data, projects: [project] });
+    render(<Registry source={populated} config={config} />);
+
+    expect(await screen.findByRole("heading", { name: project.metadata_uri })).toBeInTheDocument();
+    expect(screen.getByText("Project #7")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^7$/ })).not.toBeInTheDocument();
+  });
 
   it("calculates a canonical metadata digest without uploading the selected file", async () => {
     const bytes = new Uint8Array(32); bytes[0] = 1; bytes[31] = 255;
