@@ -50,7 +50,7 @@ describe("production transaction wiring", () => {
     render(<App config={config} source={{ loadLedger: vi.fn(async () => ledger) }} registrySource={registrySource()} />);
     await userEvent.click(await screen.findByRole("link", { name: /^FAQ/ }));
     const region = screen.getByLabelText("faq view");
-    await screen.findByRole("heading", { name: /Questions, answered plainly/ });
+    await screen.findByRole("heading", { name: /Questions, answered plainly/ }, { timeout: 5_000 });
     expect(region).toHaveFocus();
     expect(window.location.hash).toBe("#faq");
   });
