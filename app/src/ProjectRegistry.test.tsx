@@ -123,6 +123,20 @@ describe("registry transaction UI evidence", () => {
     finish({ status: "unknown" });
   });
 
+  it("refuses a prepared review whose action differs from the selected action", async () => {
+    const port = flow();
+    vi.mocked(port.prepare).mockResolvedValueOnce({ ...review, executeMessage: { retire: { project_id: 1 } } });
+    render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    await screen.findByText("Eligible projects"); await openProjectWorkbench();
+    await userEvent.type(screen.getByLabelText("Metadata URI"), "ipfs://alpha");
+    await userEvent.type(screen.getByLabelText("SHA-256 metadata digest"), `sha256:${"a".repeat(64)}`);
+    await userEvent.type(screen.getByLabelText("Payout address"), sender);
+    await userEvent.click(screen.getByRole("button", { name: "Review project action" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm and open wallet" }));
+    expect(port.submit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/no longer matches.*Nothing was submitted/i);
+  });
+
   it("restores a hashless unknown lock after unmount and remount without inventing explorer evidence", async () => {
     const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
     const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);

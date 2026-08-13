@@ -14,7 +14,7 @@ const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender: bou
   canonicalState: { fingerprint: ledger.fingerprint, height: 123 }, walletRevision: 1 };
 const access = (): BountyTransactionAccess => ({ connect: vi.fn(async () => ({ address: bounty.creator })),
   prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "confirmed" as const, txHash: "ABC", height: 124,
-    confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, explorerUrl: "https://example/tx/ABC" })) });
+    confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, explorerUrl: "https://www.mintscan.io/juno/tx/ABC" })) });
 describe("bounty action UI", () => {
   beforeEach(() => sessionStorage.clear());
   it("keeps read-only access and explains unavailable wallet support", async () => {
@@ -112,17 +112,28 @@ describe("bounty action UI", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/no transaction hash is available.*Do not submit again/i);
     finish({ status: "unknown" });
   });
+  it("refuses a prepared review whose sender or action differs from the requested intent", async () => {
+    const port = access();
+    vi.mocked(port.prepare).mockResolvedValueOnce({ ...review, sender: toBech32("juno", new Uint8Array(20).fill(9)),
+      executeMessage: { expire: { bounty_id: 1 } } });
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
+    await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
+    expect(port.submit).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent(/no longer matches.*Nothing was submitted/i);
+  });
   it("keeps known-hash evidence visible while canonical state is incomplete", async () => {
     const port = access();
     vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown", txHash: "KNOWN",
-      explorerUrl: "https://example/tx/KNOWN" });
+      explorerUrl: "https://www.mintscan.io/juno/tx/KNOWN" });
     const view = render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
     await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
     await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
     expect(await screen.findByRole("status")).toHaveTextContent(/do not submit again/i);
     const evidence = screen.getByRole("link", { name: /transaction evidence KNOWN/ });
-    expect(evidence).toHaveAttribute("href", "https://example/tx/KNOWN");
+    expect(evidence).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/KNOWN");
     expect(screen.getByRole("button", { name: /review contribution/ })).toBeDisabled();
     view.rerender(<BountyActions bountyContract={config.contract} canonical={{ ...canonical, chainTimeNanos: "1700000001000000000" }}
       stale={false} access={port} bounty={bounty} />);

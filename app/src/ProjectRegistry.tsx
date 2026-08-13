@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig } from "./config";
 import type { Project, ProjectDetail, RegistryDataSource } from "./registry";
 import { buildRegistryIntent, type RegistryAction, type RegistryTransactionFlow } from "./registryActions";
-import { clearRegistrySubmission, loadLatestRegistrySubmission, loadRegistrySubmission, markRegistrySubmissionUnavailable, registryActionFromReview, saveRegistrySubmission, type StoredRegistrySubmission } from "./registrySubmissionState";
+import { clearRegistrySubmission, loadLatestRegistrySubmission, loadRegistrySubmission, registryActionFromReview, saveRegistrySubmission, type StoredRegistrySubmission } from "./registrySubmissionState";
 import type { TransactionOutcome, TransactionReview } from "./transactions";
+import { runtimeTransactionOutcome } from "./transactionOutcome";
 import { useAsync } from "./useAsync";
 import { formatJuno, userFacingTransactionAmounts } from "./junoAmount";
 import { digestMetadataFile } from "./metadataDigest";
@@ -13,18 +14,6 @@ const compact = (value: string) => value.length > 24 ? `${value.slice(0, 12)}…
 const juno = formatJuno;
 const utc = (nanos: string) => new Date(Number(BigInt(nanos) / 1_000_000n)).toISOString();
 const statusLabel = (status: Project["status"]) => ({ pending: "Pending curator review", active: "Active", suspended: "Suspended by curator", rejected: "Rejected by curator", retired: "Retired" })[status];
-const runtimeTransactionOutcome = (value: unknown): TransactionOutcome | null => {
-  if (typeof value !== "object" || value === null) return null;
-  const result = value as Record<string, unknown>, status = result.status, keys = Object.keys(result);
-  const exact = (...allowed: string[]) => keys.every((field) => allowed.includes(field)) && allowed.every((field) => field in result);
-  if (status === "confirmed" && exact("status", "txHash", "height", "confirmationStatus", "refreshStatus", "explorerUrl") &&
-    typeof result.txHash === "string" && result.txHash.trim().length > 0 && Number.isSafeInteger(result.height) && (result.height as number) > 0 &&
-    result.confirmationStatus === "confirmed" && (result.refreshStatus === "refreshed" || result.refreshStatus === "failed") && typeof result.explorerUrl === "string") return value as TransactionOutcome;
-  if ((status === "failed" || status === "rejected") && (exact("status", "reason") || (status === "failed" && exact("status", "reason", "txHash", "explorerUrl"))) && typeof result.reason === "string" && result.reason.trim().length > 0) return value as TransactionOutcome;
-  if (status === "pending" && exact("status", "txHash", "explorerUrl") && typeof result.txHash === "string" && result.txHash.trim().length > 0 && typeof result.explorerUrl === "string") return value as TransactionOutcome;
-  if (status === "unknown" && (exact("status") || exact("status", "txHash", "explorerUrl")) && (!("txHash" in result) || (typeof result.txHash === "string" && result.txHash.trim().length > 0 && typeof result.explorerUrl === "string"))) return value as TransactionOutcome;
-  return null;
-};
 
 const registryActionHelp: Record<RegistryAction, { title: string; detail: string }> = {
   register_project: { title: "Apply to the registry", detail: "Creates a pending application and deposits the exact registration bond shown in the live policy below. Approval and gauge funding are not guaranteed." },
@@ -84,6 +73,7 @@ function ActionWorkbench({ config, source, transactionFlow, sender }: { config: 
   const contractScope = useMemo(() => ({ chainId: config.chainId, contract: config.registryContract }), [config.chainId, config.registryContract]);
   const scope = useMemo(() => activeSender ? { sender: activeSender, ...contractScope } : null, [activeSender, contractScope]);
   const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
+  const preparedAction = useRef<RegistryAction | null>(null);
   const [storedSubmission, setStoredSubmission] = useState<StoredRegistrySubmission | null>(() => scope ? loadRegistrySubmission(scope) : loadLatestRegistrySubmission(contractScope));
   useEffect(() => setStoredSubmission(scope ? loadRegistrySubmission(scope) : loadLatestRegistrySubmission(contractScope)), [scope, contractScope]);
   const submissionLocked = storedSubmission !== null;
@@ -92,15 +82,15 @@ function ActionWorkbench({ config, source, transactionFlow, sender }: { config: 
   const visibleReceipt = receipt ?? persistedReceipt;
   const hashMetadataFile = async (file: File | undefined) => { if (!file) return; setDigestBusy(true); setDigestError(null); try { setDigest(await digestMetadataFile(file)); setReview(null); } catch (cause) { setDigestError(cause instanceof Error ? cause.message : "Metadata hashing failed."); } finally { setDigestBusy(false); } };
   const connect = async () => { if (!transactionFlow?.connect) return; setBusy(true); setError(null); try { const identity = await transactionFlow.connect(); setConnectedSender(identity.address); } catch (cause) { setError(cause instanceof Error ? cause.message : "Wallet connection failed."); } finally { setBusy(false); } };
-  const prepare = async () => { if (!transactionFlow || !activeSender || submissionLocked) return; setBusy(true); setError(null); setReview(null); setOutcome(null); try { const numericProjectId = action === "register_project" ? null : Number(projectId); const context = await source.loadActionContext(numericProjectId); const intent = buildRegistryIntent(config, activeSender, context, { action, projectId: numericProjectId, metadataUri, metadataDigest: digest, address, note }); setReview(await transactionFlow.prepare(intent)); } catch (cause) { setError(cause instanceof Error ? cause.message : "Transaction preparation failed."); } finally { setBusy(false); } };
+  const prepare = async () => { if (!transactionFlow || !activeSender || submissionLocked) return; setBusy(true); setError(null); setReview(null); setOutcome(null); try { const numericProjectId = action === "register_project" ? null : Number(projectId); const context = await source.loadActionContext(numericProjectId); const intent = buildRegistryIntent(config, activeSender, context, { action, projectId: numericProjectId, metadataUri, metadataDigest: digest, address, note }); const prepared = await transactionFlow.prepare(intent); preparedAction.current = action; setReview(prepared); } catch (cause) { setError(cause instanceof Error ? cause.message : "Transaction preparation failed."); } finally { setBusy(false); } };
   const submit = async () => {
     if (!transactionFlow || !review || !scope) return;
     setBusy(true); setError(null);
     const submittedReview = review;
     const submittedAction = registryActionFromReview(submittedReview.executeMessage);
     if (submittedReview.sender !== scope.sender || submittedReview.chainId !== scope.chainId ||
-      submittedReview.contract !== scope.contract || !submittedAction) {
-      markRegistrySubmissionUnavailable(scope); setStoredSubmission({ kind: "malformed" });
+      submittedReview.contract !== scope.contract || !submittedAction || submittedAction !== preparedAction.current) {
+      setError("Prepared transaction no longer matches the requested account, contract, and action. Nothing was submitted.");
       setReview(null); setBusy(false); return;
     }
     const preSubmissionEvidence = { version: 1 as const, ...scope, action: submittedAction, status: "unknown" as const };

@@ -2,12 +2,13 @@ import { useId, useRef, useState } from "react";
 import { contributeIntent, createBountyIntent, type EligibilityState } from "./bountyFlows";
 import type { Bounty, Contribution } from "./types";
 import type { TransactionIntent, TransactionOutcome, TransactionReview } from "./transactions";
+import { runtimeTransactionOutcome } from "./transactionOutcome";
 import { cancelSoleFundedIntent, claimRefundIntent, confirmSolePayoutIntent, declineSolePayoutIntent,
   expireBountyIntent, finalizePayoutIntent, nominatePayoutIntent, type SettlementState,
   votePayoutIntent } from "./settlementFlows";
 import { formatJuno, formatJunoCoin } from "./junoAmount";
 import { DEFAULT_CHAIN_ID } from "./config";
-import { bountyActionFromReview, clearBountySubmission, loadLatestBountySubmission, markBountySubmissionUnavailable,
+import { bountyActionFromReview, clearBountySubmission, loadLatestBountySubmission,
   saveBountySubmission, type StoredBountySubmission } from "./bountySubmissionState";
 import "./bounty.css";
 
@@ -17,19 +18,6 @@ export interface BountyTransactionAccess {
   submit(review: TransactionReview): Promise<TransactionOutcome>;
 }
 type ReviewState = { review: TransactionReview; submitting: boolean } | null;
-const runtimeTransactionOutcome = (value: unknown): TransactionOutcome | null => {
-  if (typeof value !== "object" || value === null) return null;
-  const result = value as Record<string, unknown>, status = result.status, keys = Object.keys(result);
-  const exact = (...allowed: string[]) => keys.every((field) => allowed.includes(field)) && allowed.every((field) => field in result);
-  if (status === "confirmed" && exact("status", "txHash", "height", "confirmationStatus", "refreshStatus", "explorerUrl") &&
-    typeof result.txHash === "string" && result.txHash.trim().length > 0 && Number.isSafeInteger(result.height) && (result.height as number) > 0 &&
-    result.confirmationStatus === "confirmed" && (result.refreshStatus === "refreshed" || result.refreshStatus === "failed") && typeof result.explorerUrl === "string") return value as TransactionOutcome;
-  if ((status === "failed" || status === "rejected") && (exact("status", "reason") || (status === "failed" && exact("status", "reason", "txHash", "explorerUrl"))) && typeof result.reason === "string" && result.reason.trim().length > 0) return value as TransactionOutcome;
-  if (status === "pending" && exact("status", "txHash", "explorerUrl") && typeof result.txHash === "string" && result.txHash.trim().length > 0 && typeof result.explorerUrl === "string") return value as TransactionOutcome;
-  if (status === "unknown" && (exact("status") || exact("status", "txHash", "explorerUrl")) && (!("txHash" in result) || (typeof result.txHash === "string" && result.txHash.trim().length > 0 && typeof result.explorerUrl === "string"))) return value as TransactionOutcome;
-  return null;
-};
-
 export function BountyActions({ canonical, access, stale, bountyContract, bounty, contributions = [], settlement }: {
   canonical: EligibilityState; access?: BountyTransactionAccess; stale: boolean;
   bountyContract: string;
@@ -39,6 +27,7 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
   const [review, setReview] = useState<ReviewState>(null);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
+  const preparedExpectation = useRef<{ sender: string; action: string } | null>(null);
   const contractScope = { chainId: DEFAULT_CHAIN_ID, contract: bountyContract };
   const [storedSubmission, setStoredSubmission] = useState<StoredBountySubmission | null>(() => loadLatestBountySubmission(contractScope));
   const submissionLocked = storedSubmission !== null;
@@ -51,7 +40,11 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
       // Re-read the extension account for every new review. The transaction
       // flow performs another identity check immediately before signing.
       const sender = (await access.connect()).address;
-      setReview({ review: await access.prepare(make(sender)), submitting: false });
+      const intent = make(sender), action = Object.keys(intent.executeMessage);
+      if (action.length !== 1) throw new Error("Transaction preparation produced an invalid action.");
+      const prepared = await access.prepare(intent);
+      preparedExpectation.current = { sender, action: action[0] };
+      setReview({ review: prepared, submitting: false });
     } catch (error) { setMessage(error instanceof Error ? error.message : "Transaction preparation failed."); }
   };
   const submit = async () => {
@@ -60,8 +53,10 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
     const submittedReview = review.review;
     const action = bountyActionFromReview(submittedReview, contractScope);
     const scope = { sender: submittedReview.sender, ...contractScope };
-    if (!action) {
-      markBountySubmissionUnavailable(scope); setStoredSubmission({ kind: "malformed" }); setReview(null); return;
+    const expected = preparedExpectation.current;
+    if (!action || !expected || submittedReview.sender !== expected.sender || action !== expected.action) {
+      setMessage("Prepared transaction no longer matches the requested account and action. Nothing was submitted.");
+      setReview(null); return;
     }
     const preSubmissionEvidence = { version: 1 as const, ...scope, action, status: "unknown" as const };
     if (!saveBountySubmission(preSubmissionEvidence)) {

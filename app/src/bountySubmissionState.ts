@@ -1,3 +1,4 @@
+import { DEFAULT_EXPLORER } from "./config";
 import type { TransactionReview } from "./transactions";
 
 const STORAGE_PREFIX = "juno-voice:bounty-submission:v1";
@@ -31,9 +32,7 @@ const exact = (value: Record<string, unknown>, required: readonly string[], opti
 const nonBlank = (value: unknown, max = 256): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= max && value.trim() === value;
 const explorerMatches = (value: unknown, txHash: string) => {
-  if (!nonBlank(value, 2_048)) return false;
-  try { const url = new URL(value); return url.protocol === "https:" && url.pathname.endsWith(`/tx/${encodeURIComponent(txHash)}`); }
-  catch { return false; }
+  return value === `${DEFAULT_EXPLORER}/tx/${encodeURIComponent(txHash)}`;
 };
 
 function parse(value: string, scope: BountySubmissionScope): BountySubmissionEvidence | null {
