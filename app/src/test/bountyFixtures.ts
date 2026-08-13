@@ -1,11 +1,12 @@
 import { loadConfig, type AppConfig } from "../config";
 import type { Bounty, LedgerData } from "../types";
-export const config: AppConfig = loadConfig({ VITE_RPC_URL: "https://rpc.example" });
+import { TEST_DEPLOYMENT_ENV } from "./deployment";
+export const config: AppConfig = loadConfig(TEST_DEPLOYMENT_ENV);
 export const bounty: Bounty = {
   id: 1,
   creator: "juno1creatorxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
   terms: {
-    title: "Fund public goods tooling",
+    title: "Fund community tooling",
     summary: "A real bounty record",
     acceptance_criteria: "Ship it",
     content_uri: null,

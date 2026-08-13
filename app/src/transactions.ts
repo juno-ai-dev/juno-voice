@@ -1,5 +1,5 @@
 import { fromBech32 } from "@cosmjs/encoding";
-import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_GAUGE_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
+import type { AppConfig } from "./config";
 import type { WalletAuthorization, WalletSession } from "./wallet";
 
 export interface Coin { readonly denom: string; readonly amount: string }
@@ -33,6 +33,7 @@ export type TransactionOutcome =
   | (Exclude<BroadcastResponse, { status: "confirmed" }> & { readonly explorerUrl?: string })
   | { readonly status: "rejected"; readonly reason: string };
 export interface TransactionDependencies {
+  readonly contracts: Pick<AppConfig, "contract" | "registryContract" | "gaugeContract">;
   readonly wallet: WalletSession;
   readonly readCanonicalState: () => Promise<CanonicalState>;
   readonly estimateFee: (request: Omit<ExactExecuteRequest, "fee">) => Promise<FeeEstimate>;
@@ -145,7 +146,7 @@ function validJunoAddress(address: string, lengths: readonly number[]): boolean 
     return decoded.prefix === "juno" && lengths.includes(decoded.data.length);
   } catch { return false; }
 }
-const projectId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9-]{3,64}$/.test(value) && value !== "do-not-distribute";
+const projectId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 const metadataUri = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && new TextEncoder().encode(value).length <= 2_048;
 const account = (value: unknown): value is string => typeof value === "string" && validJunoAddress(value, [20]);
 function objectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
@@ -175,8 +176,7 @@ const placeVotes = (body: unknown) => {
   return true;
 };
 const projectCandidate = (value: unknown) => value === null ||
-  (objectWithExactKeys(value, ["project_id", "metadata_uri", "metadata_digest"]) &&
-    typeof value.project_id === "string" && /^[a-z0-9-]{3,64}$/.test(value.project_id) &&
+  (objectWithExactKeys(value, ["metadata_uri", "metadata_digest"]) &&
     typeof value.metadata_uri === "string" && value.metadata_uri.length > 0 && digest(value.metadata_digest));
 const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Object.freeze({
   create_bounty: (body) => objectWithExactKeys(body, ["title", "summary", "acceptance_criteria", "content_uri",
@@ -200,8 +200,8 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
   cancel_sole_funded: (body) => objectWithExactKeys(body, ["bounty_id", "reason"]) && uint(body.bounty_id) && text(body.reason),
   expire: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   claim_refund: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
-  register_project: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest", "payout_address"]) &&
-    projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
+  register_project: (body) => objectWithExactKeys(body, ["metadata_uri", "metadata_digest", "payout_address"]) &&
+    metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
   update_pending_metadata: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest"]) &&
     projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest),
   propose_payout_address: (body) => objectWithExactKeys(body, ["project_id", "address"]) && projectId(body.project_id) && account(body.address),
@@ -215,6 +215,7 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
   open_epoch: gaugeOnly,
   place_votes: placeVotes,
   execute: gaugeOnly,
+  expire_epoch: gaugeOnly,
 });
 const BOUNTY_ACTIONS = new Set([
   "create_bounty", "contribute", "nominate_payout", "confirm_sole_payout", "decline_sole_payout",
@@ -224,21 +225,22 @@ const REGISTRY_ACTIONS = new Set([
   "register_project", "update_pending_metadata", "propose_payout_address", "cancel_payout_address_change",
   "accept_payout_address", "claim_registration_bond", "retire",
 ]);
-const GAUGE_ACTIONS = new Set(["open_epoch", "place_votes", "execute"]);
+const GAUGE_ACTIONS = new Set(["open_epoch", "place_votes", "execute", "expire_epoch"]);
 const PAYABLE_ACTIONS = new Set(["create_bounty", "contribute", "register_project"]);
-function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization): void {
+function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization,
+  contracts: TransactionDependencies["contracts"]): void {
   safeCanonical(intent);
   if (intent.chainId !== "juno-1" || authorization.chainId !== intent.chainId)
     throw new TransactionSafetyError("wrong_chain", "Transaction and wallet must both target juno-1.");
   if (!validJunoAddress(authorization.address, [20]) || !validJunoAddress(intent.contract, [32]) ||
-    ![DEFAULT_BOUNTY_CONTRACT, DEFAULT_REGISTRY_CONTRACT, DEFAULT_GAUGE_CONTRACT].includes(intent.contract as never) || !Array.isArray(intent.funds))
+    ![contracts.contract, contracts.registryContract, contracts.gaugeContract].includes(intent.contract) || !Array.isArray(intent.funds))
     throw new TransactionSafetyError("invalid_transaction", "Invalid or unapproved contract or funds.");
   const keys = Object.keys(intent.executeMessage);
   const action = keys.length === 1 ? keys[0] : "";
   if (!action || !ACTION_SCHEMAS[action]?.(intent.executeMessage[action]))
     throw new TransactionSafetyError("message_forbidden", "Execute action or schema is not permitted by the central policy.");
-  const contractActions = intent.contract === DEFAULT_BOUNTY_CONTRACT ? BOUNTY_ACTIONS :
-    intent.contract === DEFAULT_GAUGE_CONTRACT ? GAUGE_ACTIONS : REGISTRY_ACTIONS;
+  const contractActions = intent.contract === contracts.contract ? BOUNTY_ACTIONS :
+    intent.contract === contracts.gaugeContract ? GAUGE_ACTIONS : REGISTRY_ACTIONS;
   if (!contractActions.has(action))
     throw new TransactionSafetyError("message_forbidden", "Execute action is not permitted for this contract.");
   if (PAYABLE_ACTIONS.has(action) ? intent.funds.length !== 1 || !exactJunoCoin(intent.funds[0]) : intent.funds.length !== 0)
@@ -307,7 +309,8 @@ export function createTransactionFlow(dependencies: TransactionDependencies) {
   };
   return {
     async prepare(intent: TransactionIntent): Promise<TransactionReview> {
-      const authorization = await dependencies.wallet.current(); validateIntent(intent, authorization);
+      const authorization = await dependencies.wallet.current();
+      validateIntent(intent, authorization, dependencies.contracts);
       const canonicalState = await dependencies.readCanonicalState();
       safeCanonical(canonicalState);
       if (canonicalState.fingerprint !== intent.expectedStateFingerprint)

@@ -47,4 +47,12 @@ pub enum ContractError {
     NotProjectCandidate,
     #[error("bounty has already graduated")]
     AlreadyGraduated,
+    #[error("unknown reply id {0}")]
+    UnknownReply(u64),
+    #[error("registry graduation submessage failed: {0}")]
+    GraduationSubmessage(String),
+    #[error("there is no pending registry graduation")]
+    NoPendingGraduation,
+    #[error("registry returned a malformed graduation response")]
+    MalformedGraduationResponse,
 }

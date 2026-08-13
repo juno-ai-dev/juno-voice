@@ -39,7 +39,7 @@ describe("accessibility", () => {
 
   it("has no WCAG A/AA violations in populated and empty states", async () => {
     const populated = render(<Ledger config={config} source={source()} />);
-    await screen.findByText("Fund public goods tooling");
+    await screen.findByText("Fund community tooling");
     await checkA11y(populated.container);
     populated.unmount();
 
@@ -81,7 +81,7 @@ describe("accessibility", () => {
       observationHeight: ledger.observationHeight, chainTimeNanos: ledger.chainTimeNanos, fingerprint: "detail" };
     const { container } = render(<Ledger config={config} source={{ loadLedger: async () => ledger,
       loadBountyDetail: async () => detail }} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Fund public goods tooling" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Fund community tooling" }));
     await screen.findByRole("heading", { name: "Contributor-controlled settlement" });
     await checkA11y(container);
   });

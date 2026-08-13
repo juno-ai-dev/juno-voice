@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -o errexit -o nounset -o pipefail
 
-ARTIFACT_DIR=${1:?usage: validate-v1-wasm.sh ARTIFACT_DIR}
+ARTIFACT_DIR=${1:?usage: validate-v2-wasm.sh ARTIFACT_DIR}
 MAX_WASM_SIZE_BYTES=800000
 
 validate_artifact() {
@@ -9,7 +9,7 @@ validate_artifact() {
   local expected_exports=$2
   local path="$ARTIFACT_DIR/$artifact"
   if [ ! -f "$path" ]; then
-    echo "missing v1 Wasm artifact: $path" >&2
+    echo "missing v2 Wasm artifact: $path" >&2
     return 1
   fi
   local size
@@ -38,7 +38,7 @@ BASE='["__data_end","__heap_base","allocate","deallocate","execute","instantiate
 LEGACY=',"requires_cosmwasm_1_1","requires_cosmwasm_1_2","requires_iterator","requires_stargate"]'
 
 validate_artifact juno_voice_bounties.wasm \
-  "$BASE,\"query\",\"requires_iterator\"]"
+  "$BASE,\"query\",\"reply\",\"requires_iterator\"]"
 validate_artifact hack_juno_registry_adapter.wasm \
   "$BASE,\"query\",\"requires_iterator\"]"
 validate_artifact dao_dao_core.wasm \
@@ -48,4 +48,4 @@ validate_artifact dao_voting_juno_staked.wasm \
 validate_artifact gauge_orchestrator.wasm \
   "$BASE,\"migrate\",\"query\",\"reply\"$LEGACY"
 
-echo "Juno Voice v1 Wasm sizes and exports are valid (limit: $MAX_WASM_SIZE_BYTES bytes)"
+echo "Juno Voice v2 Wasm sizes and exports are valid (limit: $MAX_WASM_SIZE_BYTES bytes)"

@@ -1,12 +1,10 @@
-# Juno Voice v1 deployment
+# Juno Voice v2 deployment
 
-> **Historical `uni-7` tooling:** this directory documents the backend release
-> planner and testnet workflow used before the `juno-1` deployment. It is not the
-> current mainnet trial entry point. See
-> [`docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
+> **Fresh deployment only:** this planner creates new v2 instances and new
+> deterministic addresses. It does not migrate or import v1 state.
 
 `juno_voice_deploy.py` is the authority-preserving deployment planner for the
-v1 backend. It validates one versioned configuration, checks every Wasm byte
+v2 backend. It validates one versioned configuration, checks every Wasm byte
 against its declared SHA-256 digest, predicts every circularly-dependent
 address with CosmWasm `instantiate2`, and emits or applies one restartable step
 at a time.
@@ -28,6 +26,14 @@ The checked-in `config.schema.json` is for editors and external validation.
 The Python validator is authoritative because it additionally verifies files,
 bech32 checksums, CW2 identities, immutable constants, and cross-field economic
 invariants.
+
+Every config declares one closed cutover mode. A target with no earlier Juno
+Voice composition uses `no_prior_composition` with a null `historical_v1`.
+Replacing v1 uses `replace_historical_v1` and supplies the exact address, Code
+ID, and checksum of all five historical contracts. `juno-1` requires the latter
+mode. Historical addresses/checksums must be distinct from every predicted v2
+address/artifact, and uploaded v2 Code IDs may not reuse a historical Code ID.
+No historical identity is inferred from a repository default.
 
 Typical operator flow:
 
@@ -80,7 +86,12 @@ name and requires its address to equal the configured deployer and
 Before either mutation or final verification, the same read-only preflight
 confirms the RPC chain ID, rejects a catching-up node, and compares the live
 staking bond denomination and actual `gov` module account with the exact
-configuration. This prevents uploading bytes to a similarly named testnet on
+configuration. In historical replacement mode it also re-queries all five v1
+code identities and admins, the Vault/bounty/registry balances, empty bounty,
+project, and application pages, zero liabilities, retained-only options, and
+the absence of gauge epochs. `apply-next` repeats this gate before every
+broadcast, and `verify` embeds the final pre-client-cutover observation. This
+prevents uploading bytes to a similarly named testnet on
 which the required economic flows cannot run or governance authority is wrong.
 Before uploading, the runner scans all paginated on-chain code identities for
 the exact checksum. This closes the small broadcast-before-journal crash window:
@@ -97,7 +108,12 @@ recorded.
 
 `verify` is read-only with respect to the chain. It rechecks all code hashes,
 admins, creators, module links, disclosed Agent DAO membership/threshold, roles,
-limits, snapshot policy, and adapter economics. Its content-bound report embeds
+limits, retained-option and execution-deadline policy, and adapter economics.
+It additionally requires an empty v2 Vault balance, exact zero bounty and bond
+accounting, empty bounty/project/application pages, bounty/project counters at
+one, a zero consumed-source counter, only `do-not-distribute` in the registry,
+and no current or historical gauge epoch.
+Its content-bound report embeds
 the exact contract-info and smart-query observations plus the complete expected
 check profile, so the release gate rejects an omitted or substituted
 relationship instead of trusting a generic success label.

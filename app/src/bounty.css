@@ -1,0 +1,205 @@
+.bounty-create-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  margin: 28px 0 48px;
+  padding: 24px 28px;
+  border: 1px solid #6f3e40;
+  background: linear-gradient(105deg, #160608, #2c0d10);
+}
+
+.bounty-create-launcher h2,
+.bounty-create-launcher p {
+  margin: 3px 0;
+}
+
+.bounty-create-launcher > div > p:last-child,
+.form-intro,
+.form-disclosure > p,
+.disclosure-help p {
+  color: #d7bda1;
+}
+
+.action-panel-heading,
+.form-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.action-panel-heading {
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #553033;
+}
+
+.action-panel-heading p {
+  margin: 3px 0;
+}
+
+.create-bounty-form {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.create-bounty-form h2 {
+  margin-bottom: 4px;
+  font-size: clamp(30px, 5vw, 44px);
+}
+
+.form-section {
+  margin: 28px 0 18px;
+  padding: 20px;
+  border: 1px solid #6e4541;
+}
+
+.form-section legend,
+.form-disclosure summary {
+  font-family: var(--font-family-mono, "Space Mono", monospace);
+  font-weight: 700;
+}
+
+.field-hint,
+.form-submit-row small,
+.hash-status,
+.expiry-preview small {
+  display: block;
+  margin-top: 3px;
+  color: #d7bda1;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.create-bounty-form input::placeholder,
+.create-bounty-form textarea::placeholder {
+  color: #a98c79;
+}
+
+.expiry-preview {
+  display: grid;
+  gap: 3px;
+  padding: 14px 16px;
+  border-left: 3px solid #ff9a9b;
+  background: #100405;
+  font-family: var(--font-family-mono, "Space Mono", monospace);
+  overflow-wrap: anywhere;
+}
+
+.expiry-preview span {
+  color: #d7bda1;
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.field-error {
+  color: #ffc16b !important;
+}
+
+.form-disclosure {
+  margin: 14px 0;
+  border: 1px solid #6e4541;
+  background: #100405;
+}
+
+.form-disclosure summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 54px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+
+.form-disclosure summary span {
+  color: #ff9a9b;
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.form-disclosure[open] {
+  padding: 0 18px 18px;
+}
+
+.form-disclosure[open] summary {
+  margin: 0 -18px;
+  border-bottom: 1px solid #553033;
+}
+
+.disclosure-help {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border-left: 3px solid #ff9a9b;
+  background: #160608;
+}
+
+.disclosure-help p {
+  margin-bottom: 0;
+}
+
+.hash-field {
+  display: grid;
+  gap: 9px;
+}
+
+.action-panel .file-picker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid #a65a5c;
+  color: #ff9a9b;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.action-panel .file-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-picker:focus-within {
+  outline: 3px solid #ff9a9b;
+  outline-offset: 3px;
+}
+
+.form-submit-row {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid #553033;
+}
+
+.form-submit-row small {
+  max-width: 480px;
+}
+
+@media (max-width: 700px) {
+  .bounty-create-launcher,
+  .action-panel-heading,
+  .form-submit-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bounty-create-launcher .button,
+  .form-submit-row .button {
+    width: 100%;
+  }
+
+  .form-section {
+    padding: 16px;
+  }
+}

@@ -1,6 +1,7 @@
 use cosmwasm_std::{
-    entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, Event, MessageInfo,
-    Order, Response, StdError, StdResult, Storage, Timestamp, Uint128, WasmMsg,
+    entry_point, from_json, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, Event,
+    MessageInfo, Order, Reply, Response, StdError, StdResult, Storage, SubMsg, SubMsgResponse,
+    SubMsgResult, Timestamp, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
@@ -9,15 +10,16 @@ use crate::error::ContractError;
 use crate::msg::{
     AuthoritiesResponse, BountiesResponse, BountyResponse, ClaimsResponse, ConfigUpdate,
     ContributionsResponse, ErrorCatalogResponse, ErrorCode, ExecuteMsg, HealthResponse,
-    HistoryResponse, InstantiateMsg, Limits, ModerationOutcome, PayoutVote, QueryMsg,
-    ReceiptsResponse, RegistryExecuteMsg, RoundsResponse,
+    HistoryResponse, IdentityStateResponse, InstantiateMsg, Limits, ModerationOutcome, PayoutVote,
+    QueryMsg, ReceiptsResponse, RegistryExecuteMsg, RegistryProjectCreatedResponse, RoundsResponse,
 };
 use crate::state::{
     Accounting, Bounty, BountyStatus, ClaimRecord, Config, ContributionView, GraduationRecord,
-    HistoryAction, HistoryEntry, ModerationRecord, Nomination, PauseState, RefundReason, Round,
-    RoundOutcome, RoundRule, Terms, VoteReceipt, ACCOUNTING, BOUNTIES, CLAIMS, CONFIG,
-    CONTRIBUTIONS, CONTRIBUTION_CHECKPOINTS, CONTRIBUTOR_INDEX, CONTRIBUTOR_POSITION, GRADUATIONS,
-    HISTORY, MODERATIONS, NEXT_BOUNTY_ID, PAUSE, ROUNDS, VOTER_INDEX, VOTES,
+    HistoryAction, HistoryEntry, ModerationRecord, Nomination, PauseState, PendingGraduation,
+    RefundReason, Round, RoundOutcome, RoundRule, Terms, VoteReceipt, ACCOUNTING, BOUNTIES, CLAIMS,
+    CONFIG, CONTRIBUTIONS, CONTRIBUTION_CHECKPOINTS, CONTRIBUTOR_INDEX, CONTRIBUTOR_POSITION,
+    GRADUATIONS, HISTORY, MODERATIONS, NEXT_BOUNTY_ID, PAUSE, PENDING_GRADUATION, ROUNDS,
+    VOTER_INDEX, VOTES,
 };
 
 const CONTRACT_NAME: &str = "crates.io:juno-voice-bounties";
@@ -30,6 +32,7 @@ const MAX_HARD_ROUNDS: u32 = 100;
 const MAX_HARD_PAGE_LIMIT: u32 = 100;
 const MAX_HARD_TEXT_BYTES: u32 = 16_384;
 const MAX_HARD_LIFETIME_SECONDS: u64 = 366 * 24 * 60 * 60;
+const GRADUATION_REPLY_ID: u64 = 1;
 
 #[entry_point]
 pub fn instantiate(
@@ -978,7 +981,7 @@ fn execute_graduate(
     if info.sender != config.agent {
         return Err(ContractError::Unauthorized);
     }
-    let mut bounty = load_bounty(deps.storage, bounty_id)?;
+    let bounty = load_bounty(deps.storage, bounty_id)?;
     if bounty.status != BountyStatus::Paid {
         return Err(ContractError::InvalidState);
     }
@@ -993,46 +996,121 @@ fn execute_graduate(
         .paid_recipient
         .clone()
         .ok_or(ContractError::InvalidState)?;
-    let record = GraduationRecord {
+    let pending = PendingGraduation {
         bounty_id,
         agent: info.sender.clone(),
         registry: config.registry.clone(),
-        project_id: candidate.project_id.clone(),
         payout_address: payout_address.clone(),
-        graduated_at: env.block.time,
+        requested_at: env.block.time,
     };
-    bounty.graduated_at = Some(env.block.time);
-    GRADUATIONS.save(deps.storage, bounty_id, &record)?;
-    append_history(
-        deps.storage,
-        &mut bounty,
-        &info.sender,
-        HistoryAction::Graduated,
-        env.block.time,
-    )?;
-    BOUNTIES.save(deps.storage, bounty_id, &bounty)?;
+    if PENDING_GRADUATION.may_load(deps.storage)?.is_some() {
+        return Err(ContractError::InvalidState);
+    }
+    PENDING_GRADUATION.save(deps.storage, &pending)?;
 
     let msg = RegistryExecuteMsg::Graduate {
         source_bounty_id: bounty_id,
-        project_id: candidate.project_id.clone(),
         metadata_uri: candidate.metadata_uri,
         metadata_digest: candidate.metadata_digest,
         payout_address: payout_address.to_string(),
     };
     Ok(Response::new()
-        .add_message(WasmMsg::Execute {
-            contract_addr: config.registry.to_string(),
-            msg: to_json_binary(&msg)?,
-            funds: vec![],
-        })
+        .add_submessage(SubMsg::reply_on_success(
+            WasmMsg::Execute {
+                contract_addr: config.registry.to_string(),
+                msg: to_json_binary(&msg)?,
+                funds: vec![],
+            },
+            GRADUATION_REPLY_ID,
+        ))
         .add_event(
-            Event::new("juno_voice_bounties.project_graduated")
+            Event::new("juno_voice_bounties.project_graduation_requested")
                 .add_attribute("bounty_id", bounty_id.to_string())
                 .add_attribute("agent", info.sender)
                 .add_attribute("registry", config.registry)
-                .add_attribute("project_id", candidate.project_id)
                 .add_attribute("payout_address", payout_address),
         ))
+}
+
+#[entry_point]
+pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, ContractError> {
+    if reply.id != GRADUATION_REPLY_ID {
+        return Err(ContractError::UnknownReply(reply.id));
+    }
+    let response = match reply.result {
+        SubMsgResult::Ok(response) => response,
+        SubMsgResult::Err(error) => return Err(ContractError::GraduationSubmessage(error)),
+    };
+    let pending = PENDING_GRADUATION
+        .may_load(deps.storage)?
+        .ok_or(ContractError::NoPendingGraduation)?;
+    let created = decode_registry_created_response(response)?;
+    if created.response_version != 1 || created.project_id == 0 {
+        return Err(ContractError::MalformedGraduationResponse);
+    }
+    let mut bounty = load_bounty(deps.storage, pending.bounty_id)?;
+    if bounty.status != BountyStatus::Paid || bounty.graduated_at.is_some() {
+        return Err(ContractError::InvalidState);
+    }
+    let record = GraduationRecord {
+        bounty_id: pending.bounty_id,
+        agent: pending.agent.clone(),
+        registry: pending.registry.clone(),
+        project_id: created.project_id,
+        payout_address: pending.payout_address.clone(),
+        graduated_at: pending.requested_at,
+    };
+    bounty.graduated_at = Some(pending.requested_at);
+    GRADUATIONS.save(deps.storage, pending.bounty_id, &record)?;
+    append_history(
+        deps.storage,
+        &mut bounty,
+        &pending.agent,
+        HistoryAction::Graduated,
+        pending.requested_at,
+    )?;
+    BOUNTIES.save(deps.storage, pending.bounty_id, &bounty)?;
+    PENDING_GRADUATION.remove(deps.storage);
+    Ok(Response::new().add_event(
+        Event::new("juno_voice_bounties.project_graduated")
+            .add_attribute("bounty_id", pending.bounty_id.to_string())
+            .add_attribute("agent", pending.agent)
+            .add_attribute("registry", pending.registry)
+            .add_attribute("project_id", created.project_id.to_string())
+            .add_attribute("payout_address", pending.payout_address),
+    ))
+}
+
+fn decode_registry_created_response(
+    response: SubMsgResponse,
+) -> Result<RegistryProjectCreatedResponse, ContractError> {
+    for msg_response in &response.msg_responses {
+        if msg_response
+            .type_url
+            .ends_with("MsgExecuteContractResponse")
+        {
+            let wrapped = cw_utils::parse_execute_response_data(msg_response.value.as_slice())
+                .map_err(|_| ContractError::MalformedGraduationResponse)?;
+            let data = wrapped
+                .data
+                .ok_or(ContractError::MalformedGraduationResponse)?;
+            return from_json(data).map_err(|_| ContractError::MalformedGraduationResponse);
+        }
+    }
+    #[allow(deprecated)]
+    let data = response
+        .data
+        .ok_or(ContractError::MalformedGraduationResponse)?;
+    from_json(&data)
+        .or_else(|_| {
+            let wrapped = cw_utils::parse_execute_response_data(data.as_slice())
+                .map_err(|_| StdError::generic_err("malformed registry execute response"))?;
+            let inner = wrapped
+                .data
+                .ok_or_else(|| StdError::generic_err("registry execute response omitted data"))?;
+            from_json(inner)
+        })
+        .map_err(|_| ContractError::MalformedGraduationResponse)
 }
 
 fn execute_pause(
@@ -1198,6 +1276,9 @@ fn query_inner(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractEr
             })?)
         }
         QueryMsg::Accounting {} => Ok(to_json_binary(&ACCOUNTING.load(deps.storage)?)?),
+        QueryMsg::IdentityState {} => Ok(to_json_binary(&IdentityStateResponse {
+            next_bounty_id: NEXT_BOUNTY_ID.load(deps.storage)?,
+        })?),
         QueryMsg::Health {} => {
             let config = CONFIG.load(deps.storage)?;
             let accounting = ACCOUNTING.load(deps.storage)?;
@@ -1566,17 +1647,6 @@ fn validate_project_candidate(
     candidate: &crate::msg::ProjectCandidate,
     limits: &Limits,
 ) -> Result<(), ContractError> {
-    if candidate.project_id.len() < 3
-        || candidate.project_id.len() > 64
-        || !candidate
-            .project_id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-    {
-        return Err(ContractError::InvalidMetadata(
-            "project_id must be 3-64 lowercase ASCII letters, digits, or hyphens".into(),
-        ));
-    }
     validate_required(
         &candidate.metadata_uri,
         "metadata_uri",

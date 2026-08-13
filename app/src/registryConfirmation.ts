@@ -67,11 +67,14 @@ export function confirmRegistryMutation({
   funds: readonly Coin[];
 }) {
   const body = bodyOf(executeMessage, action);
-  const projectId = body.project_id;
-  if (typeof projectId !== "string" || refreshed.project?.id !== projectId)
-    throw new Error("Canonical registry project could not be refreshed.");
   const matches = events.filter((item) => item.type === eventNames[action] || item.type === `wasm-${eventNames[action]}`);
-  if (matches.length !== 1 || matches[0].attributes.find((item) => item.key === "project_id")?.value !== projectId)
+  const eventProjectId = matches[0]?.attributes.find((item) => item.key === "project_id")?.value;
+  if (matches.length !== 1 || typeof eventProjectId !== "string" || !/^[1-9]\d*$/.test(eventProjectId))
     throw new Error("Registry mutation event is missing, ambiguous, or did not match the reviewed project.");
+  const projectId = Number(eventProjectId);
+  if (!Number.isSafeInteger(projectId) || refreshed.project?.id !== projectId ||
+    (action !== "register_project" && body.project_id !== projectId))
+    throw new Error("Canonical registry project could not be refreshed.");
   assertProject(action, refreshed.project, body, sender, funds);
+  return projectId;
 }

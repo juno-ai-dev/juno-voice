@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://juno-voice.invalid/schema/release-evidence-v1.json",
-  "title": "Juno Voice v1 release evidence",
+  "$id": "https://juno-voice.invalid/schema/release-evidence-v2.json",
+  "title": "Juno Voice v2 release evidence",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,7 +10,7 @@
     "runbooks", "operations_rehearsal", "release_signoff"
   ],
   "properties": {
-    "schema_version": {"const": "juno-voice/release-evidence/v1"},
+    "schema_version": {"const": "juno-voice/release-evidence/v2"},
     "build_manifest": {"$ref": "#/$defs/file"},
     "deployment_verification": {"$ref": "#/$defs/file"},
     "upstream_review": {"$ref": "#/$defs/upstreamReview"},
@@ -116,7 +116,11 @@
             "moderate_expire_pull_refunds", "paid_bounty_graduation",
             "bonded_registration_approval", "snapshot_turnout_distribution",
             "failed_turnout_no_distribution", "suspension_before_execution",
-            "guardian_stop_governor_recovery", "consecutive_epoch_isolation"
+            "guardian_stop_governor_recovery", "consecutive_epoch_isolation",
+            "partial_ballot_retention", "retained_only_no_distribution",
+            "underfunded_terminal_epoch", "expired_terminal_epoch",
+            "aborted_terminal_epoch", "numeric_identity_assignment",
+            "bounty_source_rotation", "bond_transition_table"
           ]
         },
         "status": {"const": "passed"},
@@ -130,8 +134,8 @@
     },
     "scenarios": {
       "type": "array",
-      "minItems": 10,
-      "maxItems": 10,
+      "minItems": 18,
+      "maxItems": 18,
       "items": {"$ref": "#/$defs/scenario"},
       "allOf": [
         {"contains": {"properties": {"id": {"const": "multi_fund_ratify_pay"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
@@ -143,7 +147,15 @@
         {"contains": {"properties": {"id": {"const": "failed_turnout_no_distribution"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
         {"contains": {"properties": {"id": {"const": "suspension_before_execution"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
         {"contains": {"properties": {"id": {"const": "guardian_stop_governor_recovery"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
-        {"contains": {"properties": {"id": {"const": "consecutive_epoch_isolation"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+        {"contains": {"properties": {"id": {"const": "consecutive_epoch_isolation"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "partial_ballot_retention"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "retained_only_no_distribution"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "underfunded_terminal_epoch"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "expired_terminal_epoch"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "aborted_terminal_epoch"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "numeric_identity_assignment"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "bounty_source_rotation"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "bond_transition_table"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
       ]
     },
     "stakeChange": {

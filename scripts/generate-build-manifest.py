@@ -7,10 +7,10 @@ from pathlib import Path
 
 
 ARTIFACTS = {
-    "juno_voice_bounties.wasm": ("crates.io:juno-voice-bounties", "1.0.0", "juno-voice"),
+    "juno_voice_bounties.wasm": ("crates.io:juno-voice-bounties", "2.0.0", "juno-voice"),
     "hack_juno_registry_adapter.wasm": (
         "crates.io:hack-juno-registry-adapter",
-        "1.0.0",
+        "2.0.0",
         "juno-voice",
     ),
     "dao_dao_core.wasm": ("crates.io:dao-dao-core", "2.8.0-alpha.2", "dao-contracts"),
@@ -19,7 +19,7 @@ ARTIFACTS = {
         "2.8.0-alpha.2",
         "dao-contracts",
     ),
-    "gauge_orchestrator.wasm": ("crates.io:gauge", "2.8.0-alpha.2", "dao-contracts"),
+    "gauge_orchestrator.wasm": ("crates.io:gauge", "2.8.0-alpha.3", "dao-contracts"),
 }
 SCHEMAS = {
     "juno_voice_bounties": (

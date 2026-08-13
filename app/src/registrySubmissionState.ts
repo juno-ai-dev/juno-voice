@@ -34,6 +34,11 @@ const nonBlank = (value: unknown, max: number): value is string =>
 const validExplorerUrl = (value: unknown, txHash: string) =>
   value === `${DEFAULT_EXPLORER}/tx/${encodeURIComponent(txHash)}`;
 
+export function markRegistrySubmissionUnavailable(scope: RegistrySubmissionScope): void {
+  unavailableSubmissions.add(key(scope));
+  unavailableLatest.add(latestKey(scope));
+}
+
 function parse(value: string, scope: RegistrySubmissionScope): RegistrySubmissionEvidence | null {
   try {
     const raw: unknown = JSON.parse(value);

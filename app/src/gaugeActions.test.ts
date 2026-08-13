@@ -29,7 +29,7 @@ describe("18-decimal gauge preference validation", () => {
 
 describe("canonical gauge eligibility and messages", () => {
   it("builds exact placement, revision/removal, open, and execute messages with empty funds", () => {
-    expect(buildGaugeIntent(config, voter, gaugeContext, "place_votes", [{ option: "alpha", weight: "0.5" }])).toMatchObject({ contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }] } }, funds: [] });
+    expect(buildGaugeIntent(config, voter, gaugeContext, "place_votes", [{ option: "project:1", weight: "0.5" }])).toMatchObject({ contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "project:1", weight: "0.5" }] } }, funds: [] });
     expect(buildGaugeIntent(config, voter, gaugeContext, "remove_votes")).toMatchObject({ executeMessage: { place_votes: { gauge: 0, votes: null } }, funds: [] });
     const terminal = { ...gaugeContext, data: { ...gaugeData, current: { ...gaugeData.current!, outcome: "distributed" as const, messageCount: 1 }, gauge: { ...gaugeData.gauge, nextEpoch: 2400 } } };
     expect(buildGaugeIntent(config, voter, terminal, "open_epoch")).toMatchObject({
@@ -47,12 +47,13 @@ describe("canonical gauge eligibility and messages", () => {
   ])("disables voting for %s", (_, change) => {
     const data = { ...gaugeData, ...change } as typeof gaugeData;
     expect(gaugeEligibility({ data, fingerprint: "x" }).vote).toBe(false);
-    expect(() => buildGaugeIntent(config, voter, { data, fingerprint: "x" }, "place_votes", [{ option: "alpha", weight: "1" }])).toThrow("not eligible");
+    expect(() => buildGaugeIntent(config, voter, { data, fingerprint: "x" }, "place_votes", [{ option: "project:1", weight: "1" }])).toThrow("not eligible");
   });
-  it("fails open and execute closed when the Vault is not funded", () => {
+  it("fails open closed but permits terminal execution to record an emitted-value shortfall", () => {
     const data = { ...gaugeData, vaultBalance: "9999999", chainTimeNanos: "3000000000000" };
     const eligibility = gaugeEligibility({ data, fingerprint: "x" });
-    expect(eligibility.execute).toBe(false);
+    expect(eligibility.open).toBe(false);
+    expect(eligibility.execute).toBe(true);
   });
   it("allows terminal no-turnout execution without pretending distribution needs funding", () => {
     const data = { ...gaugeData, vaultBalance: "0", adapterStopped: true, chainTimeNanos: "3000000000000", current: { ...gaugeData.current!, participatingPower: "1" } };

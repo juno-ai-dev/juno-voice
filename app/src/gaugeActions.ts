@@ -4,7 +4,7 @@ import { formatJuno } from "./junoAmount";
 import { canonicalDecimal, DECIMAL_SCALE, GAUGE_ID, parseDecimal18, type GaugeActionContext, type GaugeVote } from "./gauge";
 import type { TransactionIntent, TransactionOutcome, TransactionReview } from "./transactions";
 
-export type GaugeAction = "open_epoch" | "place_votes" | "remove_votes" | "execute";
+export type GaugeAction = "open_epoch" | "place_votes" | "remove_votes" | "execute" | "expire_epoch";
 export interface PreferenceInput { option: string; weight: string }
 export interface GaugeTransactionFlow {
   connect?(): Promise<{ address: string }>;
@@ -45,13 +45,15 @@ export function gaugeEligibility(context: GaugeActionContext) {
   const turnoutMet = !!epoch && BigInt(epoch.participatingPower) * 10_000n >= BigInt(epoch.snapshotTotalPower) * BigInt(epoch.minTurnoutBps);
   const minimum = data.gauge.minPercentSelected === null ? 0n : parseDecimal18(data.gauge.minPercentSelected);
   const valid = new Set(data.currentRegistryOptions);
-  const hasExecutionCandidate = !!epoch && BigInt(epoch.totalCast) > 0n && data.options.some(({ option, power }) =>
-    BigInt(power) > 0n && valid.has(option) && BigInt(power) * DECIMAL_SCALE >= BigInt(epoch.totalCast) * minimum);
+  const hasExecutionCandidate = !!epoch && BigInt(epoch.participatingPower) > 0n && data.options.some(({ option, power }) =>
+    option !== epoch.retainedOption && BigInt(power) > 0n && valid.has(option) &&
+    BigInt(power) * DECIMAL_SCALE >= BigInt(epoch.participatingPower) * minimum);
   return {
     open: base && funded && (!epoch || epoch.outcome !== "open") && now >= BigInt(data.gauge.nextEpoch),
     vote: base && !!epoch && epoch.outcome === "open" && now < BigInt(epoch.closesAt) && BigInt(data.votingPower?.power ?? "0") > 0n,
-    execute: !data.gauge.isStopped && !!epoch && epoch.outcome === "open" && now >= BigInt(epoch.closesAt) &&
-      (!turnoutMet || !hasExecutionCandidate || (!data.adapterStopped && funded)),
+    execute: !data.gauge.isStopped && !!epoch && epoch.outcome === "open" && now >= BigInt(epoch.closesAt) && now < BigInt(epoch.executionDeadline) &&
+      (!turnoutMet || BigInt(epoch.participatingPower) === 0n || !hasExecutionCandidate || !data.adapterStopped),
+    expire: !!epoch && epoch.outcome === "open" && now >= BigInt(epoch.executionDeadline),
   };
 }
 
@@ -67,6 +69,12 @@ export function buildGaugeIntent(config: AppConfig, sender: string, context: Gau
     if (!eligibility.execute || !epoch) fail("Canonical chain state does not currently permit executing this epoch.");
     executeMessage = { execute: { gauge: GAUGE_ID } };
     consequence = "Finalize the fixed epoch. Ineligible, capped, unselected, and do-not-distribute value remains in the Program Vault; it does not roll over automatically.";
+  } else if (action === "expire_epoch") {
+    if (!eligibility.expire || !epoch) fail("Canonical chain state has not reached this epoch's execution deadline.");
+    const currentEpoch = epoch;
+    if (!currentEpoch) throw new Error("Canonical epoch is unavailable.");
+    executeMessage = { expire_epoch: { gauge: GAUGE_ID } };
+    consequence = `Terminalize epoch ${currentEpoch.epochId} after its fixed execution deadline. Its full unspent budget remains in the Program Vault.`;
   } else if (action === "remove_votes") {
     if (!eligibility.vote || !epoch || !data.ballot) fail("A live connected ballot is required before it can be removed.");
     const currentEpoch = epoch;

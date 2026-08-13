@@ -1,6 +1,6 @@
 [package]
 name = "hack-juno-registry-adapter"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
@@ -21,4 +21,5 @@ thiserror = "=1.0.69"
 [dev-dependencies]
 cw-multi-test = "=2.2.0"
 proptest = "=1.6.0"
+serde = "=1.0.229"
 juno-voice-bounties = { path = "../juno-voice-bounties", features = ["library"] }

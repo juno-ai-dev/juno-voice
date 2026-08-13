@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict evidence validation and Juno Voice v1 release-manifest generation."""
+"""Strict evidence validation and Juno Voice v2 release-manifest generation."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import copy
 import json
 import re
 import sys
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -16,8 +17,8 @@ import juno_voice_deploy as deploy  # noqa: E402
 import release_auth  # noqa: E402
 
 
-EVIDENCE_SCHEMA = "juno-voice/release-evidence/v1"
-MANIFEST_SCHEMA = "juno-voice/release-manifest/v1"
+EVIDENCE_SCHEMA = "juno-voice/release-evidence/v2"
+MANIFEST_SCHEMA = "juno-voice/release-manifest/v2"
 TX_HASH = re.compile(r"^[0-9A-F]{64}$")
 REQUIRED_SCENARIOS = {
     "multi_fund_ratify_pay",
@@ -30,6 +31,14 @@ REQUIRED_SCENARIOS = {
     "suspension_before_execution",
     "guardian_stop_governor_recovery",
     "consecutive_epoch_isolation",
+    "partial_ballot_retention",
+    "retained_only_no_distribution",
+    "underfunded_terminal_epoch",
+    "expired_terminal_epoch",
+    "aborted_terminal_epoch",
+    "numeric_identity_assignment",
+    "bounty_source_rotation",
+    "bond_transition_table",
 }
 REQUIRED_SCENARIO_ASSERTIONS = {
     "multi_fund_ratify_pay": {
@@ -91,6 +100,57 @@ REQUIRED_SCENARIO_ASSERTIONS = {
         "second_ballot_state": "query_response_equals",
         "snapshot_isolation_state": "query_response_equals",
     },
+    "partial_ballot_retention": {
+        "partial_epoch_state": "query_response_equals",
+        "partial_ballot_state": "query_response_equals",
+        "project_balance_delta": "balance_delta_equals",
+        "distribution_event": "transaction_event_equals",
+    },
+    "retained_only_no_distribution": {
+        "retained_only_epoch_state": "query_response_equals",
+        "retained_only_ballot_state": "query_response_equals",
+        "vault_balance_unchanged": "balance_delta_equals",
+        "retained_only_terminal_event": "transaction_event_equals",
+        "no_transfer_events": "matching_events_equal",
+    },
+    "underfunded_terminal_epoch": {
+        "underfunded_epoch_state": "query_response_equals",
+        "vault_balance_unchanged": "balance_delta_equals",
+        "underfunded_terminal_event": "transaction_event_equals",
+        "no_transfer_events": "matching_events_equal",
+    },
+    "expired_terminal_epoch": {
+        "expired_epoch_state": "query_response_equals",
+        "vault_balance_unchanged": "balance_delta_equals",
+        "expired_terminal_event": "transaction_event_equals",
+        "no_transfer_events": "matching_events_equal",
+    },
+    "aborted_terminal_epoch": {
+        "aborted_epoch_state": "query_response_equals",
+        "vault_balance_unchanged": "balance_delta_equals",
+        "aborted_terminal_event": "transaction_event_equals",
+        "no_transfer_events": "matching_events_equal",
+    },
+    "numeric_identity_assignment": {
+        "assigned_bonded_project_state": "query_response_equals",
+        "assigned_graduated_project_state": "query_response_equals",
+        "registration_assignment_event": "transaction_event_equals",
+    },
+    "bounty_source_rotation": {
+        "old_source_project_state": "query_response_equals",
+        "replacement_source_project_state": "query_response_equals",
+        "old_source_replay_rejected": "transaction_code_equals",
+    },
+    "bond_transition_table": {
+        "bond_pending_state": "query_response_equals",
+        "bond_active_state": "query_response_equals",
+        "bond_suspended_state": "query_response_equals",
+        "bond_rejected_refunded_state": "query_response_equals",
+        "bond_rejected_forfeited_state": "query_response_equals",
+        "bond_retired_claimable_state": "query_response_equals",
+        "bond_retired_claimed_state": "query_response_equals",
+        "graduated_bond_free_state": "query_response_equals",
+    },
 }
 QUERY_PROOFS = {
     "bounty_paid_state": ("bounty", "bounty", "paid_bounty"),
@@ -117,6 +177,25 @@ QUERY_PROOFS = {
     "first_ballot_state": ("gauge", "epoch_ballot", "epoch_ballot"),
     "second_ballot_state": ("gauge", "epoch_ballot", "epoch_ballot"),
     "snapshot_isolation_state": ("gauge", "list_epochs", "isolated_epoch_list"),
+    "partial_epoch_state": ("gauge", "epoch", "partial_epoch"),
+    "partial_ballot_state": ("gauge", "epoch_ballot", "partial_ballot"),
+    "retained_only_epoch_state": ("gauge", "epoch", "retained_only_epoch"),
+    "retained_only_ballot_state": ("gauge", "epoch_ballot", "retained_only_ballot"),
+    "underfunded_epoch_state": ("gauge", "epoch", "underfunded_epoch"),
+    "expired_epoch_state": ("gauge", "epoch", "expired_epoch"),
+    "aborted_epoch_state": ("gauge", "epoch", "aborted_epoch"),
+    "assigned_bonded_project_state": ("registry", "project", "approved_bonded_project"),
+    "assigned_graduated_project_state": ("registry", "project", "graduated_project"),
+    "old_source_project_state": ("registry", "project", "graduated_project_any_source"),
+    "replacement_source_project_state": ("registry", "project", "graduated_project_any_source"),
+    "bond_pending_state": ("registry", "project", "pending_bonded_project"),
+    "bond_active_state": ("registry", "project", "approved_bonded_project"),
+    "bond_suspended_state": ("registry", "project", "suspended_project"),
+    "bond_rejected_refunded_state": ("registry", "project", "rejected_refunded_project"),
+    "bond_rejected_forfeited_state": ("registry", "project", "rejected_forfeited_project"),
+    "bond_retired_claimable_state": ("registry", "project", "retired_claimable_project"),
+    "bond_retired_claimed_state": ("registry", "project", "retired_claimed_project"),
+    "graduated_bond_free_state": ("registry", "project", "graduated_project"),
 }
 QUERY_PAYLOAD_FIELDS = {
     "bounty": {"bounty_id"},
@@ -196,16 +275,105 @@ TRANSACTION_EVENT_PROOFS = {
             "snapshot_height",
             "snapshot_total_power",
             "participating_power",
+            "allocated_power",
             "total_cast",
+            "retained_option_power",
+            "unallocated_power",
+            "selected_project_power",
+            "emitted_value",
+            "retained_value",
             "min_turnout_bps",
+            "policy_version",
             "epoch_budget",
             "denom",
+            "execution_deadline",
             "outcome",
             "message_count",
         ),
         "fixed_attributes": {
             "action": "execute_snapshot_epoch",
             "outcome": "distributed",
+        },
+    },
+    "registration_assignment_event": {
+        "event_type": "wasm-hack_juno_registry.project_registered",
+        "contract": "registry",
+        "required_keys": (
+            "_contract_address",
+            "project_id",
+            "applicant",
+            "payout_address",
+            "bond",
+        ),
+        "fixed_attributes": {},
+    },
+    "retained_only_terminal_event": {
+        "event_type": "wasm",
+        "contract": "gauge",
+        "required_keys": (
+            "_contract_address", "action", "sender", "gauge_id", "epoch_id",
+            "snapshot_height", "snapshot_total_power", "participating_power",
+            "allocated_power", "total_cast", "retained_option_power",
+            "unallocated_power", "selected_project_power", "emitted_value",
+            "retained_value", "min_turnout_bps", "policy_version", "epoch_budget",
+            "denom", "execution_deadline", "outcome", "message_count",
+        ),
+        "fixed_attributes": {
+            "action": "execute_snapshot_epoch",
+            "outcome": "no_eligible_options",
+            "message_count": "0",
+        },
+    },
+    "underfunded_terminal_event": {
+        "event_type": "wasm",
+        "contract": "gauge",
+        "required_keys": (
+            "_contract_address", "action", "sender", "gauge_id", "epoch_id",
+            "snapshot_height", "snapshot_total_power", "participating_power",
+            "allocated_power", "total_cast", "retained_option_power",
+            "unallocated_power", "selected_project_power", "emitted_value",
+            "retained_value", "min_turnout_bps", "policy_version", "epoch_budget",
+            "denom", "execution_deadline", "outcome", "message_count",
+            "required_value", "available_balance",
+        ),
+        "fixed_attributes": {
+            "action": "execute_snapshot_epoch",
+            "outcome": "insufficient_funds",
+            "message_count": "0",
+        },
+    },
+    "expired_terminal_event": {
+        "event_type": "wasm",
+        "contract": "gauge",
+        "required_keys": (
+            "_contract_address", "action", "sender", "gauge_id", "epoch_id",
+            "snapshot_height", "snapshot_total_power", "participating_power",
+            "allocated_power", "total_cast", "retained_option_power",
+            "unallocated_power", "selected_project_power", "emitted_value",
+            "retained_value", "min_turnout_bps", "policy_version", "epoch_budget",
+            "denom", "execution_deadline", "outcome", "message_count",
+        ),
+        "fixed_attributes": {
+            "action": "expire_snapshot_epoch",
+            "outcome": "expired",
+            "message_count": "0",
+        },
+    },
+    "aborted_terminal_event": {
+        "event_type": "wasm",
+        "contract": "gauge",
+        "required_keys": (
+            "_contract_address", "action", "sender", "gauge_id", "epoch_id",
+            "snapshot_height", "snapshot_total_power", "participating_power",
+            "allocated_power", "total_cast", "retained_option_power",
+            "unallocated_power", "selected_project_power", "emitted_value",
+            "retained_value", "min_turnout_bps", "policy_version", "epoch_budget",
+            "denom", "execution_deadline", "outcome", "message_count", "reason",
+        ),
+        "fixed_attributes": {
+            "action": "abort_snapshot_epoch",
+            "outcome": "aborted",
+            "message_count": "0",
         },
     },
 }
@@ -250,7 +418,7 @@ GAS_REPORT_PAYLOAD_FIELDS = (
     "reviewed_at",
     "methodology",
 )
-RELEASE_DECISION_SCHEMA = "juno-voice/release-decision/v1"
+RELEASE_DECISION_SCHEMA = "juno-voice/release-decision/v2"
 RELEASE_DECISION_PAYLOAD_FIELDS = (
     "schema_version",
     "status",
@@ -331,12 +499,21 @@ EPOCH_RESPONSE_FIELDS = {
     "snapshot_height",
     "snapshot_total_power",
     "participating_power",
+    "allocated_power",
     "total_cast",
+    "retained_option",
+    "retained_option_power",
+    "unallocated_power",
+    "selected_project_power",
+    "emitted_value",
+    "retained_value",
     "min_turnout_bps",
+    "policy_version",
     "epoch_budget",
     "denom",
     "opens_at",
     "closes_at",
+    "execution_deadline",
     "voter_count",
     "option_count",
     "outcome",
@@ -1052,19 +1229,50 @@ def _validate_epoch_common(
     if response.get("epoch_id") != query_payload["epoch"]:
         fail(f"{path}.epoch_id", "does not match the queried epoch")
     _positive_int_field(response.get("snapshot_height"), f"{path}.snapshot_height")
-    _uint128_string(
+    snapshot_total = _uint128_string(
         response.get("snapshot_total_power"),
         f"{path}.snapshot_total_power",
         positive=True,
     )
-    _uint128_string(response.get("participating_power"), f"{path}.participating_power")
-    _uint128_string(response.get("total_cast"), f"{path}.total_cast")
+    participating = _uint128_string(
+        response.get("participating_power"), f"{path}.participating_power"
+    )
+    allocated = _uint128_string(response.get("allocated_power"), f"{path}.allocated_power")
+    total_cast = _uint128_string(response.get("total_cast"), f"{path}.total_cast")
+    retained_option = response.get("retained_option")
+    if retained_option != "do-not-distribute":
+        fail(f"{path}.retained_option", "must equal the configured retained option")
+    retained_power = _uint128_string(
+        response.get("retained_option_power"), f"{path}.retained_option_power"
+    )
+    unallocated = _uint128_string(response.get("unallocated_power"), f"{path}.unallocated_power")
+    selected_power = _uint128_string(
+        response.get("selected_project_power"), f"{path}.selected_project_power"
+    )
+    emitted = _uint128_string(response.get("emitted_value"), f"{path}.emitted_value")
+    retained = _uint128_string(response.get("retained_value"), f"{path}.retained_value")
+    if not (
+        allocated == total_cast
+        and allocated <= participating <= snapshot_total
+        and retained_power <= allocated
+        and unallocated == participating - allocated
+        and selected_power <= allocated - retained_power
+    ):
+        fail(path, "does not preserve snapshot allocation invariants")
     turnout = response.get("min_turnout_bps")
     if isinstance(turnout, bool) or not isinstance(turnout, int) or not 0 <= turnout <= 10_000:
         fail(f"{path}.min_turnout_bps", "must be in 0..=10000")
-    _uint128_string(response.get("epoch_budget"), f"{path}.epoch_budget", positive=True)
+    _positive_int_field(response.get("policy_version"), f"{path}.policy_version")
+    budget = _uint128_string(response.get("epoch_budget"), f"{path}.epoch_budget", positive=True)
     if response.get("denom") != deploy.DENOM:
         fail(f"{path}.denom", f"must equal {deploy.DENOM!r}")
+    opens_at = uint(response.get("opens_at"), f"{path}.opens_at")
+    closes_at = uint(response.get("closes_at"), f"{path}.closes_at")
+    deadline = uint(response.get("execution_deadline"), f"{path}.execution_deadline")
+    if not opens_at < closes_at < deadline:
+        fail(f"{path}.execution_deadline", "must follow the voting close")
+    if response.get("outcome") != "open" and emitted + retained != budget:
+        fail(path, "does not reconcile emitted plus retained value to the epoch budget")
 
 
 def validate_named_query_proof(
@@ -1178,22 +1386,33 @@ def validate_named_query_proof(
 
     if semantics in (
         "graduated_project",
+        "graduated_project_any_source",
         "pending_bonded_project",
         "approved_bonded_project",
         "suspended_project",
+        "rejected_refunded_project",
+        "rejected_forfeited_project",
+        "retired_claimable_project",
+        "retired_claimed_project",
     ):
+        _positive_int_field(query_payload["project_id"], f"{path}.query.project.project_id")
         if response.get("id") != query_payload["project_id"]:
             fail(f"{path}.actual.id", "does not match the queried project")
         expected_status = {
             "graduated_project": "active",
+            "graduated_project_any_source": "active",
             "pending_bonded_project": "pending",
             "approved_bonded_project": "active",
             "suspended_project": "suspended",
+            "rejected_refunded_project": "rejected",
+            "rejected_forfeited_project": "rejected",
+            "retired_claimable_project": "retired",
+            "retired_claimed_project": "retired",
         }[semantics]
         if response.get("status") != expected_status:
             fail(f"{path}.actual.status", f"must equal {expected_status!r}")
         provenance = _proof_object(response.get("provenance"), f"{path}.actual.provenance")
-        if semantics == "graduated_project":
+        if semantics in ("graduated_project", "graduated_project_any_source"):
             graduated = _proof_object(
                 provenance.get("graduated_bounty"),
                 f"{path}.actual.provenance.graduated_bounty",
@@ -1202,7 +1421,30 @@ def validate_named_query_proof(
                 graduated.get("source_bounty_id"),
                 f"{path}.actual.provenance.graduated_bounty.source_bounty_id",
             )
-        elif semantics in ("pending_bonded_project", "approved_bonded_project"):
+            source_contract = nonempty(
+                graduated.get("source_bounty_contract"),
+                f"{path}.actual.provenance.graduated_bounty.source_bounty_contract",
+            )
+            try:
+                source_bytes = deploy.decode_address(source_contract, "juno")
+            except ValueError:
+                fail(
+                    f"{path}.actual.provenance.graduated_bounty.source_bounty_contract",
+                    "must be a valid Juno address",
+                )
+            if len(source_bytes) != 32:
+                fail(
+                    f"{path}.actual.provenance.graduated_bounty.source_bounty_contract",
+                    "must be a 32-byte Juno contract address",
+                )
+            if semantics == "graduated_project" and source_contract != transcript["addresses"]["bounty"]:
+                fail(
+                    f"{path}.actual.provenance.graduated_bounty.source_bounty_contract",
+                    "must equal the verified bounty contract",
+                )
+            if response.get("bond") is not None:
+                fail(f"{path}.actual.bond", "must be null for graduated provenance")
+        else:
             bonded = _proof_object(
                 provenance.get("bonded_registration"),
                 f"{path}.actual.provenance.bonded_registration",
@@ -1212,8 +1454,20 @@ def validate_named_query_proof(
                 f"{path}.actual.provenance.bonded_registration.applicant",
             )
             bond = _proof_object(response.get("bond"), f"{path}.actual.bond")
-            if bond.get("state") != "deposited":
-                fail(f"{path}.actual.bond.state", "must equal 'deposited'")
+            expected_bond_state = {
+                "pending_bonded_project": "deposited",
+                "approved_bonded_project": "deposited",
+                "suspended_project": "deposited",
+                "rejected_refunded_project": "refunded",
+                "rejected_forfeited_project": "forfeited",
+                "retired_claimable_project": "claimable",
+                "retired_claimed_project": "claimed",
+            }[semantics]
+            if bond.get("state") != expected_bond_state:
+                fail(
+                    f"{path}.actual.bond.state",
+                    f"must equal {expected_bond_state!r}",
+                )
             _uint128_string(bond.get("amount"), f"{path}.actual.bond.amount", positive=True)
         return
 
@@ -1230,16 +1484,34 @@ def validate_named_query_proof(
             fail(f"{path}.actual", "bond receipts cannot be below the held liability")
         return
 
-    if semantics in ("distributed_epoch", "failed_turnout_epoch", "no_eligible_epoch"):
+    if semantics in (
+        "distributed_epoch",
+        "failed_turnout_epoch",
+        "no_eligible_epoch",
+        "partial_epoch",
+        "retained_only_epoch",
+        "underfunded_epoch",
+        "expired_epoch",
+        "aborted_epoch",
+    ):
         _validate_epoch_common(response, query_payload, f"{path}.actual")
         outcome = response.get("outcome")
-        if semantics == "distributed_epoch":
+        if semantics in ("distributed_epoch", "partial_epoch"):
             distributed = _proof_object(outcome, f"{path}.actual.outcome").get("distributed")
             distributed = _proof_object(distributed, f"{path}.actual.outcome.distributed")
             _positive_int_field(
                 distributed.get("message_count"),
                 f"{path}.actual.outcome.distributed.message_count",
             )
+            if semantics == "partial_epoch":
+                participating = int(response["participating_power"])
+                allocated = int(response["allocated_power"])
+                if not 0 < allocated < participating:
+                    fail(f"{path}.actual", "must prove a nonempty partial allocation")
+                if int(response["unallocated_power"]) == 0:
+                    fail(f"{path}.actual.unallocated_power", "must be positive")
+                if int(response["emitted_value"]) == 0 or int(response["retained_value"]) == 0:
+                    fail(f"{path}.actual", "must prove both emission and retention")
         elif semantics == "failed_turnout_epoch":
             if outcome != "no_distribution_turnout":
                 fail(f"{path}.actual.outcome", "must equal 'no_distribution_turnout'")
@@ -1247,11 +1519,49 @@ def validate_named_query_proof(
             total = int(response["snapshot_total_power"])
             if participating * 10_000 >= total * response["min_turnout_bps"]:
                 fail(f"{path}.actual", "does not prove turnout below the threshold")
-        elif outcome != "no_eligible_options":
-            fail(f"{path}.actual.outcome", "must equal 'no_eligible_options'")
+        elif semantics in ("no_eligible_epoch", "retained_only_epoch"):
+            if outcome != "no_eligible_options":
+                fail(f"{path}.actual.outcome", "must equal 'no_eligible_options'")
+            if semantics == "retained_only_epoch":
+                participating = int(response["participating_power"])
+                if not (
+                    participating > 0
+                    and int(response["allocated_power"]) == participating
+                    and int(response["retained_option_power"]) == participating
+                    and int(response["unallocated_power"]) == 0
+                    and int(response["selected_project_power"]) == 0
+                    and int(response["emitted_value"]) == 0
+                    and int(response["retained_value"]) == int(response["epoch_budget"])
+                ):
+                    fail(f"{path}.actual", "does not prove retained-only terminal accounting")
+        elif semantics == "underfunded_epoch":
+            insufficient = _proof_object(outcome, f"{path}.actual.outcome").get("insufficient_funds")
+            insufficient = _proof_object(
+                insufficient, f"{path}.actual.outcome.insufficient_funds"
+            )
+            required = _uint128_string(
+                insufficient.get("required"),
+                f"{path}.actual.outcome.insufficient_funds.required",
+                positive=True,
+            )
+            available = _uint128_string(
+                insufficient.get("available"),
+                f"{path}.actual.outcome.insufficient_funds.available",
+            )
+            if available >= required or int(response["emitted_value"]) != 0:
+                fail(f"{path}.actual", "does not prove terminal insufficient funds")
+        elif semantics == "expired_epoch":
+            if outcome != "expired" or int(response["emitted_value"]) != 0:
+                fail(f"{path}.actual", "does not prove terminal expiry without emission")
+        else:
+            aborted = _proof_object(outcome, f"{path}.actual.outcome").get("aborted")
+            aborted = _proof_object(aborted, f"{path}.actual.outcome.aborted")
+            nonempty(aborted.get("reason"), f"{path}.actual.outcome.aborted.reason")
+            if int(response["emitted_value"]) != 0:
+                fail(f"{path}.actual.emitted_value", "must be zero for an abort")
         return
 
-    if semantics == "epoch_ballot":
+    if semantics in ("epoch_ballot", "partial_ballot", "retained_only_ballot"):
         ballot = _proof_object(response.get("ballot"), f"{path}.actual.ballot")
         if ballot.get("voter") != query_payload["voter"]:
             fail(f"{path}.actual.ballot.voter", "does not match the queried voter")
@@ -1259,6 +1569,25 @@ def validate_named_query_proof(
         votes = ballot.get("votes")
         if not isinstance(votes, list) or not votes:
             fail(f"{path}.actual.ballot.votes", "must contain a historical allocation")
+        if semantics == "partial_ballot":
+            total = Decimal(0)
+            for index, vote in enumerate(votes):
+                vote = _proof_object(vote, f"{path}.actual.ballot.votes[{index}]")
+                option = vote.get("option")
+                if not isinstance(option, str) or not re.fullmatch(r"project:[1-9][0-9]*", option):
+                    fail(f"{path}.actual.ballot.votes[{index}].option", "must be a canonical project option")
+                try:
+                    weight = Decimal(vote.get("weight"))
+                except (InvalidOperation, TypeError):
+                    fail(f"{path}.actual.ballot.votes[{index}].weight", "must be a decimal")
+                if weight <= 0:
+                    fail(f"{path}.actual.ballot.votes[{index}].weight", "must be positive")
+                total += weight
+            if total >= 1:
+                fail(f"{path}.actual.ballot.votes", "must leave an unallocated remainder")
+        elif semantics == "retained_only_ballot":
+            if len(votes) != 1 or votes[0] != {"option": "do-not-distribute", "weight": "1"}:
+                fail(f"{path}.actual.ballot.votes", "must be one full retained-option allocation")
         _positive_int_field(
             ballot.get("receipt_index"), f"{path}.actual.ballot.receipt_index"
         )
@@ -1273,6 +1602,15 @@ def validate_named_query_proof(
         policy = _proof_object(response.get("snapshot_policy"), f"{path}.actual.snapshot_policy")
         if policy.get("denom") != deploy.DENOM:
             fail(f"{path}.actual.snapshot_policy.denom", f"must equal {deploy.DENOM!r}")
+        if policy.get("retained_option") != "do-not-distribute":
+            fail(
+                f"{path}.actual.snapshot_policy.retained_option",
+                "must equal the configured retained option",
+            )
+        _positive_int_field(
+            policy.get("execution_window_seconds"),
+            f"{path}.actual.snapshot_policy.execution_window_seconds",
+        )
         return
 
     if semantics == "snapshot_authorities":
@@ -1324,11 +1662,53 @@ def validate_scenario_query_relationships(
     assertions = {
         assertion["name"]: assertion
         for assertion in transcript["assertions"]
-        if isinstance(assertion, dict) and assertion.get("name") in QUERY_PROOFS
+        if isinstance(assertion, dict) and isinstance(assertion.get("name"), str)
     }
 
     def query_for(name: str) -> dict[str, Any]:
         return transcript["queries"][assertions[name]["source"]["query_index"]]
+
+    def event_attributes(name: str) -> dict[str, str]:
+        raw = assertions[name]["actual"]["attributes"]
+        return {item["key"]: item["value"] for item in raw}
+
+    def bind_epoch_event(query_name: str, event_name: str) -> None:
+        epoch = assertions[query_name]["actual"]
+        attributes = event_attributes(event_name)
+        expected = {
+            "gauge_id": str(epoch["gauge_id"]),
+            "epoch_id": str(epoch["epoch_id"]),
+            "snapshot_height": str(epoch["snapshot_height"]),
+            "snapshot_total_power": epoch["snapshot_total_power"],
+            "participating_power": epoch["participating_power"],
+            "allocated_power": epoch["allocated_power"],
+            "total_cast": epoch["total_cast"],
+            "retained_option_power": epoch["retained_option_power"],
+            "unallocated_power": epoch["unallocated_power"],
+            "selected_project_power": epoch["selected_project_power"],
+            "emitted_value": epoch["emitted_value"],
+            "retained_value": epoch["retained_value"],
+            "min_turnout_bps": str(epoch["min_turnout_bps"]),
+            "policy_version": str(epoch["policy_version"]),
+            "epoch_budget": epoch["epoch_budget"],
+            "denom": epoch["denom"],
+            "execution_deadline": str(epoch["execution_deadline"]),
+        }
+        outcome = epoch["outcome"]
+        if isinstance(outcome, str):
+            expected["outcome"] = outcome
+            expected["message_count"] = "0"
+        elif "distributed" in outcome:
+            expected["outcome"] = "distributed"
+            expected["message_count"] = str(outcome["distributed"]["message_count"])
+        elif "insufficient_funds" in outcome:
+            expected["outcome"] = "insufficient_funds"
+            expected["message_count"] = "0"
+        elif "aborted" in outcome:
+            expected["outcome"] = "aborted"
+            expected["message_count"] = "0"
+        if any(attributes.get(key) != value for key, value in expected.items()):
+            fail(path, f"{event_name} does not bind the queried epoch accounting")
 
     if scenario_id == "multi_fund_ratify_pay":
         bounty = query_for("bounty_paid_state")["query"]["bounty"]["bounty_id"]
@@ -1356,11 +1736,94 @@ def validate_scenario_query_relationships(
         active = query_for("active_approved_project_state")["query"]["project"]
         if pending["project_id"] != active["project_id"]:
             fail(path, "pending and approved proofs must reference one project")
-    elif scenario_id == "snapshot_turnout_distribution":
-        epoch = query_for("epoch_snapshot_state")["query"]["epoch"]
-        ballot = query_for("historical_ballot_state")["query"]["epoch_ballot"]
+    elif scenario_id in (
+        "snapshot_turnout_distribution",
+        "partial_ballot_retention",
+        "retained_only_no_distribution",
+    ):
+        epoch_name = {
+            "snapshot_turnout_distribution": "epoch_snapshot_state",
+            "partial_ballot_retention": "partial_epoch_state",
+            "retained_only_no_distribution": "retained_only_epoch_state",
+        }[scenario_id]
+        ballot_name = {
+            "snapshot_turnout_distribution": "historical_ballot_state",
+            "partial_ballot_retention": "partial_ballot_state",
+            "retained_only_no_distribution": "retained_only_ballot_state",
+        }[scenario_id]
+        epoch = query_for(epoch_name)["query"]["epoch"]
+        ballot = query_for(ballot_name)["query"]["epoch_ballot"]
         if epoch["gauge"] != ballot["gauge"] or epoch["epoch"] != ballot["epoch"]:
             fail(path, "snapshot epoch and historical ballot must reference one epoch")
+        if scenario_id in ("snapshot_turnout_distribution", "partial_ballot_retention"):
+            bind_epoch_event(epoch_name, "distribution_event")
+        elif scenario_id == "retained_only_no_distribution":
+            bind_epoch_event(epoch_name, "retained_only_terminal_event")
+    elif scenario_id in (
+        "underfunded_terminal_epoch",
+        "expired_terminal_epoch",
+        "aborted_terminal_epoch",
+    ):
+        query_name, event_name = {
+            "underfunded_terminal_epoch": (
+                "underfunded_epoch_state", "underfunded_terminal_event"
+            ),
+            "expired_terminal_epoch": (
+                "expired_epoch_state", "expired_terminal_event"
+            ),
+            "aborted_terminal_epoch": (
+                "aborted_epoch_state", "aborted_terminal_event"
+            ),
+        }[scenario_id]
+        bind_epoch_event(query_name, event_name)
+        attributes = event_attributes(event_name)
+        outcome = assertions[query_name]["actual"]["outcome"]
+        if scenario_id == "underfunded_terminal_epoch":
+            insufficient = outcome["insufficient_funds"]
+            if (
+                attributes.get("required_value") != insufficient["required"]
+                or attributes.get("available_balance") != insufficient["available"]
+            ):
+                fail(path, "underfunded event does not bind required and available value")
+        if scenario_id == "aborted_terminal_epoch":
+            if attributes.get("reason") != outcome["aborted"]["reason"]:
+                fail(path, "abort event does not bind the terminal reason")
+    elif scenario_id == "numeric_identity_assignment":
+        bonded = assertions["assigned_bonded_project_state"]["actual"]
+        graduated = assertions["assigned_graduated_project_state"]["actual"]
+        if graduated["id"] != bonded["id"] + 1:
+            fail(path, "registry-assigned IDs must be consecutive in chain transaction order")
+        project_id = event_attributes("registration_assignment_event").get("project_id")
+        if project_id != str(bonded["id"]):
+            fail(path, "registration event does not bind the assigned numeric project ID")
+    elif scenario_id == "bounty_source_rotation":
+        old = assertions["old_source_project_state"]["actual"]
+        replacement = assertions["replacement_source_project_state"]["actual"]
+        old_source = old["provenance"]["graduated_bounty"]
+        replacement_source = replacement["provenance"]["graduated_bounty"]
+        if not (
+            old["id"] != replacement["id"]
+            and old_source["source_bounty_id"]
+            == replacement_source["source_bounty_id"]
+            and old_source["source_bounty_contract"]
+            != replacement_source["source_bounty_contract"]
+            and replacement_source["source_bounty_contract"]
+            == transcript["addresses"]["bounty"]
+        ):
+            fail(path, "does not prove source-namespaced bounty ID reuse after rotation")
+    elif scenario_id == "bond_transition_table":
+        states = {
+            name: assertions[name]["actual"]
+            for name in REQUIRED_SCENARIO_ASSERTIONS[scenario_id]
+        }
+        lifecycle_names = (
+            "bond_pending_state", "bond_active_state", "bond_suspended_state",
+            "bond_retired_claimable_state", "bond_retired_claimed_state",
+        )
+        if len({states[name]["id"] for name in lifecycle_names}) != 1:
+            fail(path, "pending, active, suspended, retired, and claimed proofs must follow one bond")
+        if len({state["id"] for state in states.values()}) < 4:
+            fail(path, "bond transition evidence must cover multiple independent project paths")
     elif scenario_id == "guardian_stop_governor_recovery":
         stopped = query_for("guardian_stopped_state")["query"]["gauge"]
         resumed = query_for("governor_resumed_state")["query"]["gauge"]
@@ -1426,7 +1889,7 @@ def validate_scenario_transcript(
             "passed",
         ),
     )
-    if transcript["schema_version"] != "juno-voice/uni7-scenario-transcript/v1":
+    if transcript["schema_version"] != "juno-voice/uni7-scenario-transcript/v2":
         fail(f"scenario.{scenario_id}.schema_version", "is invalid")
     if transcript["scenario_id"] != scenario_id:
         fail(f"scenario.{scenario_id}.scenario_id", "does not match the evidence entry")
@@ -1451,6 +1914,22 @@ def validate_scenario_transcript(
     if not isinstance(transaction_evidence, list) or len(transaction_evidence) != len(transactions):
         fail(f"scenario.{scenario_id}.transaction_evidence", "must cover every transaction")
     allowed_message_contracts = allowed_scenario_contracts(config, addresses)
+    if scenario_id == "bounty_source_rotation":
+        old_source_assertions = [
+            assertion
+            for assertion in transcript["assertions"]
+            if isinstance(assertion, dict)
+            and assertion.get("name") == "old_source_project_state"
+        ]
+        if len(old_source_assertions) == 1:
+            try:
+                old_source = old_source_assertions[0]["actual"]["provenance"][
+                    "graduated_bounty"
+                ]["source_bounty_contract"]
+            except (KeyError, TypeError):
+                old_source = None
+            if isinstance(old_source, str):
+                allowed_message_contracts.add(old_source)
     evidence_hashes = []
     successful_transactions = 0
     for index, transaction in enumerate(transaction_evidence):
@@ -1682,8 +2161,45 @@ def validate_scenario_transcript(
             fail(f"{assertion_path}.actual", "must prove no matching transfer events")
         if name == "refund_events" and not actual:
             fail(f"{assertion_path}.actual", "must prove at least one refund event")
-        if name == "agent_resume_rejected" and actual == 0:
+        if name in ("agent_resume_rejected", "old_source_replay_rejected") and actual == 0:
             fail(f"{assertion_path}.actual", "must prove a failed transaction code")
+        if name == "old_source_replay_rejected":
+            transaction = _transaction_evidence(
+                transcript,
+                assertion["source"]["transaction_hash"],
+                f"{assertion_path}.source",
+            )
+            old_projects = [
+                item
+                for item in assertions
+                if isinstance(item, dict) and item.get("name") == "old_source_project_state"
+            ]
+            if len(old_projects) != 1:
+                fail(
+                    f"{assertion_path}.source",
+                    "requires exactly one old-source project proof",
+                )
+            old_project = old_projects[0]["actual"]
+            old_provenance = old_project["provenance"]["graduated_bounty"]
+            messages = transaction["messages"]
+            expected_execute = {
+                "graduate_project": {
+                    "bounty_id": old_provenance["source_bounty_id"]
+                }
+            }
+            if (
+                len(messages) != 1
+                or messages[0].get("@type")
+                != "/cosmwasm.wasm.v1.MsgExecuteContract"
+                or messages[0].get("contract")
+                != old_provenance["source_bounty_contract"]
+                or messages[0].get("msg") != expected_execute
+                or messages[0].get("funds") != []
+            ):
+                fail(
+                    f"{assertion_path}.source",
+                    "must be a failed replay of the old source/bounty pair",
+                )
         if predicate == "matching_events_equal" and set(
             assertion["source"]["transaction_hashes"]
         ) != set(transactions):
@@ -2820,15 +3336,28 @@ def _validate_evidence(
             "snapshot_height": str(snapshot_height),
             "snapshot_total_power": response["snapshot_total_power"],
             "participating_power": response["participating_power"],
+            "allocated_power": response["allocated_power"],
             "total_cast": response["total_cast"],
+            "retained_option_power": response["retained_option_power"],
+            "unallocated_power": response["unallocated_power"],
+            "selected_project_power": response["selected_project_power"],
+            "emitted_value": response["emitted_value"],
+            "retained_value": response["retained_value"],
             "min_turnout_bps": str(response["min_turnout_bps"]),
+            "policy_version": str(response["policy_version"]),
             "epoch_budget": str(config["gauge"]["epoch_budget"]),
             "denom": config["chain"]["native_denom"],
+            "execution_deadline": str(response["execution_deadline"]),
             "message_count": str(message_count),
         }
         for attribute, expected in expected_event_values.items():
             if distribution_attributes.get(attribute) != expected:
                 fail(f"{canary_path}.distribution_event.{attribute}", "does not match verified epoch state")
+        if int(response["emitted_value"]) != value:
+            fail(
+                f"{canary_path}.epoch_query.response.emitted_value",
+                "does not match distributed_value",
+            )
 
         transfer_total = 0
         transfer_count = 0

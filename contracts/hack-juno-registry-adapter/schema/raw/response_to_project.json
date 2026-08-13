@@ -35,7 +35,9 @@
       "$ref": "#/definitions/Timestamp"
     },
     "id": {
-      "type": "string"
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "latest_review": {
       "anyOf": [
@@ -101,9 +103,13 @@
             "graduated_bounty": {
               "type": "object",
               "required": [
+                "source_bounty_contract",
                 "source_bounty_id"
               ],
               "properties": {
+                "source_bounty_contract": {
+                  "$ref": "#/definitions/Addr"
+                },
                 "source_bounty_id": {
                   "type": "integer",
                   "format": "uint64",

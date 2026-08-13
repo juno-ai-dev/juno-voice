@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://juno-voice.invalid/schema/uni7-scenario-transcript-v1.json",
-  "title": "Juno Voice uni-7 scenario transcript v1",
+  "$id": "https://juno-voice.invalid/schema/uni7-scenario-transcript-v2.json",
+  "title": "Juno Voice v2 uni-7 scenario transcript",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,14 +11,18 @@
     "assertions", "passed"
   ],
   "properties": {
-    "schema_version": {"const": "juno-voice/uni7-scenario-transcript/v1"},
+    "schema_version": {"const": "juno-voice/uni7-scenario-transcript/v2"},
     "scenario_id": {
       "enum": [
         "multi_fund_ratify_pay", "reset_renominate_pay",
         "moderate_expire_pull_refunds", "paid_bounty_graduation",
         "bonded_registration_approval", "snapshot_turnout_distribution",
         "failed_turnout_no_distribution", "suspension_before_execution",
-        "guardian_stop_governor_recovery", "consecutive_epoch_isolation"
+        "guardian_stop_governor_recovery", "consecutive_epoch_isolation",
+        "partial_ballot_retention", "retained_only_no_distribution",
+        "underfunded_terminal_epoch", "expired_terminal_epoch",
+        "aborted_terminal_epoch", "numeric_identity_assignment",
+        "bounty_source_rotation", "bond_transition_table"
       ]
     },
     "chain_id": {"const": "uni-7"},

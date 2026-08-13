@@ -16,11 +16,14 @@ fn registry_code() -> Box<dyn Contract<Empty>> {
 }
 
 fn bounty_code() -> Box<dyn Contract<Empty>> {
-    Box::new(ContractWrapper::new(
-        bounty_contract::execute,
-        bounty_contract::instantiate,
-        bounty_contract::query,
-    ))
+    Box::new(
+        ContractWrapper::new(
+            bounty_contract::execute,
+            bounty_contract::instantiate,
+            bounty_contract::query,
+        )
+        .with_reply(bounty_contract::reply),
+    )
 }
 
 struct Suite {
@@ -127,9 +130,7 @@ fn suite() -> Suite {
     }
 }
 
-#[test]
-fn paid_candidate_graduates_through_authenticated_bounty_into_active_registry() {
-    let mut suite = suite();
+fn pay_candidate(suite: &mut Suite) {
     let expires_at = suite.app.block_info().time.plus_seconds(10_000);
     suite
         .app
@@ -144,7 +145,6 @@ fn paid_candidate_graduates_through_authenticated_bounty_into_active_registry() 
                 content_digest: Some(format!("sha256:{}", "a".repeat(64))),
                 expires_at,
                 project_candidate: Some(bounty_msg::ProjectCandidate {
-                    project_id: "cross-contract-project".into(),
                     metadata_uri: "ipfs://bafyproject".into(),
                     metadata_digest: format!("sha256:{}", "b".repeat(64)),
                 }),
@@ -170,11 +170,117 @@ fn paid_candidate_graduates_through_authenticated_bounty_into_active_registry() 
     suite
         .app
         .execute_contract(
-            suite.creator,
+            suite.creator.clone(),
             suite.bounty.clone(),
             &bounty_msg::ExecuteMsg::ConfirmSolePayout {
                 bounty_id: 1,
                 round: 1,
+            },
+            &[],
+        )
+        .unwrap();
+}
+
+#[test]
+fn paid_candidate_graduates_through_authenticated_bounty_into_active_registry() {
+    let mut suite = suite();
+    pay_candidate(&mut suite);
+    suite
+        .app
+        .execute_contract(
+            suite.agent,
+            suite.bounty.clone(),
+            &bounty_msg::ExecuteMsg::GraduateProject { bounty_id: 1 },
+            &[],
+        )
+        .unwrap();
+
+    let project: Project = suite
+        .app
+        .wrap()
+        .query_wasm_smart(
+            suite.registry.clone(),
+            &registry_msg::QueryMsg::Project { project_id: 1 },
+        )
+        .unwrap();
+    assert_eq!(project.status, ProjectStatus::Active);
+    assert_eq!(project.payout_address, suite.recipient);
+    assert_eq!(
+        project.provenance,
+        AdmissionProvenance::GraduatedBounty {
+            source_bounty_contract: suite.bounty.clone(),
+            source_bounty_id: 1
+        }
+    );
+    let checked: registry_msg::CheckOptionResponse = suite
+        .app
+        .wrap()
+        .query_wasm_smart(
+            suite.registry,
+            &registry_msg::QueryMsg::CheckOption {
+                option: "project:1".into(),
+            },
+        )
+        .unwrap();
+    assert!(checked.valid);
+    assert_ne!(suite.governor, project.owner);
+}
+
+#[test]
+fn registry_submessage_failure_rolls_back_pending_graduation_and_id_allocation() {
+    let mut suite = suite();
+    pay_candidate(&mut suite);
+    suite
+        .app
+        .execute_contract(
+            suite.agent.clone(),
+            suite.registry.clone(),
+            &registry_msg::ExecuteMsg::Stop {
+                scope: registry_msg::StopScope::Admissions,
+                reason: "test recovery".into(),
+            },
+            &[],
+        )
+        .unwrap();
+    assert!(suite
+        .app
+        .execute_contract(
+            suite.agent.clone(),
+            suite.bounty.clone(),
+            &bounty_msg::ExecuteMsg::GraduateProject { bounty_id: 1 },
+            &[],
+        )
+        .is_err());
+    let bounty: bounty_msg::BountyResponse = suite
+        .app
+        .wrap()
+        .query_wasm_smart(
+            suite.bounty.clone(),
+            &bounty_msg::QueryMsg::Bounty { bounty_id: 1 },
+        )
+        .unwrap();
+    assert!(bounty.graduation.is_none());
+    let projects: registry_msg::ProjectsResponse = suite
+        .app
+        .wrap()
+        .query_wasm_smart(
+            suite.registry.clone(),
+            &registry_msg::QueryMsg::Projects {
+                start_after: None,
+                limit: Some(10),
+            },
+        )
+        .unwrap();
+    assert!(projects.projects.is_empty());
+
+    suite
+        .app
+        .execute_contract(
+            suite.governor.clone(),
+            suite.registry.clone(),
+            &registry_msg::ExecuteMsg::Resume {
+                scope: registry_msg::StopScope::Admissions,
+                reason: "test recovery complete".into(),
             },
             &[],
         )
@@ -188,35 +294,13 @@ fn paid_candidate_graduates_through_authenticated_bounty_into_active_registry() 
             &[],
         )
         .unwrap();
-
     let project: Project = suite
         .app
         .wrap()
         .query_wasm_smart(
-            suite.registry.clone(),
-            &registry_msg::QueryMsg::Project {
-                project_id: "cross-contract-project".into(),
-            },
-        )
-        .unwrap();
-    assert_eq!(project.status, ProjectStatus::Active);
-    assert_eq!(project.payout_address, suite.recipient);
-    assert_eq!(
-        project.provenance,
-        AdmissionProvenance::GraduatedBounty {
-            source_bounty_id: 1
-        }
-    );
-    let checked: registry_msg::CheckOptionResponse = suite
-        .app
-        .wrap()
-        .query_wasm_smart(
             suite.registry,
-            &registry_msg::QueryMsg::CheckOption {
-                option: "cross-contract-project".into(),
-            },
+            &registry_msg::QueryMsg::Project { project_id: 1 },
         )
         .unwrap();
-    assert!(checked.valid);
-    assert_ne!(suite.governor, project.owner);
+    assert_eq!(project.id, 1);
 }

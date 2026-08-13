@@ -1,6 +1,6 @@
 {
   "contract_name": "juno-voice-bounties",
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "idl_version": "1.0.0",
   "instantiate": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -733,17 +733,13 @@
         "type": "object",
         "required": [
           "metadata_digest",
-          "metadata_uri",
-          "project_id"
+          "metadata_uri"
         ],
         "properties": {
           "metadata_digest": {
             "type": "string"
           },
           "metadata_uri": {
-            "type": "string"
-          },
-          "project_id": {
             "type": "string"
           }
         },
@@ -830,6 +826,19 @@
         ],
         "properties": {
           "health": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "identity_state"
+        ],
+        "properties": {
+          "identity_state": {
             "type": "object",
             "additionalProperties": false
           }
@@ -1467,17 +1476,13 @@
           "type": "object",
           "required": [
             "metadata_digest",
-            "metadata_uri",
-            "project_id"
+            "metadata_uri"
           ],
           "properties": {
             "metadata_digest": {
               "type": "string"
             },
             "metadata_uri": {
-              "type": "string"
-            },
-            "project_id": {
               "type": "string"
             }
           },
@@ -1844,7 +1849,9 @@
               "$ref": "#/definitions/Addr"
             },
             "project_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             },
             "registry": {
               "$ref": "#/definitions/Addr"
@@ -1922,17 +1929,13 @@
           "type": "object",
           "required": [
             "metadata_digest",
-            "metadata_uri",
-            "project_id"
+            "metadata_uri"
           ],
           "properties": {
             "metadata_digest": {
               "type": "string"
             },
             "metadata_uri": {
-              "type": "string"
-            },
-            "project_id": {
               "type": "string"
             }
           },
@@ -2933,6 +2936,22 @@
           "type": "string"
         }
       }
+    },
+    "identity_state": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "IdentityStateResponse",
+      "type": "object",
+      "required": [
+        "next_bounty_id"
+      ],
+      "properties": {
+        "next_bounty_id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
     },
     "pause": {
       "$schema": "http://json-schema.org/draft-07/schema#",

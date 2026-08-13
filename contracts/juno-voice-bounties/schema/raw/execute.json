@@ -611,17 +611,13 @@
       "type": "object",
       "required": [
         "metadata_digest",
-        "metadata_uri",
-        "project_id"
+        "metadata_uri"
       ],
       "properties": {
         "metadata_digest": {
           "type": "string"
         },
         "metadata_uri": {
-          "type": "string"
-        },
-        "project_id": {
           "type": "string"
         }
       },

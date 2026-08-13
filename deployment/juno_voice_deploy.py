@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validated, restartable deployment planner for Juno Voice v1.
+"""Validated, restartable deployment planner for Juno Voice v2.
 
 The planner intentionally uses only Python's standard library.  It never takes
 roles, contract addresses, economic values, or raw execute messages from CLI
@@ -27,23 +27,23 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 
-CONFIG_SCHEMA = "juno-voice/deployment-config/v1"
-STATE_SCHEMA = "juno-voice/deployment-state/v1"
-PLAN_SCHEMA = "juno-voice/deployment-plan/v1"
-PREFLIGHT_SCHEMA = "juno-voice/deployment-preflight/v1"
-VERIFICATION_SCHEMA = "juno-voice/deployment-verification/v1"
+CONFIG_SCHEMA = "juno-voice/deployment-config/v2"
+STATE_SCHEMA = "juno-voice/deployment-state/v2"
+PLAN_SCHEMA = "juno-voice/deployment-plan/v2"
+PREFLIGHT_SCHEMA = "juno-voice/deployment-preflight/v2"
+VERIFICATION_SCHEMA = "juno-voice/deployment-verification/v2"
 REQUIRED_ARTIFACTS = {
-    "juno_voice_bounties": ("crates.io:juno-voice-bounties", "1.0.0"),
+    "juno_voice_bounties": ("crates.io:juno-voice-bounties", "2.0.0"),
     "hack_juno_registry_adapter": (
         "crates.io:hack-juno-registry-adapter",
-        "1.0.0",
+        "2.0.0",
     ),
     "dao_dao_core": ("crates.io:dao-dao-core", "2.8.0-alpha.2"),
     "dao_voting_juno_staked": (
         "crates.io:dao-voting-juno-staked",
         "2.8.0-alpha.2",
     ),
-    "gauge_orchestrator": ("crates.io:gauge", "2.8.0-alpha.2"),
+    "gauge_orchestrator": ("crates.io:gauge", "2.8.0-alpha.3"),
 }
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 HEX_40 = re.compile(r"^[0-9a-f]{40}$")
@@ -295,6 +295,7 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
             "builder",
             "artifacts",
             "deployment",
+            "cutover",
             "agent_operations",
             "bounty",
             "registry",
@@ -427,6 +428,74 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
         if not SAFE_NAME.fullmatch(_string(deployment[field], f"deployment.{field}")):
             _fail(f"deployment.{field}", "contains unsafe characters")
 
+    cutover = _object(config["cutover"], "cutover", ("mode", "historical_v1"))
+    cutover_mode = cutover["mode"]
+    if cutover_mode == "no_prior_composition":
+        if cutover["historical_v1"] is not None:
+            _fail("cutover.historical_v1", "must be null when no prior composition exists")
+        if chain_id == "juno-1":
+            _fail(
+                "cutover.mode",
+                "juno-1 must replace an explicitly identified historical v1 composition",
+            )
+    elif cutover_mode == "replace_historical_v1":
+        historical = _object(
+            cutover["historical_v1"],
+            "cutover.historical_v1",
+            ("bounty", "registry", "program_vault", "voting_module", "gauge"),
+        )
+        seen_historical_addresses: set[str] = set()
+        seen_historical_code_ids: set[int] = set()
+        seen_historical_checksums: set[str] = set()
+        for component in ("bounty", "registry", "program_vault", "voting_module", "gauge"):
+            identity = _object(
+                historical[component],
+                f"cutover.historical_v1.{component}",
+                ("address", "code_id", "checksum"),
+            )
+            historical_address = identity["address"]
+            decode_address(
+                historical_address, prefix, f"cutover.historical_v1.{component}.address"
+            )
+            if historical_address in seen_historical_addresses:
+                _fail("cutover.historical_v1", "contract addresses must be distinct")
+            seen_historical_addresses.add(historical_address)
+            historical_code_id = _uint(
+                identity["code_id"],
+                f"cutover.historical_v1.{component}.code_id",
+                positive=True,
+            )
+            if historical_code_id in seen_historical_code_ids:
+                _fail("cutover.historical_v1", "code IDs must be distinct")
+            seen_historical_code_ids.add(historical_code_id)
+            checksum = _string(
+                identity["checksum"], f"cutover.historical_v1.{component}.checksum"
+            )
+            if not HEX_64.fullmatch(checksum):
+                _fail(
+                    f"cutover.historical_v1.{component}.checksum",
+                    "must be 64 lowercase hex characters",
+                )
+            seen_historical_checksums.add(checksum)
+        v2_checksums = {item["sha256"] for item in config["artifacts"].values()}
+        if seen_historical_checksums & v2_checksums:
+            _fail(
+                "cutover.historical_v1",
+                "historical and reviewed v2 checksums must be disjoint",
+            )
+        new_addresses = derive_addresses(config)
+        collisions = set(new_addresses.values()) & seen_historical_addresses
+        if collisions:
+            _fail(
+                "cutover.historical_v1",
+                f"historical and v2 addresses collide: {sorted(collisions)!r}",
+            )
+    else:
+        _fail(
+            "cutover.mode",
+            "must be 'no_prior_composition' or 'replace_historical_v1'",
+        )
+
     agent = _object(
         config["agent_operations"],
         "agent_operations",
@@ -447,7 +516,7 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
         ),
     )
     if agent["mode"] != "bind_reviewed":
-        _fail("agent_operations.mode", "v1 supports only an explicitly reviewed bound DAO")
+        _fail("agent_operations.mode", "v2 supports only an explicitly reviewed bound DAO")
     for field in ("core_address", "voting_module_address", "proposal_module_address"):
         decode_address(agent[field], prefix, f"agent_operations.{field}")
     for field in ("core_code_id", "voting_code_id", "proposal_code_id"):
@@ -691,6 +760,8 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
             "epoch_size_seconds",
             "min_turnout_bps",
             "epoch_budget",
+            "retained_option",
+            "execution_window_seconds",
             "min_percent_selected",
             "max_available_percentage",
             "max_options_selected",
@@ -712,6 +783,15 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
     epoch_budget = _uint(gauge["epoch_budget"], "gauge.epoch_budget", positive=True)
     if epoch_budget != epoch_ceiling:
         _fail("gauge.epoch_budget", "must equal registry.epoch_ceiling")
+    if gauge["retained_option"] != registry["reserved_option"]:
+        _fail("gauge.retained_option", "must equal registry.reserved_option")
+    execution_window = _uint(
+        gauge["execution_window_seconds"],
+        "gauge.execution_window_seconds",
+        positive=True,
+    )
+    if execution_window >= 2**64:
+        _fail("gauge.execution_window_seconds", "must fit u64")
     if _decimal(gauge["min_percent_selected"], "gauge.min_percent_selected") != min_share:
         _fail("gauge.min_percent_selected", "must equal registry.min_project_share")
     if _decimal(
@@ -764,10 +844,10 @@ def validate_config(config: dict[str, Any], root: Path, *, check_files: bool = T
         "tranche.operational_margin_seconds",
         positive=True,
     )
-    if retention * block_seconds < epoch_seconds + margin:
+    if retention * block_seconds < epoch_seconds + execution_window + margin:
         _fail(
             "tranche.snapshot_retention_blocks",
-            "observed retention does not cover an open epoch plus operational margin",
+            "observed retention does not cover voting, execution, and operational windows",
         )
 
 
@@ -937,6 +1017,8 @@ def instantiate_messages(config: dict[str, Any], code_ids: dict[str, int]) -> di
                     "min_turnout_bps": gauge["min_turnout_bps"],
                     "epoch_budget": str(gauge["epoch_budget"]),
                     "denom": DENOM,
+                    "retained_option": gauge["retained_option"],
+                    "execution_window_seconds": gauge["execution_window_seconds"],
                 },
             }
         ],
@@ -1398,6 +1480,23 @@ class Junod:
         )
         return result.get("data", result)
 
+    def balance(self, address: str, denom: str) -> str:
+        result = self.run(
+            [
+                "query",
+                "bank",
+                "balance",
+                address,
+                denom,
+                "--node",
+                self.config["chain"]["rpc"],
+                "--output",
+                "json",
+            ]
+        )
+        amount = _nested(result, ("balance", "amount"), ("amount",))
+        return str(_uint(amount, f"bank.balance.{address}.{denom}"))
+
     def code_ids_by_checksum(self, checksum: str) -> list[int]:
         matches: list[int] = []
         page_key: str | None = None
@@ -1535,6 +1634,211 @@ def _nested(value: Any, *paths: tuple[str, ...]) -> Any:
     return None
 
 
+def observe_cutover_state(config: dict[str, Any], junod: Junod) -> dict[str, Any]:
+    cutover = config["cutover"]
+    if cutover["mode"] == "no_prior_composition":
+        return {"mode": "no_prior_composition", "historical_v1": None}
+
+    historical = cutover["historical_v1"]
+    contract_info: dict[str, Any] = {}
+    code_checksums: dict[str, str] = {}
+    for component, identity in historical.items():
+        contract_info[component] = copy.deepcopy(junod.contract_info(identity["address"]))
+        code_checksums[component] = _chain_checksum(
+            junod.code_info(
+                _uint(
+                    identity["code_id"],
+                    f"cutover.historical_v1.{component}.code_id",
+                    positive=True,
+                )
+            )
+        )
+
+    addresses = {component: identity["address"] for component, identity in historical.items()}
+    denom = config["chain"]["native_denom"]
+    return {
+        "mode": "replace_historical_v1",
+        "historical_v1": {
+            "contract_info": contract_info,
+            "code_checksums": code_checksums,
+            "balances": {
+                component: junod.balance(addresses[component], denom)
+                for component in ("program_vault", "bounty", "registry")
+            },
+            "bounty_health": copy.deepcopy(junod.smart(addresses["bounty"], {"health": {}})),
+            "bounty_page": copy.deepcopy(
+                junod.smart(
+                    addresses["bounty"],
+                    {"bounties": {"start_after": None, "limit": 1}},
+                )
+            ),
+            "registry_health": copy.deepcopy(
+                junod.smart(addresses["registry"], {"health": {}})
+            ),
+            "registry_projects": copy.deepcopy(
+                junod.smart(
+                    addresses["registry"],
+                    {"projects": {"start_after": None, "limit": 1}},
+                )
+            ),
+            "registry_applications": copy.deepcopy(
+                junod.smart(
+                    addresses["registry"],
+                    {"applications": {"start_after": None, "limit": 1}},
+                )
+            ),
+            "registry_options": copy.deepcopy(
+                junod.smart(
+                    addresses["registry"],
+                    {"all_options": {"start_after": None, "limit": 2}},
+                )
+            ),
+            "gauge_state": copy.deepcopy(
+                junod.smart(addresses["gauge"], {"gauge": {"id": 0}})
+            ),
+            "gauge_epochs": copy.deepcopy(
+                junod.smart(
+                    addresses["gauge"],
+                    {"list_epochs": {"gauge": 0, "start_after": None, "limit": 1}},
+                )
+            ),
+        },
+    }
+
+
+def validate_cutover_observation(config: dict[str, Any], observation: Any) -> None:
+    observation = _object(observation, "preflight.cutover", ("mode", "historical_v1"))
+    expected_mode = config["cutover"]["mode"]
+    if observation["mode"] != expected_mode:
+        _fail("preflight.cutover.mode", "does not match deployment config")
+    if expected_mode == "no_prior_composition":
+        if observation["historical_v1"] is not None:
+            _fail("preflight.cutover.historical_v1", "must be null")
+        return
+
+    observed = _object(
+        observation["historical_v1"],
+        "preflight.cutover.historical_v1",
+        (
+            "contract_info",
+            "code_checksums",
+            "balances",
+            "bounty_health",
+            "bounty_page",
+            "registry_health",
+            "registry_projects",
+            "registry_applications",
+            "registry_options",
+            "gauge_state",
+            "gauge_epochs",
+        ),
+    )
+    expected = config["cutover"]["historical_v1"]
+    contract_info = _object(
+        observed["contract_info"],
+        "preflight.cutover.historical_v1.contract_info",
+        expected,
+    )
+    checksums = _object(
+        observed["code_checksums"],
+        "preflight.cutover.historical_v1.code_checksums",
+        expected,
+    )
+    for component, identity in expected.items():
+        info = contract_info[component]
+        if not isinstance(info, dict):
+            _fail(
+                f"preflight.cutover.historical_v1.contract_info.{component}",
+                "must be an object",
+            )
+        expected_code_id = _uint(
+            identity["code_id"],
+            f"cutover.historical_v1.{component}.code_id",
+            positive=True,
+        )
+        if _contract_code_id(info) != expected_code_id:
+            _fail(
+                f"preflight.cutover.historical_v1.contract_info.{component}.code_id",
+                "does not match the historical composition",
+            )
+        if info.get("admin") != config["chain"]["xgov_module_account"]:
+            _fail(
+                f"preflight.cutover.historical_v1.contract_info.{component}.admin",
+                "does not match the disclosed x/gov module account",
+            )
+        if checksums[component] != identity["checksum"]:
+            _fail(
+                f"preflight.cutover.historical_v1.code_checksums.{component}",
+                "does not match the historical composition",
+            )
+
+    balances = _object(
+        observed["balances"],
+        "preflight.cutover.historical_v1.balances",
+        ("program_vault", "bounty", "registry"),
+    )
+    for component, amount in balances.items():
+        if _uint(amount, f"preflight.cutover.historical_v1.balances.{component}") != 0:
+            _fail(
+                f"preflight.cutover.historical_v1.balances.{component}",
+                "must be zero before cutover",
+            )
+
+    zero_bounty_accounting = {
+        "active_escrow": "0",
+        "outstanding_refunds": "0",
+        "pending_payout_liabilities": "0",
+        "lifetime_received": "0",
+        "lifetime_paid": "0",
+        "lifetime_refunded": "0",
+    }
+    bounty_health = observed["bounty_health"]
+    if not isinstance(bounty_health, dict):
+        _fail("preflight.cutover.historical_v1.bounty_health", "must be an object")
+    if bounty_health != {
+        "accounting": zero_bounty_accounting,
+        "actual_native_balance": "0",
+        "liabilities": "0",
+        "fully_backed": True,
+    }:
+        _fail("preflight.cutover.historical_v1.bounty_health", "must be exactly empty")
+    if observed["bounty_page"] != {"bounties": []}:
+        _fail("preflight.cutover.historical_v1.bounty_page", "must be empty")
+
+    zero_registry_accounting = {
+        "active_projects": 0,
+        "pending_applications": 0,
+        "bond_liability": "0",
+        "lifetime_bonds_received": "0",
+        "lifetime_bonds_refunded": "0",
+        "lifetime_bonds_forfeited": "0",
+    }
+    registry_health = observed["registry_health"]
+    if registry_health != {
+        "accounting": zero_registry_accounting,
+        "actual_native_balance": "0",
+        "fully_backed": True,
+    }:
+        _fail("preflight.cutover.historical_v1.registry_health", "must be exactly empty")
+    for field in ("registry_projects", "registry_applications"):
+        if observed[field] != {"projects": []}:
+            _fail(f"preflight.cutover.historical_v1.{field}", "must be empty")
+    if observed["registry_options"] != {"options": ["do-not-distribute"]}:
+        _fail(
+            "preflight.cutover.historical_v1.registry_options",
+            "must contain only the retained option",
+        )
+    gauge_state = observed["gauge_state"]
+    if (
+        not isinstance(gauge_state, dict)
+        or "current_epoch" not in gauge_state
+        or gauge_state["current_epoch"] is not None
+    ):
+        _fail("preflight.cutover.historical_v1.gauge_state.current_epoch", "must be null")
+    if observed["gauge_epochs"] != {"epochs": []}:
+        _fail("preflight.cutover.historical_v1.gauge_epochs", "must be empty")
+
+
 def preflight_chain(config: dict[str, Any], junod: Junod) -> dict[str, Any]:
     """Reject a wrong, unsynced, or economically incompatible target chain."""
     status = junod.status()
@@ -1596,6 +1900,8 @@ def preflight_chain(config: dict[str, Any], junod: Junod) -> dict[str, Any]:
             f"chain reports {observed_xgov!r}"
         )
 
+    cutover = observe_cutover_state(config, junod)
+    validate_cutover_observation(config, cutover)
     return {
         "schema_version": PREFLIGHT_SCHEMA,
         "config_sha256": config_hash(config),
@@ -1604,11 +1910,13 @@ def preflight_chain(config: dict[str, Any], junod: Junod) -> dict[str, Any]:
         "catching_up": False,
         "staking_bond_denom": bond_denom,
         "xgov_module_account": observed_xgov,
+        "cutover": cutover,
         "checks": [
             "chain_id",
             "rpc_synced",
             "staking_bond_denom",
             "xgov_module_account",
+            "cutover",
         ],
     }
 
@@ -1640,6 +1948,7 @@ def validate_preflight_report(config: dict[str, Any], report: dict[str, Any]) ->
             "catching_up",
             "staking_bond_denom",
             "xgov_module_account",
+            "cutover",
             "checks",
         ),
     )
@@ -1656,11 +1965,13 @@ def validate_preflight_report(config: dict[str, Any], report: dict[str, Any]) ->
         _fail("preflight.staking_bond_denom", "does not match deployment config")
     if report["xgov_module_account"] != config["chain"]["xgov_module_account"]:
         _fail("preflight.xgov_module_account", "does not match deployment config")
+    validate_cutover_observation(config, report["cutover"])
     expected_checks = {
         "chain_id",
         "rpc_synced",
         "staking_bond_denom",
         "xgov_module_account",
+        "cutover",
     }
     if not isinstance(report["checks"], list) or set(report["checks"]) != expected_checks:
         _fail("preflight.checks", "does not contain the complete preflight check set")
@@ -1671,11 +1982,23 @@ def verify_code_ids(config: dict[str, Any], code_ids: dict[str, int], junod: Jun
     if set(code_ids) != set(REQUIRED_ARTIFACTS):
         raise ValidationError("all five exact code IDs are required for chain verification")
     seen: set[int] = set()
+    historical_code_ids = (
+        {
+            _uint(identity["code_id"], f"cutover.historical_v1.{component}.code_id", positive=True)
+            for component, identity in config["cutover"]["historical_v1"].items()
+        }
+        if config["cutover"]["mode"] == "replace_historical_v1"
+        else set()
+    )
     for name, expected in config["artifacts"].items():
         code_id = _uint(code_ids[name], f"state.code_ids.{name}", positive=True)
         if code_id in seen:
             raise ValidationError(f"state.code_ids.{name}: duplicate code ID {code_id}")
         seen.add(code_id)
+        if code_id in historical_code_ids:
+            raise ValidationError(
+                f"state.code_ids.{name}: v2 code ID {code_id} reuses a historical v1 code ID"
+            )
         actual = _chain_checksum(junod.code_info(code_id))
         if actual != expected["sha256"]:
             raise RuntimeError(
@@ -1755,6 +2078,7 @@ def expected_verification_checks(
             "vault:voting_module",
             "voting:dao",
             "vault:sole_execution_module",
+            "vault:fresh_balance",
         )
     )
     checks.extend(
@@ -1774,9 +2098,19 @@ def expected_verification_checks(
             "ratification_seconds",
         )
     )
+    checks.extend(("bounty:fresh_identity", "bounty:fresh_page", "bounty:fresh_health"))
     registry_fields = list(instantiate_messages(config, code_ids)["registry"])
     checks.extend(f"registry:{field}" for field in registry_fields)
     checks.append("registry:max_active_projects")
+    checks.extend(
+        (
+            "registry:fresh_identity",
+            "registry:fresh_projects",
+            "registry:fresh_applications",
+            "registry:fresh_options",
+            "registry:fresh_health",
+        )
+    )
     checks.extend(
         f"gauge:{field}"
         for field in (
@@ -1794,6 +2128,7 @@ def expected_verification_checks(
             "snapshot_policy",
         )
     )
+    checks.extend(("gauge:fresh_state", "gauge:fresh_epochs"))
     agent = config["agent_operations"]
     membership_kind = agent["membership"]["kind"]
     checks.extend(
@@ -1827,6 +2162,24 @@ def validate_verification_observations(
     addresses: dict[str, str],
     observations: Any,
 ) -> None:
+    if config["cutover"]["mode"] == "replace_historical_v1":
+        historical_code_ids = {
+            _uint(
+                identity["code_id"],
+                f"cutover.historical_v1.{component}.code_id",
+                positive=True,
+            )
+            for component, identity in config["cutover"]["historical_v1"].items()
+        }
+        v2_code_ids = {
+            _uint(value, f"verification.code_ids.{name}", positive=True)
+            for name, value in code_ids.items()
+        }
+        reused = v2_code_ids & historical_code_ids
+        if reused:
+            raise RuntimeError(
+                f"verification reuses historical v1 code IDs: {sorted(reused)!r}"
+            )
     observations = _object(
         observations,
         "verification.observations",
@@ -1834,11 +2187,21 @@ def validate_verification_observations(
             "release_code_checksums",
             "contract_info",
             "vault_state",
+            "vault_balance",
             "voting_dao",
             "bounty_config",
+            "bounty_identity_state",
+            "bounty_page",
+            "bounty_health",
             "registry_config",
+            "registry_identity_state",
+            "registry_projects",
+            "registry_applications",
+            "registry_options",
+            "registry_health",
             "gauge_config",
             "gauge_state",
+            "gauge_epochs",
             "agent_core_state",
             "agent_membership_contract",
             "agent_membership_page",
@@ -1922,6 +2285,7 @@ def validate_verification_observations(
         [addresses["gauge"]],
     )
     expect("voting_dao", observations["voting_dao"], addresses["program_vault"])
+    expect("vault_balance", observations["vault_balance"], "0")
 
     messages = instantiate_messages(config, code_ids)
     bounty = observations["bounty_config"]
@@ -1933,6 +2297,25 @@ def validate_verification_observations(
         "bounty_config.ratification_seconds",
         bounty.get("ratification_seconds"),
         RATIFICATION_SECONDS,
+    )
+    expect("bounty_identity_state", observations["bounty_identity_state"], {"next_bounty_id": 1})
+    expect("bounty_page", observations["bounty_page"], {"bounties": []})
+    expect(
+        "bounty_health",
+        observations["bounty_health"],
+        {
+            "accounting": {
+                "active_escrow": "0",
+                "outstanding_refunds": "0",
+                "pending_payout_liabilities": "0",
+                "lifetime_received": "0",
+                "lifetime_paid": "0",
+                "lifetime_refunded": "0",
+            },
+            "actual_native_balance": "0",
+            "liabilities": "0",
+            "fully_backed": True,
+        },
     )
 
     registry = observations["registry_config"]
@@ -1952,6 +2335,34 @@ def validate_verification_observations(
         "registry_config.max_active_projects",
         registry.get("max_active_projects"),
         MAX_ACTIVE_PROJECTS,
+    )
+    expect(
+        "registry_identity_state",
+        observations["registry_identity_state"],
+        {"next_project_id": 1, "consumed_source_bounties": 0},
+    )
+    expect("registry_projects", observations["registry_projects"], {"projects": []})
+    expect("registry_applications", observations["registry_applications"], {"projects": []})
+    expect(
+        "registry_options",
+        observations["registry_options"],
+        {"options": [config["registry"]["reserved_option"]]},
+    )
+    expect(
+        "registry_health",
+        observations["registry_health"],
+        {
+            "accounting": {
+                "active_projects": 0,
+                "pending_applications": 0,
+                "bond_liability": "0",
+                "lifetime_bonds_received": "0",
+                "lifetime_bonds_refunded": "0",
+                "lifetime_bonds_forfeited": "0",
+            },
+            "actual_native_balance": "0",
+            "fully_backed": True,
+        },
     )
 
     gauge_config = observations["gauge_config"]
@@ -1987,6 +2398,16 @@ def validate_verification_observations(
             )
         else:
             expect(path, gauge_state.get(field), expected_gauge[field])
+    if (
+        "current_epoch" not in gauge_state
+        or gauge_state["current_epoch"] is not None
+        or gauge_state.get("is_stopped") is not False
+    ):
+        _fail(
+            "verification.observations.gauge_state",
+            "must have no current epoch and must start unstopped",
+        )
+    expect("gauge_epochs", observations["gauge_epochs"], {"epochs": []})
 
     agent = config["agent_operations"]
     agent_core = observations["agent_core_state"]
@@ -2201,6 +2622,8 @@ def verify_deployment(
         if isinstance(item, dict) and str(item.get("status", "")).lower() == "enabled"
     ]
     _expect_equal(checks, "vault:sole_execution_module", enabled, [addresses["gauge"]])
+    vault_balance = junod.balance(addresses["program_vault"], config["chain"]["native_denom"])
+    _expect_equal(checks, "vault:fresh_balance", vault_balance, "0")
 
     bounty_config = junod.smart(addresses["bounty"], {"config": {}})
     expected_bounty = instantiate_messages(config, code_ids)["bounty"]
@@ -2224,6 +2647,31 @@ def verify_deployment(
         bounty_config.get("ratification_seconds"),
         RATIFICATION_SECONDS,
     )
+    bounty_identity_state = junod.smart(addresses["bounty"], {"identity_state": {}})
+    _expect_equal(checks, "bounty:fresh_identity", bounty_identity_state, {"next_bounty_id": 1})
+    bounty_page = junod.smart(
+        addresses["bounty"], {"bounties": {"start_after": None, "limit": 1}}
+    )
+    _expect_equal(checks, "bounty:fresh_page", bounty_page, {"bounties": []})
+    bounty_health = junod.smart(addresses["bounty"], {"health": {}})
+    _expect_equal(
+        checks,
+        "bounty:fresh_health",
+        bounty_health,
+        {
+            "accounting": {
+                "active_escrow": "0",
+                "outstanding_refunds": "0",
+                "pending_payout_liabilities": "0",
+                "lifetime_received": "0",
+                "lifetime_paid": "0",
+                "lifetime_refunded": "0",
+            },
+            "actual_native_balance": "0",
+            "liabilities": "0",
+            "fully_backed": True,
+        },
+    )
 
     registry_config = junod.smart(addresses["registry"], {"config": {}})
     expected_registry = instantiate_messages(config, code_ids)["registry"]
@@ -2243,6 +2691,50 @@ def verify_deployment(
         "registry:max_active_projects",
         registry_config.get("max_active_projects"),
         MAX_ACTIVE_PROJECTS,
+    )
+    registry_identity_state = junod.smart(addresses["registry"], {"identity_state": {}})
+    _expect_equal(
+        checks,
+        "registry:fresh_identity",
+        registry_identity_state,
+        {"next_project_id": 1, "consumed_source_bounties": 0},
+    )
+    registry_projects = junod.smart(
+        addresses["registry"], {"projects": {"start_after": None, "limit": 1}}
+    )
+    _expect_equal(checks, "registry:fresh_projects", registry_projects, {"projects": []})
+    registry_applications = junod.smart(
+        addresses["registry"], {"applications": {"start_after": None, "limit": 1}}
+    )
+    _expect_equal(
+        checks, "registry:fresh_applications", registry_applications, {"projects": []}
+    )
+    registry_options = junod.smart(
+        addresses["registry"], {"all_options": {"start_after": None, "limit": 2}}
+    )
+    _expect_equal(
+        checks,
+        "registry:fresh_options",
+        registry_options,
+        {"options": [config["registry"]["reserved_option"]]},
+    )
+    registry_health = junod.smart(addresses["registry"], {"health": {}})
+    _expect_equal(
+        checks,
+        "registry:fresh_health",
+        registry_health,
+        {
+            "accounting": {
+                "active_projects": 0,
+                "pending_applications": 0,
+                "bond_liability": "0",
+                "lifetime_bonds_received": "0",
+                "lifetime_bonds_refunded": "0",
+                "lifetime_bonds_forfeited": "0",
+            },
+            "actual_native_balance": "0",
+            "fully_backed": True,
+        },
     )
 
     gauge_config = junod.smart(addresses["gauge"], {"config": {}})
@@ -2278,6 +2770,16 @@ def verify_deployment(
             )
         else:
             _expect_equal(checks, path, gauge_state.get(field), expected)
+    _expect_equal(
+        checks,
+        "gauge:fresh_state",
+        {"current_epoch": gauge_state.get("current_epoch"), "is_stopped": gauge_state.get("is_stopped")},
+        {"current_epoch": None, "is_stopped": False},
+    )
+    gauge_epochs = junod.smart(
+        addresses["gauge"], {"list_epochs": {"gauge": 0, "start_after": None, "limit": 1}}
+    )
+    _expect_equal(checks, "gauge:fresh_epochs", gauge_epochs, {"epochs": []})
 
     agent = config["agent_operations"]
     agent_core = junod.smart(agent["core_address"], {"dump_state": {}})
@@ -2488,11 +2990,21 @@ def verify_deployment(
         },
         "contract_info": contract_infos,
         "vault_state": copy.deepcopy(vault),
+        "vault_balance": vault_balance,
         "voting_dao": voting_dao,
         "bounty_config": copy.deepcopy(bounty_config),
+        "bounty_identity_state": copy.deepcopy(bounty_identity_state),
+        "bounty_page": copy.deepcopy(bounty_page),
+        "bounty_health": copy.deepcopy(bounty_health),
         "registry_config": copy.deepcopy(registry_config),
+        "registry_identity_state": copy.deepcopy(registry_identity_state),
+        "registry_projects": copy.deepcopy(registry_projects),
+        "registry_applications": copy.deepcopy(registry_applications),
+        "registry_options": copy.deepcopy(registry_options),
+        "registry_health": copy.deepcopy(registry_health),
         "gauge_config": copy.deepcopy(gauge_config),
         "gauge_state": copy.deepcopy(gauge_state),
+        "gauge_epochs": copy.deepcopy(gauge_epochs),
         "agent_core_state": copy.deepcopy(agent_core),
         "agent_membership_contract": membership_contract,
         "agent_membership_page": copy.deepcopy(membership_page),

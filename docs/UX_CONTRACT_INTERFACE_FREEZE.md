@@ -1,26 +1,31 @@
-# Juno Voice v1 UX contract interface freeze
+# Juno Voice v2 UX contract interface freeze
 
-**Freeze baseline:** repository commit `3ad9998b69e2588e5092b26f0da6ca246e26fecd`; `deps/dao-contracts` commit `8f26e510dc89e56576e2dbbd35c96edb45d4b778`
+**Freeze baseline:** active v2 remediation candidate; exact root and accepted
+`deps/dao-contracts` commits are release inputs and remain pending.
 
-**Status:** v1 contracts are deployed and verified on `juno-1`. Section 11
-preserves the historical first read-only frontend release profile; the current
-application also supports exact-review transaction preparation for the public
-bounty, registry, settlement, and gauge surfaces documented here.
+**Status:** v2 is not deployed. Funded use is blocked pending fresh deployment,
+verification, independent review, and an authorized canary. Section 11 preserves
+the quarantined historical v1 read-only profile; those identities are not v2
+defaults or valid cutover inputs.
 
 **Audience:** wallet, frontend, explorer, and indexer implementers
 
-This document freezes the implemented wire surface on which the v1 UX may rely. It does not change a contract, create a deployment, or turn prototype behavior into product behavior. JSON keys are snake_case enum encodings produced by `cw_serde`. `Uint128`, `Timestamp`, and `Decimal` are JSON strings; integer IDs/cursors are JSON numbers. Amounts are integer native-denom units (v1 deployment policy is `ujuno`), never display Juno.
+This document freezes the implemented wire surface on which the v2 UX may rely.
+It does not create or authorize a deployment. JSON keys are snake_case enum
+encodings produced by `cw_serde`. `Uint128`, `Timestamp`, and `Decimal` are JSON
+strings; integer IDs/cursors are JSON numbers. Amounts are integer native-denom
+units (v2 deployment policy is `ujuno`), never display Juno.
 
 ## 1. Scope and canonical sources
 
-| Component | v1 UX status | Canonical schema |
+| Component | v2 UX status | Canonical schema |
 |---|---|---|
-| `juno-voice-bounties` | **Frozen/public v1 product surface** | [`contracts/juno-voice-bounties/schema/juno-voice-bounties.json`](../contracts/juno-voice-bounties/schema/juno-voice-bounties.json), with per-response files in [`schema/raw/`](../contracts/juno-voice-bounties/schema/raw/) |
-| `hack-juno-registry-adapter` | **Frozen/public v1 product and gauge-adapter surface** | [`contracts/hack-juno-registry-adapter/schema/hack-juno-registry-adapter.json`](../contracts/hack-juno-registry-adapter/schema/hack-juno-registry-adapter.json), with per-response files in [`schema/raw/`](../contracts/hack-juno-registry-adapter/schema/raw/) |
+| `juno-voice-bounties` | **Frozen v2 candidate product surface** | [`contracts/juno-voice-bounties/schema/juno-voice-bounties.json`](../contracts/juno-voice-bounties/schema/juno-voice-bounties.json), with per-response files in [`schema/raw/`](../contracts/juno-voice-bounties/schema/raw/) |
+| `hack-juno-registry-adapter` | **Frozen v2 candidate product and gauge-adapter surface** | [`contracts/hack-juno-registry-adapter/schema/hack-juno-registry-adapter.json`](../contracts/hack-juno-registry-adapter/schema/hack-juno-registry-adapter.json), with per-response files in [`schema/raw/`](../contracts/hack-juno-registry-adapter/schema/raw/) |
 | pinned epoch-snapshot gauge | **Frozen external touchpoints only** (the submodule owns the full interface) | [`deps/dao-contracts/contracts/gauges/gauge/schema/gauge-orchestrator.json`](../deps/dao-contracts/contracts/gauges/gauge/schema/gauge-orchestrator.json) |
-| `juno-voice` social request contract | **Prototype/legacy, not a v1 social-bounty UX surface**. Its implemented API is frozen only so the checked-in prototype does not get conflated with v1. | [`schema/juno-voice.json`](../schema/juno-voice.json), with per-response files in [`schema/raw/`](../schema/raw/) |
+| `juno-voice` social request contract | **Prototype/legacy, not a v2 social-bounty UX surface**. Its implemented API is frozen only so the checked-in prototype does not get conflated with v2. | [`schema/juno-voice.json`](../schema/juno-voice.json), with per-response files in [`schema/raw/`](../schema/raw/) |
 
-“Frozen” means message names/fields, response shapes, enum encodings, pagination semantics, required funds, authority gates, boundary inclusivity, and event names/attributes documented here are integration contracts. Governance/operations messages remain real public-chain messages but are labelled **admin** and must not appear as ordinary user controls. Instantiate/migrate and release address/checksum selection are **release-only**.
+“Frozen” means message names/fields, response shapes, enum encodings, pagination semantics, required funds, authority gates, boundary inclusivity, and event names/attributes documented here are integration contracts. Governance/operations messages remain real public-chain messages but are labelled **admin** and must not appear as ordinary user controls. Fresh instantiation and release address/checksum selection are **release-only**; no v1 import is supported.
 
 Clients must still read live `config`, `pause`, and object snapshots: configured amounts, limits, authorities, IDs, and timestamps are not constants unless explicitly stated. Do not copy large response definitions from this document; generate/typeset from the canonical schemas above.
 
@@ -93,7 +98,7 @@ Evidence kinds are `pull_request`, `commit`, `release`, `deployment`, `document`
 
 Every list response includes `query_height`; pages are bounded by live `default_query_limit`/`max_query_limit` and are weakly consistent while state changes. Refresh page one rather than treating a multi-page crawl as a snapshot.
 
-## 4. Social bounties (`juno-voice-bounties`) — v1 public surface
+## 4. Social bounties (`juno-voice-bounties`) — v2 public surface
 
 ### 4.1 Execute inventory
 
@@ -143,14 +148,14 @@ Limits are capped by live `config.limits.max_page_limit`; unlike the prototype c
 
 The error catalog labels are `unauthorized`, `unexpected_funds`, `invalid_funds`, `invalid_configuration`, `invalid_metadata`, `not_found`, `invalid_state`, `paused`, `expired`, `not_expired`, `contribution_limit`, `round_limit`, `wrong_round`, `not_contributor`, `voting_closed`, `ratification_open`, `already_claimed`, `not_refundable`, `not_project_candidate`, `already_graduated`, `arithmetic`. They classify UX recovery cases but are **not** emitted as structured transaction-error codes. Runtime failures arrive through the chain as display strings. Clients may classify recognized strings defensively for guidance, but must preserve the raw chain error and must not assume a stable machine-readable code is present.
 
-## 5. Project registry and gauge adapter — v1 public surface
+## 5. Project registry and gauge adapter — v2 public surface
 
 ### 5.1 Execute inventory
 
 | Execute message | Actor / gate | Funds | Success event and stable attributes |
 |---|---|---|---|
-| `register_project { project_id, metadata_uri, metadata_digest, payout_address }` | public; admissions open; unique ID | exactly `config.registration_bond` in one native coin | `hack_juno_registry.project_registered`: `project_id,applicant,payout_address,bond` |
-| `graduate { source_bounty_id, project_id, metadata_uri, metadata_digest, payout_address }` | configured bounty contract only | none | `.bounty_graduated`: `project_id,source_bounty_id,bounty_contract,payout_address` |
+| `register_project { metadata_uri, metadata_digest, payout_address }` | public; admissions open; registry assigns the next numeric ID | exactly `config.registration_bond` in one native coin | typed response `{ response_version: 1, project_id }`; `hack_juno_registry.project_registered`: `project_id,applicant,payout_address,bond` |
+| `graduate { source_bounty_id, metadata_uri, metadata_digest, payout_address }` | configured bounty contract only; replay key is `(sender, source_bounty_id)` | none | typed response `{ response_version: 1, project_id }`; `.bounty_graduated`: `project_id,source_bounty_id,source_bounty_contract,payout_address` |
 | `update_pending_metadata { project_id, metadata_uri, metadata_digest }` | pending project owner | none | `.pending_metadata_updated`: `project_id,applicant` |
 | `review_registration { project_id, decision, reason }` | curator | none | **admin:** `.registration_reviewed`: `project_id,curator,decision,reason_code,status` |
 | `suspend { project_id, reason }` | curator | none | **admin/stop:** `.project_suspended`: `project_id,curator,reason_code` |
@@ -166,7 +171,7 @@ The error catalog labels are `unauthorized`, `unexpected_funds`, `invalid_funds`
 | `update_bounty_contract { bounty_contract }` | governor | none | **admin/release:** `.bounty_contract_updated`: `governor,bounty_contract,changed_at` |
 | `update_economic_config { update: { registration_bond?, spam_destination?, payout_address_delay_seconds?, epoch_ceiling?, min_project_share?, max_project_share?, max_selected_projects? } }` | governor | none | **admin:** `.economic_config_updated`: `governor,config_version,changed_at` |
 
-Project states are `pending`, `active`, `suspended`, `rejected`, `retired`; bond states are `deposited`, `refunded`, `forfeited`, `claimable`, `claimed`. Review decisions are `approve`, `request_changes`, `soft_reject`, `hard_reject`; override targets are `active`, `suspended`, `rejected`, `retired`; stop scopes are `admissions`, `adapter`, `all`. Only `active` project IDs plus reserved `do-not-distribute` are gauge options.
+Project states are `pending`, `active`, `suspended`, `rejected`, `retired`; bond states are `deposited`, `refunded`, `forfeited`, `claimable`, `claimed`. Review decisions are `approve`, `request_changes`, `soft_reject`, `hard_reject`; override targets are `active`, `suspended`, `rejected`, `retired`; stop scopes are `admissions`, `adapter`, `all`. Project IDs are registry-assigned, monotonically increasing `u64` values and are never reused. Only `active` projects encoded as canonical `project:<base-10-id>` options plus reserved `do-not-distribute` are gauge options.
 
 **Address boundary:** `executable_at = proposed_at + payout_address_delay_seconds`; acceptance fails while `now < executable_at` and succeeds at equality. Always display the pending address and exact UTC executable time. Admission and active-option capacity are bounded by config/implementation.
 
@@ -178,8 +183,8 @@ All owned response schemas are in [`contracts/hack-juno-registry-adapter/schema/
 |---|---|---|
 | `config {}`, `pause {}`, `accounting {}`, `health {}` | same-named response | singleton |
 | `project { project_id }` | `Project` | singleton; missing errors |
-| `projects { start_after?, limit? }` | `ProjectsResponse` | ascending project-ID bytes; exclusive string cursor; continue from last ID |
-| `applications { start_after?, limit? }` | `ProjectsResponse` | ascending pending project ID; exclusive string cursor |
+| `projects { start_after?, limit? }` | `ProjectsResponse` | ascending numeric project ID; exclusive `u64` cursor; continue from last ID |
+| `applications { start_after?, limit? }` | `ProjectsResponse` | ascending pending numeric project ID; exclusive `u64` cursor |
 | `status_history { project_id, start_after?, limit? }` | `HistoryResponse<StatusHistoryEntry>` | ascending sequence |
 | `address_history { project_id, start_after?, limit? }` | `HistoryResponse<AddressHistoryEntry>` | ascending sequence |
 | `all_options { start_after?, limit? }` | `AllOptionsResponse` | ascending option string; exclusive cursor |
@@ -190,29 +195,31 @@ Pages are capped by `max_page_limit`, return no next cursor, and do not carry qu
 
 ## 6. Pinned gauge UX touchpoints
 
-The v1 UX integrates the epoch-snapshot mode of the pinned gauge; it must not expose hook-mode stake/member messages. Full wire definitions and responses are in the pinned [gauge schema](../deps/dao-contracts/contracts/gauges/gauge/schema/gauge-orchestrator.json).
+The v2 UX integrates the epoch-snapshot mode of the pinned gauge; it must not expose hook-mode stake/member messages. Full wire definitions and responses are in the pinned [gauge schema](../deps/dao-contracts/contracts/gauges/gauge/schema/gauge-orchestrator.json).
 
 ### Frozen user/public touchpoints
 
 | Action/query | Authority/funds | UX contract |
 |---|---|---|
-| `open_epoch { gauge }` | public, no funds | creates the next epoch only when schedule/policy permit; success attributes `action=open_snapshot_epoch,sender,gauge_id,epoch_id,snapshot_height,snapshot_total_power,opens_at,closes_at,min_turnout_bps,epoch_budget,denom,option_count` |
-| `place_votes { gauge, votes? }` | public staker, no funds | in snapshot mode applies to current open epoch using historical power; `votes=null` abstains/removes active ballot; positive Decimal weights sum <= 1; success `action=place_snapshot_vote,sender,gauge_id,epoch_id,snapshot_height,voting_power,option_count,participating_power,total_cast` |
-| `execute { gauge }` | public, no funds | only at/after close; success `action=execute_snapshot_epoch,sender,gauge_id,epoch_id,snapshot_height,snapshot_total_power,participating_power,total_cast,min_turnout_bps,epoch_budget,denom,outcome,message_count` |
+| `open_epoch { gauge }` | public, no funds | requires the Vault's full epoch budget and creates the next epoch only when schedule/policy permit; success also binds `execution_deadline,policy_version,retained_option` |
+| `place_votes { gauge, votes? }` | public staker, no funds | in snapshot mode applies to current open epoch using historical power; `votes=null` abstains/removes active ballot; positive Decimal weights sum <= 1; success reports `participating_power,allocated_power,total_cast,retained_option_power,unallocated_power` |
+| `execute { gauge }` | public, no funds | at/after close and through the execution deadline; requires only actual emitted value and reports raw allocation plus `selected_project_power,emitted_value,retained_value,policy_version,execution_deadline,outcome,message_count` |
+| `expire_epoch { gauge }` | public, no funds | at/after `execution_deadline`; terminal no-distribution outcome, schedule advances exactly once |
+| `abort_epoch { gauge, reason }` | owner/Program Vault only, no funds | reasoned terminal no-distribution recovery for an unrecoverable open epoch; guardian cannot call it |
 | `cleanup_epoch { gauge, epoch, limit }` | public, no funds | internal maintenance, not a primary button; success includes `gauge_id,epoch_id,processed,phase,complete` |
 | `gauge { id }`, `epoch { gauge, epoch }`, `epoch_ballot { gauge, epoch, voter }`, `epoch_allocations { ... }`, `list_epochs { ... }`, `list_epoch_ballots { ... }` | query | primary epoch/detail/user-result data |
 | registry `all_options` / gauge `list_options` and `selected_set` | query | option discovery/current ranking; epoch detail must use the epoch’s fixed facts, not silently substitute current registry status |
 
-Epoch outcomes are `open`, `distributed { message_count }`, `no_distribution_turnout`, `no_eligible_options`. Ballot list pagination is ascending stable `receipt_index` and must use returned `next_start_after` because removed ballots create holes. Allocations are option-string ordered with exclusive `start_after`; epochs are ID ordered with exclusive `start_after`. List responses other than ballots do not return next cursors, so continue from the last item until short/empty.
+Epoch outcomes are `open`, `distributed { message_count }`, `no_distribution_turnout`, `no_distribution_zero_participation`, `no_eligible_options`, `insufficient_funds { required, available }`, `expired`, and `aborted { reason }`. Every terminal response satisfies `emitted_value + retained_value == epoch_budget`. Ballot list pagination is ascending stable `receipt_index` and must use returned `next_start_after` because removed ballots create holes. Allocations are option-string ordered with exclusive `start_after`; epochs are ID ordered with exclusive `start_after`. List responses other than ballots do not return next cursors, so continue from the last item until short/empty.
 
-**Time boundary:** `opens_at`/`closes_at` are Unix seconds (gauge response integers, unlike CosmWasm `Timestamp` strings in owned contracts). Voting is before close; execute is at/after close. UX eligibility must be confirmed against chain state/time, not browser time.
+**Time boundary:** `opens_at`, `closes_at`, and `execution_deadline` are Unix seconds (gauge response integers, unlike CosmWasm `Timestamp` strings in owned contracts). Voting is before close; execute is at/after close and no later than the deadline; expiry is valid at deadline equality. UX eligibility must be confirmed against chain state/time, not browser time.
 
-Gauge owner operations (`create_gauge`, `update_gauge`, `resume_gauge`, `update_snapshot_policy`, option removal, hooks) are **admin/release-only**. `stop_gauge` is owner or configured guardian stop-only; `resume_gauge` is owner-only. Instantiate/migrate and selecting the production `gauge_id` are **release-only**.
+Gauge owner operations (`create_gauge`, `update_gauge`, `resume_gauge`, `update_snapshot_policy`, option removal, hooks) are **admin/release-only**. `stop_gauge` is owner or configured guardian stop-only; `resume_gauge` is owner-only. Fresh instantiation and selecting the production `gauge_id` are **release-only**.
 
 ## 7. Cross-contract flows
 
 1. **Bounty settlement:** user funds `create_bounty`/`contribute` → creator or agent nominates → sole contributor confirms, or contributors vote for the full 72 hours → anyone finalizes → bank send is atomic with `paid`, or state resets/refunds. Never show a separate recipient claim.
-2. **Graduation:** after a candidate bounty is `paid`, agent calls `graduate_project` on bounties → bounties calls registry `graduate` with no funds → registry authenticates `info.sender == config.bounty_contract`, creates an active project and gauge option → both contracts emit graduation events in one transaction. UX success requires both messages to succeed and canonical registry state to confirm.
+2. **Graduation:** after a candidate bounty is `paid`, agent calls `graduate_project` on bounties → bounties uses reply-on-success to call registry `graduate` with no caller-supplied ID → registry authenticates the source, allocates an ID, and returns a typed response → bounties records that ID only in the reply → both records commit atomically. UX success requires the bounty and registry events plus canonical registry state to agree.
 3. **Bonded registration:** applicant sends exact registry bond → curator review activates, requests changes, or rejects → contract records bond disposition → depositor claims only if state is `claimable`.
 4. **Gauge epoch:** public `open_epoch` snapshots historical Juno power and adapter options → stakers place/revise allocations → public `execute` queries registry `sample_gauge_msgs` with epoch budget, available balance, and denom → registry emits native bank-send messages only for active selected projects; `do-not-distribute`, caps, thresholds, and rounding remain retained value. Graduation is eligibility, not guaranteed payment.
 5. **Stops:** agent/curator can stop bounded new activity/admissions/adapter; gauge guardian can stop; only governor/owner can resume. Existing refunds and the explicitly implemented safety exits remain governed by their message gates—do not infer a global pause from one contract.
@@ -228,10 +235,10 @@ Gauge owner operations (`create_gauge`, `update_gauge`, `resume_gauge`, `update_
 | Sole review | `bounty,contribution` | confirm/decline; none | payout/decline event + canonical state/bank send | wrong round/contributor, deadline closed |
 | Contributor ballot | `bounty,contribution,receipt,receipts` | `vote_payout`; none | vote event + refreshed receipt/round | not contributor, wrong round, voting closed |
 | Finalize/refund | `bounty,round,claim` | finalize or claim; none | finalization/refund event + canonical state/bank send | ratification open, not refundable/already claimed |
-| Projects/applications | `projects/applications,config,pause` | `register_project`; exact native bond | registered event + project | stopped, duplicate/capacity, invalid bond/metadata |
+| Projects/applications | `projects/applications,config,pause` | `register_project` without an ID; exact native bond | assigned-ID event + project | stopped/capacity, invalid bond/metadata |
 | Project detail/address | `project,status_history,address_history` | propose/cancel/accept; none | address event + refreshed project | wrong controller/address, delay open, no pending change |
 | Registration bond claim | `project` | `claim_registration_bond`; none | claim event + bank send | wrong depositor/not claimable |
-| Epoch list/detail | `gauge,list_epochs,epoch,epoch_allocations`; registry project lookup | `open_epoch`/`execute`; none | snapshot epoch event + refreshed epoch | stopped, schedule/window, turnout/no eligible options, adapter validation |
+| Epoch list/detail | `gauge,list_epochs,epoch,epoch_allocations`; registry project lookup | `open_epoch`/`execute`/`expire_epoch`; none | terminal event + refreshed epoch | stopped, funding, schedule/window, turnout/no eligible options, insufficient funds, adapter validation |
 | My epoch ballot | `epoch,epoch_ballot` | `place_votes`; none | snapshot-vote event + refreshed ballot | no historical power, closed/stopped, invalid option/weights |
 | Admin operations | live config/pause/object/history | role-specific messages; none | exact admin event + state | unauthorized, invalid transition/config; never render as public authority |
 
@@ -242,29 +249,30 @@ All transaction UX must show exact message, sender, contract, and funds before s
 - The first `app/` release read only the deployed v1 bounty contract through the
   historical profile in section 11. The removed request ledger/ranking,
   support/oppose voting, builder/verifier evidence, and request-bond UI are
-  **not** the v1 bounty UX.
-- The prototype’s `Submit a request` sends `submission_bond`; v1 `create_bounty` sends an initial **contribution** governed by bounty min/max and expiry. Do not rename one payload into the other.
-- Prototype status codes 1–10 and opaque rank cursors do not apply to bounty/project/epoch lists. V1 bounty state has six explicit variants; “cancelled/reset/stopped” require the canonical companion fields described above.
+  **not** the v2 bounty UX.
+- The prototype’s `Submit a request` sends `submission_bond`; v2 `create_bounty` sends an initial **contribution** governed by bounty min/max and expiry. Do not rename one payload into the other.
+- Prototype status codes 1–10 and opaque rank cursors do not apply to bounty/project/epoch lists. V2 bounty state has six explicit variants; “cancelled/reset/stopped” require the canonical companion fields described above.
 - Prototype voting is immutable historical-power support/oppose and is safety-disabled in the current UI. Bounty votes are revisable yes/no, weighted by snapshotted contributions. Gauge votes are revisable weighted option allocations using historical Juno power. These are three distinct ballots.
-- The v1 backend has no single aggregate query and owned v1 lists generally have no `query_height` or returned cursor. UX must compose queries, follow each contract’s cursor semantics, and refresh after writes.
+- The v2 backend has no single aggregate query and owned lists generally have no `query_height` or returned cursor. UX must compose queries, follow each contract’s cursor semantics, and refresh after writes.
 - Product prose previously listed aspirational display states (`cancelled`, `stopped`, `failed/expired`) that are not wire enum variants. Render them as labels only when derived from canonical pause/refund/round/epoch fields; never send or decode them as states.
-- Prototype addresses and authorities are not production facts. The verified
-  bounty address, Code ID, and checksum in section 11 are the release binding.
+- Prototype and historical v1 addresses are not v2 production facts. The v2
+  client must receive all five identities from reviewed fresh-deployment
+  verification and must fail closed before that binding exists.
 
 ## 10. Genuine interface decisions still open
 
 These do not block implementing the frozen wire messages, but require a product/indexer decision before a polished UX:
 
-1. **No returned next cursor/query height on most v1 owned lists.** Clients can safely continue from the last item, but cannot distinguish “exactly full final page” without one extra query and cannot claim snapshot consistency. Decide whether UX accepts this or a future contract revision adds cursors/heights (which would change schemas).
-2. **Derived versus explicit product states.** Product language names reset/cancelled/stopped/failed-expired states not represented by the implemented enums. This document freezes derivation for v1 UX; decide whether that is acceptable before deployment or enums must change.
+1. **No returned next cursor/query height on most owned lists.** Clients can safely continue from the last item, but cannot distinguish “exactly full final page” without one extra query and cannot claim snapshot consistency. Decide whether UX accepts this or a future contract revision adds cursors/heights (which would change schemas).
+2. **Derived versus explicit product states.** Product language names reset/cancelled/stopped/failed-expired states not represented by the implemented enums. This document freezes derivation for v2 UX; decide whether that is acceptable before deployment or enums must change.
 3. **Indexer stability governance.** Events are implemented and tested in places, but there is no separately versioned event schema. This freeze treats the listed names/keys as stable. Decide whether release gates should mechanically snapshot every event attribute.
-4. **Gauge adapter direct-query shape is snapshot-specific.** The owned adapter requires concrete `epoch_budget`, `available_balance`, and `denom`, and returns extra `emitted_value`/`retained_value`; the generic pinned interface models those request fields as optional and only requires `execute` in its response. This is compatible with the snapshot gauge path (extra response fields are ignored), but generic hook-mode callers are not a supported UX path. Confirm that snapshot-only deployment remains mandatory.
+4. **Gauge adapter direct-query shape is snapshot-specific.** The owned adapter requires concrete `epoch_budget`, `available_balance`, and `denom`, and returns `execute`, `emitted_value`, and `retained_value`. The snapshot gauge validates all three response fields and their exact budget reconciliation. Generic hook-mode callers are not a supported UX path; snapshot-only deployment remains mandatory.
 
 Until any decision produces new checked-in schemas, this commit—not aspirational prose—is the UX integration baseline.
 
 ## 11. Historical first production read-only bounty ledger profile
 
-The first production UI slice was strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`.
+The first production UI slice was strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`. This v1 identity is quarantined historical evidence: it must not be funded, imported, or used as a v2 client default.
 
 After verifying chain ID, contract address, Code ID, and wasm checksum, clients query `config {}`, `pause {}`, `health {}`, the first `bounties { start_after: null, limit: 50 }` page, and an independent observation height concurrently. Bounty pages are ascending by numeric `id`; a full page requires another query with `start_after` equal to the last ID, including an extra empty query for an exactly full final page. Repeated or non-increasing IDs are invalid. Contract pages have no observation height and are weakly consistent. Amounts and CosmWasm timestamps remain decimal strings and clients must parse them with arbitrary-precision integers.
 

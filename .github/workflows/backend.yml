@@ -1,4 +1,4 @@
-name: Backend v1
+name: Backend v2
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
       - "scripts/build-release.sh"
       - "scripts/generate-build-manifest.py"
       - "scripts/test_generate_build_manifest.py"
-      - "scripts/validate-v1-wasm.sh"
+      - "scripts/validate-v2-wasm.sh"
       - "deps/dao-contracts"
   push:
     branches: [main]
@@ -33,7 +33,7 @@ on:
       - "scripts/build-release.sh"
       - "scripts/generate-build-manifest.py"
       - "scripts/test_generate_build_manifest.py"
-      - "scripts/validate-v1-wasm.sh"
+      - "scripts/validate-v2-wasm.sh"
       - "deps/dao-contracts"
 
 permissions:
@@ -104,7 +104,7 @@ jobs:
       - name: Validate deployment and release tooling
         run: |
           bash -n scripts/build-release.sh
-          bash -n scripts/validate-v1-wasm.sh
+          bash -n scripts/validate-v2-wasm.sh
           python3 -m json.tool deployment/config.schema.json >/dev/null
           python3 -m json.tool release/gas-report.schema.json >/dev/null
           python3 -m json.tool release/release-decision.schema.json >/dev/null
@@ -168,7 +168,7 @@ jobs:
         run: |
           (cd contracts/dao-dao-core && cargo +1.81.0 run --locked -p dao-dao-core@2.8.0-alpha.2 --example schema && rm -rf schema/raw)
           (cd contracts/voting/dao-voting-juno-staked && cargo +1.81.0 run --locked -p dao-voting-juno-staked@2.8.0-alpha.2 --example schema && rm -rf schema/raw)
-          (cd contracts/gauges/gauge && cargo +1.81.0 run --locked -p gauge-orchestrator@2.8.0-alpha.2 --example gauge-orchestrator-schema && rm -rf schema/raw)
+          (cd contracts/gauges/gauge && cargo +1.81.0 run --locked -p gauge-orchestrator@2.8.0-alpha.3 --example gauge-orchestrator-schema && rm -rf schema/raw)
           git diff --exit-code -- \
             contracts/dao-dao-core/schema \
             contracts/voting/dao-voting-juno-staked/schema \
@@ -185,7 +185,7 @@ jobs:
           --target wasm32-unknown-unknown
           -p dao-dao-core@2.8.0-alpha.2
           -p dao-voting-juno-staked@2.8.0-alpha.2
-          -p gauge-orchestrator@2.8.0-alpha.2
+          -p gauge-orchestrator@2.8.0-alpha.3
 
       - name: Validate upstream Wasm compatibility
         run: |
@@ -243,11 +243,11 @@ jobs:
         env:
           COSMWASM_CHECK_V1: ${{ runner.temp }}/cwcheck-v1/bin/cosmwasm-check
           COSMWASM_CHECK_V3: ${{ runner.temp }}/cwcheck-v3/bin/cosmwasm-check
-        run: scripts/build-release.sh artifacts/v1
+        run: scripts/build-release.sh artifacts/v2
 
       - name: Upload non-deployed release candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: juno-voice-v1-wasm
+          name: juno-voice-v2-wasm
           if-no-files-found: error
-          path: artifacts/v1
+          path: artifacts/v2

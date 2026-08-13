@@ -7,4 +7,4 @@ pub mod state;
 mod tests;
 
 #[cfg(not(feature = "library"))]
-pub use crate::contract::{execute, instantiate, query};
+pub use crate::contract::{execute, instantiate, query, reply};

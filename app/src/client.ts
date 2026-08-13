@@ -188,7 +188,6 @@ export function mapBounty(v: unknown): Bounty {
   const candidate = nullable(x.project_candidate, (y) => {
     const z = rec(y, "project candidate");
     return {
-      project_id: str(z.project_id, "project candidate"),
       metadata_uri: str(z.metadata_uri, "project candidate"),
       metadata_digest: str(z.metadata_digest, "project candidate"),
     };

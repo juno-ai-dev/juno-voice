@@ -6,7 +6,7 @@ import { project } from "./registry.test";
 
 const owner = project.owner;
 const next = toBech32("juno", new Uint8Array(20).fill(7));
-const input: RegistryActionInput = { action: "register_project", projectId: "new-project", metadataUri: "ipfs://metadata", metadataDigest: `sha256:${"a".repeat(64)}`, address: owner, note: "No longer maintained" };
+const input: RegistryActionInput = { action: "register_project", projectId: null, metadataUri: "ipfs://metadata", metadataDigest: `sha256:${"a".repeat(64)}`, address: owner, note: "No longer maintained" };
 const context = (overrides: Partial<RegistryActionContext> = {}): RegistryActionContext => ({
   data: { config: { native_denom: "ujuno", registration_bond: "1000000", max_active_projects: 99, max_metadata_uri_bytes: 64, max_page_limit: 50, max_reason_bytes: 40, payout_address_delay_seconds: 86400, curator: owner, governor: owner, version: 1 }, pause: { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null }, health: { accounting: { active_projects: 1, pending_applications: 0, bond_liability: "1000000", lifetime_bonds_received: "1000000", lifetime_bonds_refunded: "0", lifetime_bonds_forfeited: "0" }, actual_native_balance: "1000000", fully_backed: true }, projects: [], applications: [], options: ["do-not-distribute"], observationHeight: 10, refreshedAt: new Date(0), weakConsistency: true },
   project: null, chainTimeNanos: "1800000000000000000", fingerprint: "canonical-fingerprint", ...overrides,
@@ -15,12 +15,12 @@ const context = (overrides: Partial<RegistryActionContext> = {}): RegistryAction
 describe("registry transaction intent construction", () => {
   it("constructs exact registration contract, action, funds, and fingerprint", () => {
     const intent = buildRegistryIntent(config, owner, context(), input);
-    expect(intent).toMatchObject({ chainId: "juno-1", contract: config.registryContract, expectedStateFingerprint: "canonical-fingerprint", funds: [{ denom: "ujuno", amount: "1000000" }], executeMessage: { register_project: { project_id: "new-project", metadata_uri: "ipfs://metadata", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: owner } } });
+    expect(intent).toMatchObject({ chainId: "juno-1", contract: config.registryContract, expectedStateFingerprint: "canonical-fingerprint", funds: [{ denom: "ujuno", amount: "1000000" }], executeMessage: { register_project: { metadata_uri: "ipfs://metadata", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: owner } } });
   });
   it("enforces schema byte bounds rather than input character counts", () => {
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataUri: "😀".repeat(17) })).toThrow("UTF-8 bytes");
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataDigest: "ab".repeat(32) })).toThrow("sha256:");
-    expect(() => buildRegistryIntent(config, owner, context(), { ...input, projectId: "do-not-distribute" })).toThrow("not reserved");
+    expect(() => buildRegistryIntent(config, owner, context(), { ...input, projectId: 1 })).toThrow("assigned by the registry");
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, address: "juno1invalid" })).toThrow("valid Juno");
   });
   it("enforces ownership, status, stop, capacity, and backing", () => {

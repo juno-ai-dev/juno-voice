@@ -1,10 +1,10 @@
-# Juno Voice v1: social bounties and Hack Juno incentives
+# Juno Voice v2: social bounties and Hack Juno incentives
 
 **Status:** Accepted architecture
 
 **Date:** 2026-08-03
 
-**Updated:** 2026-08-04
+**Updated:** 2026-08-12
 
 **Scope:** Product and protocol design; not a deployment authorization
 
@@ -34,7 +34,10 @@ Use five principal components:
 
 Do **not** create a DAO core for every bounty. A bounty needs a dynamic escrow ledger and a single temporary yes/no decision. A per-bounty DAO would require a core, CW4 group, voting module, and proposal module, introduce asynchronous membership synchronization, and leave large amounts of disposable governance state. The bounty contract can implement the exact rule in a few bounded state transitions. DAO DAO remains valuable as the `x/gov`-controlled program execution shell and for agent operations, not as a second sovereign government over Juno stakers.
 
-This is the first production-oriented Juno Voice protocol. The checked-in non-binding contract and application are pre-release prototypes, not a prior protocol version and not migration inputs.
+V2 is the security-remediated production candidate. The checked-in legacy
+non-binding request contract is a prototype, not a migration input. The current
+browser client implements the v2 wire surface but remains undeployable until it
+is bound to verified fresh-deployment identities.
 
 ## 1. Design goals
 
@@ -258,7 +261,7 @@ The complete state machine is:
 Rules:
 
 - A successful finalization updates state before emitting one bank transfer. CosmWasm transaction atomicity means a failed transfer cannot leave a paid state.
-- Payout is always the full escrowed bounty in v1. Partial awards and milestones use separate bounties.
+- Payout is always the full escrowed bounty in v2. Partial awards and milestones use separate bounties.
 - If a rejected ratification ends after the bounty expiry, it moves directly to `REFUNDING` instead of reopening.
 - While `OPEN`, anyone may expire a bounty after its deadline.
 - The creator may cancel only while they remain the sole contributor and no nomination is active.
@@ -281,7 +284,9 @@ Completing a bounty and becoming eligible for recurring incentives are separate 
 After `PAID`, the Agent Operations DAO may call `GraduateProject` if:
 
 - the bounty was marked as a project candidate;
-- the payout nomination includes a stable project ID, payout address, metadata URI, and digest;
+- the bounty candidate includes payout metadata URI and digest, while the paid
+  recipient supplies the payout address; no candidate or creator supplies a
+  project ID;
 - the delivery evidence is sufficient for the published Hack Juno eligibility policy; and
 - the project is not already registered.
 
@@ -311,7 +316,7 @@ graduated project:             ACTIVE -> SUSPENDED / RETIRED
 
 Only `ACTIVE` projects pass `CheckOption`. Suspension immediately prevents selection at execution even if an old tally exists. The Agent Operations DAO curates status; Juno `x/gov`, acting through the Program Vault, can override status and replace the curator. Payout-address changes use propose/accept semantics plus a delay so voters and operators can see the destination before it becomes payable.
 
-The registry should use stable project IDs as gauge option keys and resolve each ID to its current approved payout address only when producing messages. This avoids treating an address as project identity.
+The registry assigns immutable, monotonically increasing numeric project IDs and encodes gauge keys as canonical `project:<id>` values. Applicants and bounty creators never supply an ID. The adapter resolves each ID to its current approved payout address only when producing messages, avoiding both address identity and caller-controlled ID squatting.
 
 Reserve one immutable option such as `do-not-distribute`. Its selected share produces no transfer, so those funds remain in the Program Vault. Unallocated vote weight and allocations excluded by thresholds or caps also remain in the vault; they are never renormalized to winners. The `x/gov` funding proposal must define whether unused funds remain available for later epochs or return to the community pool at tranche expiry.
 
@@ -348,7 +353,7 @@ This is simpler and more correct than attempting to synthesize missing stake hoo
 Track two denominators:
 
 - `participating_power`: the full snapshot power of every wallet with a nonempty current-epoch vote, counted once, for turnout; and
-- `total_cast`: the sum of power actually allocated across options, for proportional distribution.
+- `allocated_power` (`total_cast` in the legacy compatibility field): the sum of power actually allocated across options, for accounting only.
 
 Without the first value, a voter allocating only part of their power would be incorrectly treated as only partially participating.
 
@@ -368,7 +373,7 @@ Reasonable canary settings to test—not silently hardcode—are:
 |---|---:|
 | Epoch duration | 7 days |
 | Minimum turnout | 1% of snapshotted Juno voting power |
-| Minimum option share | 1% of allocated power |
+| Minimum project share | 1% of participating power |
 | Maximum selected projects | 10 |
 | Maximum share per project | 20% |
 | Explicit abstention option | `do-not-distribute` |
@@ -475,7 +480,7 @@ All amounts use checked arithmetic. Strings, evidence counts, project counts, se
 | Program-vault compromise | Community funding is tranche-bounded, adapter spending is epoch-capped, and renewal requires a new `x/gov` decision. |
 | Snapshot pruning or restart | Enforce activation boundary and monitor live retention beyond the longest proposal/epoch plus margin. |
 | Keeper failure | Finalize, expire, refund, gauge execute, and bounded cleanup are public; alert on overdue rounds and epochs. |
-| Upgrade capture | Juno `x/gov` is the disclosed code administrator. V1 is freshly instantiated; any future migration requires its own version-gated specification, populated-state tests, and proposal. |
+| Upgrade capture | Juno `x/gov` is the disclosed code administrator. V2 is freshly instantiated at new addresses with no v1 import; any future migration requires its own version-gated specification, populated-state tests, and proposal. |
 
 ## 9. Product behavior
 
@@ -497,7 +502,7 @@ The project page should keep three concepts visually separate:
 - **selected in the current/last epoch** — received staker preference; and
 - **paid** — an on-chain epoch transfer actually executed.
 
-The gauge UI must display snapshot height, total snapshot power, participating power, turnout threshold, total allocated power, caps, unallocated share, `do-not-distribute` share, epoch budget, and actual transfers. It must not present participating-voter percentages as percentages of all Juno stake.
+The gauge UI must display snapshot height, total snapshot power, participating power, turnout threshold, total allocated power, caps, unallocated share, `do-not-distribute` share, selected-project power, emitted and retained value, policy version, execution deadline, epoch budget, and terminal outcome. It must not present participating-voter percentages as percentages of all Juno stake.
 
 ## 10. Deployment plan
 
@@ -514,7 +519,9 @@ This phase delivers incentives immediately without waiting for recurring gauge r
 ### Phase 2 — graduation and registry
 
 - Implement the project registry and both admission paths.
-- Test duplicate project IDs, payout-address changes, suspension between tally and execution, bond refund/slash accounting, and Program Vault governor overrides.
+- Test sequential assigned IDs, failed-allocation rollback, inability to squat an
+  ID, namespaced bounty replay, payout-address changes, suspension between tally
+  and execution, bond disposition, and Program Vault governor overrides.
 - Enable graduation only after at least one paid bounty has complete delivery evidence.
 
 ### Phase 3 — snapshot Hack Juno gauge
@@ -527,14 +534,14 @@ This phase delivers incentives immediately without waiting for recurring gauge r
 
 ### Prototype isolation
 
-Do not migrate prototype requests, votes, roles, or bonds into the v1 escrow. Prototype code may remain in the repository as an implementation reference, but it has no standing in the v1 state model. Existing real-world projects use the bonded registration path unless they complete a qualifying v1 bounty.
+Do not migrate prototype or v1 requests, votes, roles, projects, or bonds into v2. Prototype code may remain in the repository as an implementation reference, but it has no standing in the v2 state model. Existing real-world projects use the bonded registration path unless they complete a qualifying v2 bounty.
 
 ## 11. Decisions to ratify before implementation
 
 | Question | Recommended answer |
 |---|---|
 | Payout majority denominator | Participating contribution weight (`YES > NO`), with tie/no-vote reset, matching the stated requirement |
-| Bounty asset | Native `ujuno` only in v1 |
+| Bounty asset | Native `ujuno` only in v2 |
 | Multi-contributor voting period | Exactly 259,200 seconds, never early |
 | Payout shape | One full-pot payout; milestones are separate bounties |
 | Nomination authority | Creator or Agent Operations DAO |

@@ -1,15 +1,20 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { configDefaults } from "vitest/config";
 import { normalizeBase } from "./src/deployment";
+import { loadConfig, type ConfigEnvironment } from "./src/config";
 
-export default defineConfig({
-  base: normalizeBase(process.env.VITE_BASE_PATH),
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    setupFiles: "./src/test/setup.ts",
-    css: false,
-    exclude: [...configDefaults.exclude, "e2e/**", "scripts/**"],
-  },
+export default defineConfig(({ command, mode }) => {
+  const environment = { ...process.env, ...loadEnv(mode, process.cwd(), "") };
+  if (command === "build") loadConfig(environment as ConfigEnvironment);
+  return {
+    base: normalizeBase(environment.VITE_BASE_PATH),
+    plugins: [react()],
+    test: {
+      environment: "jsdom",
+      setupFiles: "./src/test/setup.ts",
+      css: false,
+      exclude: [...configDefaults.exclude, "e2e/**", "scripts/**"],
+    },
+  };
 });

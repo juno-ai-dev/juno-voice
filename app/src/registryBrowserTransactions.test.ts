@@ -24,18 +24,18 @@ const registryData = {
   refreshedAt: new Date(0), weakConsistency: true as const,
 };
 const before: RegistryActionContext = { data: registryData, project: null, chainTimeNanos: "10", fingerprint: "registry-before" };
-const registered: Project = { id: "alpha", owner: sender, payout_address: sender, metadata_uri: "ipfs://alpha",
+const registered: Project = { id: 1, owner: sender, payout_address: sender, metadata_uri: "ipfs://alpha",
   metadata_digest: digest, status: "pending", created_at: "10", updated_at: "10", status_history_count: 1,
   address_history_count: 0, provenance: { kind: "bonded_registration", applicant: sender },
   bond: { amount: "1000000", depositor: sender, state: "deposited" }, pending_payout_address: null, latest_review: null };
 const after: RegistryActionContext = { ...before, data: { ...registryData, health: { ...registryData.health,
   accounting: { ...registryData.health.accounting, pending_applications: 1, bond_liability: "1000000", lifetime_bonds_received: "1000000" }, actual_native_balance: "1000000" } },
   project: registered, fingerprint: "registry-after" };
-const intent = buildRegistryIntent(config, sender, before, { action: "register_project", projectId: "alpha",
+const intent = buildRegistryIntent(config, sender, before, { action: "register_project", projectId: null,
   metadataUri: "ipfs://alpha", metadataDigest: digest, address: sender, note: "" });
 const success = { transactionHash: "REGISTRY_HASH", height: 101, gasWanted: 1n, gasUsed: 1n,
   events: [{ type: "wasm-hack_juno_registry.project_registered", attributes: [
-    { key: "project_id", value: "alpha" }, { key: "applicant", value: sender },
+    { key: "project_id", value: "1" }, { key: "applicant", value: sender },
   ] }] };
 
 function setup() {
@@ -47,7 +47,7 @@ function setup() {
   cosmwasm.connectWithSigner.mockResolvedValue(signing);
   const loadActionContext = vi.fn()
     .mockResolvedValueOnce(before).mockResolvedValueOnce(before).mockResolvedValueOnce(after).mockResolvedValueOnce(after);
-  const registrySource: RegistryDataSource = { loadRegistry: vi.fn(), loadProject: vi.fn(), loadActionContext };
+  const registrySource: RegistryDataSource = { loadRegistry: vi.fn().mockResolvedValue(registryData), loadProject: vi.fn(), loadActionContext };
   const bountySource: VoiceDataSource = { loadLedger: vi.fn(async () => ledger) };
   const access = createBrowserTransactionAccess(config, bountySource, "keplr", registrySource);
   return { access, getKey, signing, loadActionContext };
@@ -71,7 +71,7 @@ describe("production registry browser transaction adapter", () => {
     expect(fixture.signing.execute).toHaveBeenCalledWith(sender, config.registryContract,
       intent.executeMessage, review.fee, "", [{ denom: "ujuno", amount: "1000000" }]);
     expect(fixture.loadActionContext.mock.calls).toEqual([
-      ["alpha", true], ["alpha", true], ["alpha", false], ["alpha", false],
+      [null], [null], [1],
     ]);
     expect(fixture.getKey.mock.invocationCallOrder.at(-1)).toBeLessThan(fixture.signing.execute.mock.invocationCallOrder[0]);
   });
@@ -99,7 +99,7 @@ describe("production registry browser transaction adapter", () => {
       pending_payout_address: { address: sender, proposed_at: "10", executable_at: "20", proposed_by: registered.owner } };
     const eligible = { ...before, project, chainTimeNanos: "20", fingerprint: "accept-state" };
     const tooEarly = { ...eligible, chainTimeNanos: "19" };
-    const accept = buildRegistryIntent(config, sender, eligible, { action: "accept_payout_address", projectId: "alpha",
+    const accept = buildRegistryIntent(config, sender, eligible, { action: "accept_payout_address", projectId: 1,
       metadataUri: "", metadataDigest: "", address: "", note: "" });
     fixture.loadActionContext.mockReset().mockResolvedValueOnce(eligible).mockResolvedValueOnce(tooEarly);
     await fixture.access.connect();

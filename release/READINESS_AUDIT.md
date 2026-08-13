@@ -1,171 +1,140 @@
-# Juno Voice v1 readiness audit
+# Juno Voice v2 remediation readiness audit
 
-Point-in-time audit: 2026-08-11. This document is not a release approval. It
-separates locally demonstrated implementation properties from evidence that
-requires upstream maintainers, an independent reviewer, or authorized public
-chain operations.
+**Assessment date:** 2026-08-12
 
-> **Historical snapshot:** this audit predates the later `juno-1` deployment and
-> public frontend release. Statements below describe evidence available at the
-> audit point, not current production state. Use
-> [`MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md)
-> for current trial gates and live verification.
+**Overall status:** source remediation candidate; not release-ready and not
+authorized for funded use.
+
+The implementation and local gates cover the five audit findings and the new
+fresh-deployment boundary. The implementation team's explicit candidate
+dispositions are recorded in `audit/REMEDIATION_DISPOSITION.md`; they do not
+constitute independent closure. The gauge remediation is pinned to immutable commit
+`d39094eea29a3642cfa0306fc34507ef2b07dd72`, merged as
+[`juno-ai-dev/dao-contracts#7`](https://github.com/juno-ai-dev/dao-contracts/pull/7).
+Completion still requires clean deterministic artifacts, target-chain evidence,
+independent security review, authorized fresh deployment, signed manifests, and
+a reconciled low-value canary.
 
 ## Definition-of-done matrix
 
-| Requirement | Status | Current evidence or missing gate |
+| Requirement | Status | Current evidence / remaining gate |
 |---|---|---|
-| Bounty and registry state machines and authority split | Locally demonstrated | Owned-contract unit, property, multitest, and cross-contract tests pass. |
-| Direct test/model coverage for protocol invariants | Locally demonstrated; audit pending | `REQUIREMENTS_TRACEABILITY.md` maps each accepted workstream requirement to named tests. State-machine and allocation property tests cover accounting and single disposition; an independent review is still required to challenge completeness. |
-| No unbounded contributor, voter, project, history, message, or cleanup loop | Locally demonstrated | Execute loops have hard configuration/contract bounds. List queries cap work and expose stable cursors where sparse indexes can create holes. Cleanup is capped at 100. |
-| `ujuno` liability reconciliation | Locally demonstrated | Accounting identity, unsolicited-transfer isolation, failure rollback, and single-disposition tests pass. |
-| Complete 72-hour multi-contributor window | Locally demonstrated | The immutable duration is 259,200 seconds and nanosecond-boundary tests pass. |
-| One-height epoch voting, turnout, and epoch isolation | Locally demonstrated | Snapshot, revision, turnout boundary, failure, cleanup, and consecutive-epoch tests pass under the pinned upstream toolchain. |
-| Adapter emits only capped native sends to active projects | Locally demonstrated | Typed bank-send assertions and arbitrary-allocation property tests pass; execution rechecks active status. |
-| Agent Operations cannot pay, allocate, raise limits, resume, or migrate | Locally demonstrated; chain binding pending | Contract APIs and guardian tests enforce the negative authority. Deployment verification binds the reviewed Agent DAO, but no live deployment record exists. |
-| Program Vault and Juno `x/gov` relationships query-confirmed | Tooling complete; chain evidence pending | Preflight verifies the actual `gov` module account. Final verification checks admins, mandatory creators, the voting module's DAO, modules, roles, and economics; its hash-bound report embeds the validated raw observations and exact check profile. No authorized deployment has produced the report. |
-| Gauge changes accepted upstream and cleanly pinned | Accepted and pinned | The epoch-snapshot gauge changes were merged into `juno-ai-dev/dao-contracts:v3` by [dao-contracts#5](https://github.com/juno-ai-dev/dao-contracts/pull/5). The parent gitlink pins merge commit `6b5e4a7aa4252a0bc59b32c2c58032ed5b0a913f`; release approval still requires the signed upstream acceptance attestation. |
-| Schemas and stable events cover the public API | Locally demonstrated | Owned and deployed-upstream schemas are regenerated. Successful response tests lock all 17 bounty and all 17 registry event types, plus the five new snapshot-gauge mutation actions, their exact ordered attribute keys, and nonempty wire values. Snapshot query tests cover policy/current epoch, epoch state/outcome, present and absent ballots, paged allocations, paged epochs, and sparse ballot cursors. Deployment, ten-scenario transcript, and release-evidence JSON Schemas close every required section and profile, including snapshot queries, gas observations, canary transactions, and operations rehearsals. |
-| CI independently checks both workspaces and integration | Workflow complete; clean run pending | Root and upstream pinned-toolchain jobs run independently. A separate integration job depends on both, and the release-candidate job depends on all three. Authorized exact-chain scenarios have not run. |
-| Deterministic clean-clone Wasm and complete release manifest | Tooling complete; evidence pending | The builder performs two recursive-clone builds and exact byte comparison. Manifest validation recomputes artifact sizes/hashes, canonical schema hashes, provenance/tool evidence, checksum listings, size listings, and exact `wasm-tools`/dual-`cosmwasm-check` identities from the referenced bytes. The container build has not run in this environment. |
-| Exact-artifact `uni-7` flows and maximum gas evidence | Blocked by normative mismatch and authorization | Public `uni-7` uses `ujunox`, while both v1 contracts and deployment validation require exact `ujuno`. No authorized deployment/gas packet exists. |
-| Independent review with no unresolved critical/high findings | Blocked externally | Audit report, attestation, and finding dispositions are release-gate inputs and do not exist. |
-| Deployment, monitoring, pause, recovery, and submodule runbooks | Locally demonstrated; rehearsal pending | Six content-bound runbooks exist and the release gate requires each operational section. Mutable deployment state is explicitly kept outside the clean source checkout. Six public-testnet operational rehearsals and independent operations review remain external evidence gates. |
-| Scope boundaries for prototype frontend/mainnet/funding/migration | Satisfied | A prototype frontend redesign exists and remains explicitly pre-release and outside v1 backend approval. No v1 frontend release, mainnet deployment, funding transfer, or prototype state/fund migration was performed. |
+| JV-01 partial-ballot denominator and retained accounting | Locally demonstrated | Gauge tests use participating power independently from allocated power, preserve retained-option and unallocated power, and reconcile emitted plus retained value. Upstream acceptance and chain evidence remain open. |
+| JV-02 fully funded opening and bounded terminal liveness | Locally demonstrated | Open checks the full fixed budget; execution requires only emitted value; insufficient funds, expiry, and governor abort are terminal and tested. Live funded/underfunded/expired/aborted transcripts remain open. |
+| JV-03 registry-assigned numeric identity | Locally demonstrated | Numeric monotonic IDs, canonical `project:<id>` options, chain-execution ordering, failure rollback, pagination, typed responses, and loud rejection of legacy caller-chosen IDs are covered locally. Fresh-chain registration/graduation evidence remains open. |
+| JV-04 source-namespaced graduation replay | Locally demonstrated | Provenance and replay keys bind source contract plus bounty ID; source replacement behavior is tested. Live rotation evidence remains open. |
+| JV-05 bond/status invariant | Locally demonstrated | Shared transition validation and regression/property coverage reject active or suspended bonded projects without deposited backing. Operational transition-table evidence and independent review remain open. |
+| Atomic bounty graduation handshake | Locally demonstrated | Reply-on-success records only the typed registry-assigned ID; malformed data, submessage failure, replay, and rollback are tested. Independent review remains open. |
+| Schemas, clients, monitoring, and runbooks | Candidate updated | Owned/gauge schemas, browser parsing/actions, deployment configuration, release semantics, monitoring, and recovery documentation reflect v2. All five composition schemas regenerate byte-for-byte under the declared Rust 1.85.1/1.81.0 toolchains. A final schema diff against reviewed release commits is still required. |
+| Fresh deployment; no v1 import | Tooling demonstrated | Deployment configuration uses v2 salts/labels and requires retained option plus execution window. Client production builds have no v1 defaults and require five verified v2 identities. Authorized rehearsal and mainnet deployment remain open. |
+| Deterministic exact artifacts | Open | All five contracts compile to Wasm with the declared Rust toolchains. A dirty-tree diagnostic optimization passes Wasm validation, both required `cosmwasm-check` versions, and the size/export allowlist. It did not use the digest-pinned optimizer image or clean recursive clones, so no release checksums or deterministic artifacts are claimed. |
+| Testnet scenarios and maximum gas | Open | Validators are present. No authorized exact-artifact target-chain packet exists for the v2 candidate. |
+| Independent remediation review | Open | The implementer-authored candidate disposition does not close the audit. A distinct reviewer must accept or revise JV-01 through JV-05 and retained-option/top-N and expiry decisions with no unresolved critical/high finding. |
+| Mainnet verification and canary | Open | No v2 code IDs, addresses, checksums, query-back report, signed release manifest, or authorized canary exists. |
 
 ## Local verification snapshot
 
-- Root workspace: 138 Rust tests pass; formatting and clippy with warnings
-  denied pass under Rust 1.85.1.
-- Upstream gauge package: 90 tests pass; affected gauge-package clippy with
-  warnings denied passes under Rust 1.81.0.
-- A fresh full-upstream-workspace attempt reached `osmosis-test-tube` and could
-  not build because this container has no `libclang`. The checked-in CI job
-  installs `libclang-dev`; the affected gauge suite above completed locally.
-  The deterministic release-candidate job separately installs the same native
-  dependency because GitHub jobs do not share runner packages.
-- Deployment, integration, and release Python discovery commands pass. Their
-  displayed counts are 19, 23, and 62 respectively; integration and release
-  include imported deployment fixtures, so the counts are not summed as unique
-  tests.
-- Build-manifest generator discovery runs 3 direct tests covering artifact,
-  schema, exact validator-identity, and immutable source-commit binding.
-- The deployment JSON Schema now closes and fully specifies every authority,
-  limit, artifact, composition, economics, and tranche section instead of
-  accepting six opaque objects. A structural parity test binds its required
-  keys and immutable limits to the authoritative deployment fixture.
-- Transcript and release schemas now close exact artifact/address maps, all ten
-  scenario IDs, seven gas cases, the signed gas report, the payload-bound final
-  decision, six runbooks and rehearsals, snapshot evidence, audit findings,
-  canaries, and sign-off. Their parity tests bind those sets to the authoritative
-  validator constants.
-- Owned-contract response regressions execute every one of the 34 distinct
-  bounty and registry mutation event types. They freeze each exact event name
-  and ordered attribute-key set and reject empty wire values; the exercise also
-  covers role, metadata, curator, bounty-contract, and economic updates.
-- Snapshot-gauge response regressions freeze the complete ordered attributes
-  for policy update, epoch open, ballot placement/removal, each terminal
-  execution outcome, and every cleanup phase. Public-query regressions exercise
-  current policy/epoch, epoch state, present/absent ballots, allocation pages,
-  terminal outcome, and epoch pages without reading storage directly.
-- Two isolated native builds from the current source bytes produced identical
-  copies of all five required Wasm artifacts. `wasm-tools`, both compatible
-  `cosmwasm-check` generations, and the repository size/export validator pass.
-  This is compilation/repeatability preflight evidence, not the still-required
-  clean recursive-clone build in the digest-pinned optimizer image. A Docker
-  client is present, but the current environment is denied access to
-  `/var/run/docker.sock`, so it cannot run that build.
-- Deployment restart state is durably journaled, sequence-validated, and locked
-  against concurrent broadcasters. Every fresh, pending, or crash-recovered
-  instantiation is fully query-reconciled before completion.
-- Scenario transcripts use exact named proof profiles linked to captured query,
-  balance, transaction, message, and event data. The validator enforces positive
-  payout/refund deltas, unchanged no-distribution balances, nonzero rejected
-  resume codes, proof-specific verified contract/query/response semantics and
-  cross-proof IDs, exact contract/event/action attribute sets for positive
-  event proofs, transfer scans bound to the same addresses as
-  unchanged-balance proofs, full absence-scan transaction coverage, and
-  cross-packet transaction uniqueness. CosmWasm execute destinations must be
-  verified deployment or Agent Operations addresses. Captured message, event,
-  and attribute objects have required typed structure.
-- Snapshot evidence now carries six hash-bound historical power queries against
-  the verified voting module plus full native staking transaction captures. It
-  proves the first epoch's voter and total power are identical before and after
-  the recorded intervening changes, reconciles their signed native amounts to
-  the later voter-power delta, and proves a historical query succeeds after the
-  required retention interval.
-- A read-only release capture companion reuses the scenario harness's raw
-  transaction and exact-height query normalization for snapshot changes,
-  historical queries, canaries, and rehearsal transaction sets. It refuses
-  in-checkout or existing outputs, performs initial denom/message/code-profile
-  checks, and its generated fragments round-trip through the complete release
-  validator in tests.
-- Every gas record now binds the verified contract, exact maximum-sized request,
-  full hash-checked response and byte count, and either the maximum returned
-  collection or the maximum cleanup event. The gas report is no longer an
-  opaque file: it binds the canonical seven-record hash, exact source/config,
-  safety margin, methodology, distinct measurer/reviewer roles, and two
-  payload-bound, unauthenticated traceability declarations. Canary records bind full successful
-  transaction captures, exact gauge distribution events, post-execution epoch
-  queries, and Program Vault native transfers summing to the declared value.
-- Operational readiness cannot pass on runbook filenames alone: required
-  sections are checked, all six recovery/response rehearsals need complete raw
-  transaction captures with case-specific success/rejection profiles, and the
-  release operations signer must be the separate rehearsal reviewer.
-- The security gate parses the signed attestation itself and requires it to bind
-  the independent reviewer, both audited commits, report hash, zero critical/high
-  counts, the exact lower-finding set, timestamp, and signature record.
-- Upstream acceptance likewise requires a signed attestation binding the
-  repository, immutable commit, review URL, acceptor, and timestamp. The canary
-  and final release decisions are parsed signed records; the latter binds a
-  canonical hash covering the entire reviewed packet except its own file
-  reference, every named report hash, exact testnet-only authority, and every
-  required reviewer. Reviewer declarations bind the same decision payload hash
-  for traceability but are unauthenticated and cannot authorize release. A
-  separate SSHSIG authorization must verify against an explicitly supplied
-  OpenSSH allowed-signers trust root, while production remains explicitly
-  unauthorized. Decision preparation first runs
-  the complete semantic evidence gate with only the pending decision omitted.
-- Regenerated public schemas include the snapshot-gauge API and explicit sparse
-  pagination cursors.
-- `REQUIREMENTS_TRACEABILITY.md` records the direct named test for each local
-  acceptance group and the exact hard bound for every collection traversal.
-- Parent and submodule `git diff --check` pass.
+The current working tree has passed:
 
-These checks do not substitute for the clean recursive-clone container build,
-upstream acceptance, independent security review, or public-chain evidence.
+- root Rust formatting, strict clippy, and locked workspace tests: 149 tests;
+- affected upstream gauge/interface/adapter crates: 150 locked tests, formatting,
+  and strict no-dependency clippy;
+- complete locked upstream workspace tests: 1,350 passed and 10 ignored;
+- byte-for-byte schema regeneration for the two root contracts and three
+  upstream composition contracts under Rust 1.85.1 and 1.81.0 respectively;
+- diagnostic current-tree Wasm builds for all five composition contracts under
+  those exact Rust toolchains. Binaryen 132 optimization produced artifacts of
+  561,434, 481,790, 498,188, 175,910, and 676,970 bytes for bounty, registry,
+  DAO core, Juno staking, and gauge respectively; all passed the exact export
+  allowlist and `wasm-tools 1.254.0`, all five passed `cosmwasm-check 3.0.4`,
+  and the three CosmWasm 1.x artifacts passed `cosmwasm-check 1.5.11`;
+- browser lint and typecheck, 370 Vitest tests, 5 Node policy tests, 9 packaged
+  Chromium smoke tests, and both dependency audits with zero vulnerabilities;
+- deployment validation: 22 tests;
+- root integration discovery: 26 tests;
+- release evidence/decision validation: 74 tests; and
+- deterministic build-script unit tests: 3 tests.
 
-## Blocking denomination decision
+The complete upstream workspace test command passed locally with the current
+stable toolchain. The local aarch64 environment required a temporary libclang
+18.1.1 wheel, explicit GCC/system header search paths for bindgen, and
+`CARGO_BUILD_JOBS=1` to keep the test-tube build within available memory. Those
+process-only accommodations did not modify repository dependencies or toolchain
+pins. This does not waive the clean pinned upstream workspace CI gate.
 
-The Cosmos chain registry's current live `uni-7` entry lists `ujunox` for both
-staking and fees, and no usable native `ujuno` supply has been identified. The
-current contracts reject any instantiate denomination other than `ujuno`, and
-deployment preflight correctly rejects the chain before upload. Therefore the
-exact current artifact cannot execute the required economic scenarios on that
-network. The registry record is
-`testnets/junotestnet/chain.json` in `cosmos/chain-registry`.
+The Wasm results are deliberately diagnostic. Binaryen 132 was run from a
+temporary package rather than the digest-pinned optimizer image, and the dirty
+working trees were not reconstructed twice from clean recursive clones. Their
+hashes are therefore not release identities. The clean deterministic build,
+byte comparison, and final checksum manifest remain open.
 
-One normative condition must change before exact-artifact testnet work:
+The recorded snapshot above predates commit review and is working-tree evidence,
+not immutable release evidence. The remediation is now committed and the
+submodule patch is accepted upstream, but final release verification must still
+run from clean recursive clones at frozen reviewed commits.
 
-1. Recommended: make the native denomination immutable per instance, deploy the
-   same Wasm with `ujunox` on `uni-7`, and retain `ujuno` for mainnet.
-2. Use another Juno v30-compatible public testnet whose actual native
-   denomination is `ujuno` and change the named testnet requirement.
-3. Remove or replace the exact public-`uni-7` evidence requirement.
+## Fresh-deployment boundary
 
-No denomination behavior has been changed without scope-owner approval.
+The v2 release intentionally has no migration or import entrypoint. Deployment
+must use new salts, code identities, and addresses; query the historical v1
+system immediately before cutover; and stop if any unexpected bounty, project,
+epoch, liability, or balance exists. It must then prove the v2 system starts
+empty with initial counters and no open epoch.
+
+The browser client is also cutover-gated. Production startup/build requires:
+
+- `VITE_PROTOCOL_VERSION=v2`;
+- address, Code ID, and Wasm checksum for bounty, registry, Program Vault,
+  voting module, and gauge;
+- distinct valid Juno contract addresses; and
+- an exact release commit.
+
+Transaction intents and the central signer allowlist use those injected
+identities. The historical v1 values survive only in captured test fixtures and
+cannot become production defaults accidentally. The manually dispatched Pages
+packaging job reads the eventual v2 identities from protected repository
+variables and fails before upload when any value is absent or malformed. Pushes
+to `main` cannot deploy during remediation.
+
+## Target-chain evidence blocker
+
+No exact-artifact v2 testnet deployment is authorized. The historical `uni-7`
+configuration is not automatically reusable: the Cosmos chain registry records
+`ujunox`, while the current contracts and deployment policy require `ujuno`.
+The scope owner must select a Juno-compatible network with the required native
+denomination or explicitly approve a denomination-policy change. Do not weaken
+the validator or relabel `ujunox` as `ujuno`.
+
+The selected target must capture at least:
+
+- funded, partial, retained-only, underfunded, expired, and aborted epochs;
+- emitted/retained reconciliation and unchanged balances for no-send outcomes;
+- numeric ID assignment through bonded registration and bounty graduation;
+- bounty-source rotation with namespaced replay behavior;
+- the complete operational bond transition table;
+- fresh deployment emptiness and old/new address separation; and
+- configured-maximum gas for ballots, options, selection, instantiation,
+  execution, cleanup, and queries.
 
 ## External completion sequence
 
-1. Resolve the denomination decision.
-2. Push the pinned gauge commit, obtain upstream acceptance, and record the
-   immutable accepted commit and review attestation.
-3. Run the pinned two-clone deterministic build and publish exact artifacts.
-4. Complete independent security review and disposition findings.
-5. Obtain deployment authority, bind a reviewed Agent Operations DAO, and run
-   preflight, plan review, deployment, and final verification.
-6. Run all ten exact-artifact scenarios, snapshot/staking-change checks, and
-   seven configured-maximum gas cases.
-7. Complete six operational rehearsals, two positive low-value distribution
-   canary epochs, and multi-role sign-off, then generate the testnet-only
-   release manifest.
+1. **Completed:** land and independently review the gauge patch upstream, then
+   advance the submodule to accepted immutable commit `d39094ee`.
+2. Review the root changes; run both full locked workspaces and all
+   schema-diff gates in a clean recursive clone.
+3. Produce reproducible optimized `artifacts/v2` bytes, Wasm validation, and a
+   signed build manifest bound to exact source commits.
+4. Select and authorize a compatible testnet; run the required scenarios, gas
+   cases, operational rehearsals, and deployment/cutover rehearsal.
+5. Complete independent remediation review and resolve every critical/high
+   finding.
+6. Obtain separate deployment authority, perform the fresh mainnet deployment,
+   query back every identity/config/empty-state invariant, and publish the signed
+   v2 release manifest.
+7. Configure the client from that verified manifest, perform the explicit
+   frontend cutover, and reverify the public artifact.
+8. Only after all pre-canary gates pass, obtain separate authorization for one
+   tightly capped canary and reconcile it before any larger funding decision.
+
+No item in this audit authorizes uploading code, changing governance state,
+funding a Vault, opening an epoch, or deploying the frontend.

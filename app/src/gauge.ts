@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config";
 import { connectRpc, type Connect, type RpcClient } from "./rpc";
+import { mapProject, type Project } from "./registry";
 
 export const GAUGE_ID = 0 as const;
 export const GAUGE_PAGE_LIMIT = 100;
@@ -46,14 +47,18 @@ export interface GaugeState {
   id: number; title: string; adapter: string; epochSize: number; minPercentSelected: string | null;
   maxOptionsSelected: number; maxAvailablePercentage: string | null; isStopped: boolean;
   nextEpoch: number; currentEpoch: number | null;
-  snapshotPolicy: { minTurnoutBps: number; epochBudget: string; denom: string };
+  snapshotPolicy: { minTurnoutBps: number; epochBudget: string; denom: string; retainedOption: string | null; executionWindowSeconds: number };
 }
-export type EpochOutcome = "open" | "distributed" | "no_distribution_turnout" | "no_eligible_options";
+export type EpochOutcome = "open" | "distributed" | "no_distribution_turnout" | "no_distribution_zero_participation" |
+  "no_eligible_options" | "insufficient_funds" | "expired" | "aborted";
 export interface Epoch {
   gaugeId: number; epochId: number; snapshotHeight: number; snapshotTotalPower: string;
-  participatingPower: string; totalCast: string; minTurnoutBps: number; epochBudget: string;
-  denom: string; opensAt: number; closesAt: number; voterCount: number; optionCount: number;
-  outcome: EpochOutcome; messageCount: number; cleanup: { phase: "ballots" | "options" | "complete"; cursor: number; complete: boolean };
+  participatingPower: string; allocatedPower: string; totalCast: string; retainedOption: string | null;
+  retainedOptionPower: string; unallocatedPower: string; selectedProjectPower: string; emittedValue: string; retainedValue: string;
+  minTurnoutBps: number; policyVersion: number; epochBudget: string; denom: string; opensAt: number; closesAt: number;
+  executionDeadline: number; voterCount: number; optionCount: number; outcome: EpochOutcome; messageCount: number;
+  insufficientFunds: { required: string; available: string } | null; abortReason: string | null;
+  cleanup: { phase: "ballots" | "options" | "complete"; cursor: number; complete: boolean };
 }
 export interface GaugeVote { option: string; weight: string }
 export interface Ballot {
@@ -67,6 +72,7 @@ export interface GaugeData {
   chainTimeNanos: string; observationHeight: number; refreshedAt: Date; weakConsistency: true;
   adapterStopped: boolean;
   currentRegistryOptions: string[];
+  registryProjects: Project[];
 }
 export interface GaugeActionContext { data: GaugeData; fingerprint: string }
 export interface GaugeDataSource {
@@ -84,6 +90,7 @@ export const gaugeQueries = {
   votingDao: () => ({ dao: {} }),
   registryPause: () => ({ pause: {} }),
   registryOptions: (startAfter: string | null) => ({ all_options: { start_after: startAfter, limit: 50 } }),
+  registryProjects: (startAfter: number | null) => ({ projects: { start_after: startAfter, limit: 50 } }),
 } as const;
 
 export function mapGaugeConfig(value: unknown): GaugeConfig {
@@ -100,24 +107,29 @@ export function mapGauge(value: unknown): GaugeState {
   const x = object(value, "gauge");
   exact(x, ["id", "title", "adapter", "epoch_size", "min_percent_selected", "max_options_selected", "max_available_percentage", "is_stopped", "next_epoch", "reset", "snapshot_policy", "current_epoch"]);
   if (x.reset !== null || x.snapshot_policy === null) bad("gauge");
-  const policy = object(x.snapshot_policy, "gauge snapshot policy"); exact(policy, ["min_turnout_bps", "epoch_budget", "denom"]);
+  const policy = object(x.snapshot_policy, "gauge snapshot policy"); exact(policy, ["min_turnout_bps", "epoch_budget", "denom", "retained_option", "execution_window_seconds"]);
   const current = x.current_epoch === null ? null : integer(x.current_epoch, "gauge");
   return { id: integer(x.id, "gauge"), title: text(x.title, "gauge"), adapter: text(x.adapter, "gauge"), epochSize: integer(x.epoch_size, "gauge"),
     minPercentSelected: nullableDecimal(x.min_percent_selected, "minimum selection percentage"), maxOptionsSelected: integer(x.max_options_selected, "gauge"),
     maxAvailablePercentage: nullableDecimal(x.max_available_percentage, "maximum selection percentage"), isStopped: bool(x.is_stopped, "gauge"), nextEpoch: integer(x.next_epoch, "gauge"), currentEpoch: current,
-    snapshotPolicy: { minTurnoutBps: integer(policy.min_turnout_bps, "gauge snapshot policy"), epochBudget: uint(policy.epoch_budget, "gauge snapshot policy"), denom: text(policy.denom, "gauge snapshot policy") } };
+    snapshotPolicy: { minTurnoutBps: integer(policy.min_turnout_bps, "gauge snapshot policy"), epochBudget: uint(policy.epoch_budget, "gauge snapshot policy"), denom: text(policy.denom, "gauge snapshot policy"), retainedOption: policy.retained_option === null ? null : text(policy.retained_option, "gauge snapshot policy"), executionWindowSeconds: integer(policy.execution_window_seconds, "gauge snapshot policy") } };
 }
-const mapOutcome = (value: unknown): { outcome: EpochOutcome; messageCount: number } => {
-  if (typeof value === "string" && ["open", "no_distribution_turnout", "no_eligible_options"].includes(value)) return { outcome: value as EpochOutcome, messageCount: 0 };
-  const x = object(value, "epoch outcome"); exact(x, ["distributed"]); const body = object(x.distributed, "epoch outcome"); exact(body, ["message_count"]);
-  return { outcome: "distributed", messageCount: integer(body.message_count, "epoch outcome") };
+const mapOutcome = (value: unknown): Pick<Epoch, "outcome" | "messageCount" | "insufficientFunds" | "abortReason"> => {
+  if (typeof value === "string" && ["open", "no_distribution_turnout", "no_distribution_zero_participation", "no_eligible_options", "expired"].includes(value))
+    return { outcome: value as EpochOutcome, messageCount: 0, insufficientFunds: null, abortReason: null };
+  const x = object(value, "epoch outcome");
+  if (Object.keys(x).length !== 1) bad("epoch outcome");
+  if ("distributed" in x) { const body = object(x.distributed, "epoch outcome"); exact(body, ["message_count"]); return { outcome: "distributed", messageCount: integer(body.message_count, "epoch outcome"), insufficientFunds: null, abortReason: null }; }
+  if ("insufficient_funds" in x) { const body = object(x.insufficient_funds, "epoch outcome"); exact(body, ["required", "available"]); return { outcome: "insufficient_funds", messageCount: 0, insufficientFunds: { required: uint(body.required, "epoch outcome"), available: uint(body.available, "epoch outcome") }, abortReason: null }; }
+  if ("aborted" in x) { const body = object(x.aborted, "epoch outcome"); exact(body, ["reason"]); return { outcome: "aborted", messageCount: 0, insufficientFunds: null, abortReason: text(body.reason, "epoch outcome") }; }
+  return bad("epoch outcome");
 };
 export function mapEpoch(value: unknown): Epoch {
-  const x = object(value, "epoch"); exact(x, ["gauge_id", "epoch_id", "snapshot_height", "snapshot_total_power", "participating_power", "total_cast", "min_turnout_bps", "epoch_budget", "denom", "opens_at", "closes_at", "voter_count", "option_count", "outcome", "cleanup"]);
+  const x = object(value, "epoch"); exact(x, ["gauge_id", "epoch_id", "snapshot_height", "snapshot_total_power", "participating_power", "allocated_power", "total_cast", "retained_option", "retained_option_power", "unallocated_power", "selected_project_power", "emitted_value", "retained_value", "min_turnout_bps", "policy_version", "epoch_budget", "denom", "opens_at", "closes_at", "execution_deadline", "voter_count", "option_count", "outcome", "cleanup"]);
   const outcome = mapOutcome(x.outcome), cleanup = object(x.cleanup, "epoch cleanup"); exact(cleanup, ["phase", "cursor", "complete"]);
   const phase = text(cleanup.phase, "epoch cleanup") as Epoch["cleanup"]["phase"];
   if (!["ballots", "options", "complete"].includes(phase)) bad("epoch cleanup");
-  return { gaugeId: integer(x.gauge_id, "epoch"), epochId: integer(x.epoch_id, "epoch"), snapshotHeight: integer(x.snapshot_height, "epoch"), snapshotTotalPower: uint(x.snapshot_total_power, "epoch"), participatingPower: uint(x.participating_power, "epoch"), totalCast: uint(x.total_cast, "epoch"), minTurnoutBps: integer(x.min_turnout_bps, "epoch"), epochBudget: uint(x.epoch_budget, "epoch"), denom: text(x.denom, "epoch"), opensAt: integer(x.opens_at, "epoch"), closesAt: integer(x.closes_at, "epoch"), voterCount: integer(x.voter_count, "epoch"), optionCount: integer(x.option_count, "epoch"), ...outcome, cleanup: { phase, cursor: integer(cleanup.cursor, "epoch cleanup"), complete: bool(cleanup.complete, "epoch cleanup") } };
+  return { gaugeId: integer(x.gauge_id, "epoch"), epochId: integer(x.epoch_id, "epoch"), snapshotHeight: integer(x.snapshot_height, "epoch"), snapshotTotalPower: uint(x.snapshot_total_power, "epoch"), participatingPower: uint(x.participating_power, "epoch"), allocatedPower: uint(x.allocated_power, "epoch"), totalCast: uint(x.total_cast, "epoch"), retainedOption: x.retained_option === null ? null : text(x.retained_option, "epoch"), retainedOptionPower: uint(x.retained_option_power, "epoch"), unallocatedPower: uint(x.unallocated_power, "epoch"), selectedProjectPower: uint(x.selected_project_power, "epoch"), emittedValue: uint(x.emitted_value, "epoch"), retainedValue: uint(x.retained_value, "epoch"), minTurnoutBps: integer(x.min_turnout_bps, "epoch"), policyVersion: integer(x.policy_version, "epoch"), epochBudget: uint(x.epoch_budget, "epoch"), denom: text(x.denom, "epoch"), opensAt: integer(x.opens_at, "epoch"), closesAt: integer(x.closes_at, "epoch"), executionDeadline: integer(x.execution_deadline, "epoch"), voterCount: integer(x.voter_count, "epoch"), optionCount: integer(x.option_count, "epoch"), ...outcome, cleanup: { phase, cursor: integer(cleanup.cursor, "epoch cleanup"), complete: bool(cleanup.complete, "epoch cleanup") } };
 }
 export function mapVote(value: unknown): GaugeVote {
   const x = object(value, "gauge vote"); exact(x, ["option", "weight"]); const weight = text(x.weight, "gauge vote"); parseDecimal18(weight);
@@ -171,6 +183,17 @@ async function paginateRegistryOptions(query: (message: object) => Promise<unkno
   }
   throw new Error("Registry option pagination exceeded its fail-closed bound.");
 }
+async function paginateRegistryProjects(query: (message: object) => Promise<unknown>): Promise<Project[]> {
+  const output: Project[] = []; let cursor: number | null = null;
+  for (let page = 0; page < 1000; page++) {
+    const x = object(await query(gaugeQueries.registryProjects(cursor)), "registry projects"); exact(x, ["projects"]);
+    const values: unknown[] = Array.isArray(x.projects) ? x.projects : bad("registry projects");
+    const projects = values.map(mapProject);
+    for (const project of projects) { if (cursor !== null && project.id <= cursor) bad("registry projects"); cursor = project.id; output.push(project); }
+    if (values.length < 50) return output;
+  }
+  throw new Error("Registry project pagination exceeded its fail-closed bound.");
+}
 
 export function createGaugeDataSource(cfg: AppConfig, connector: Connect = connectRpc): GaugeDataSource {
   const load = async (voter?: string): Promise<GaugeData> => {
@@ -195,9 +218,14 @@ export function createGaugeDataSource(cfg: AppConfig, connector: Connect = conne
       const registryPause = object(rawRegistryPause, "registry pause");
       exact(registryPause, ["admissions_stopped", "adapter_stopped", "reason", "actor", "changed_at"]);
       const adapterStopped = bool(registryPause.adapter_stopped, "registry pause");
-      const currentRegistryOptions = await paginateRegistryOptions((message) => client.queryContractSmart(cfg.registryContract, message));
-      if (!currentRegistryOptions.includes("do-not-distribute")) throw new Error("Registry reserved option is unavailable.");
-      if (config.owner !== cfg.vaultContract || config.daoCore !== cfg.vaultContract || config.votingPowers !== cfg.votingContract || gauge.id !== GAUGE_ID || gauge.adapter !== cfg.registryContract || gauge.snapshotPolicy.denom !== "ujuno" || gauge.snapshotPolicy.minTurnoutBps > 10_000) throw new Error("Gauge deployment binding mismatch.");
+      const [currentRegistryOptions, registryProjects] = await Promise.all([
+        paginateRegistryOptions((message) => client.queryContractSmart(cfg.registryContract, message)),
+        paginateRegistryProjects((message) => client.queryContractSmart(cfg.registryContract, message)),
+      ]);
+      const activeProjects = registryProjects.filter((project) => project.status === "active");
+      const expectedRegistryOptions = ["do-not-distribute", ...activeProjects.map((project) => `project:${project.id}`)].sort();
+      if (JSON.stringify(currentRegistryOptions) !== JSON.stringify(expectedRegistryOptions)) throw new Error("Registry project options are inconsistent.");
+      if (config.owner !== cfg.vaultContract || config.daoCore !== cfg.vaultContract || config.votingPowers !== cfg.votingContract || gauge.id !== GAUGE_ID || gauge.adapter !== cfg.registryContract || gauge.snapshotPolicy.denom !== "ujuno" || gauge.snapshotPolicy.minTurnoutBps > 10_000 || gauge.snapshotPolicy.retainedOption !== "do-not-distribute" || gauge.snapshotPolicy.executionWindowSeconds < 1) throw new Error("Gauge deployment binding mismatch.");
       const epochs = await paginateEpochs(gaugeQuery);
       if (new Set(epochs.map((epoch) => epoch.epochId)).size !== epochs.length) throw new Error("Duplicate canonical epoch identity.");
       const current = gauge.currentEpoch === null ? null : epochs.find((epoch) => epoch.epochId === gauge.currentEpoch) ?? null;
@@ -212,8 +240,8 @@ export function createGaugeDataSource(cfg: AppConfig, connector: Connect = conne
       if (votingPower && votingPower.height !== current?.snapshotHeight) throw new Error("Historical voting-power height mismatch.");
       if (!client.getBalance) throw new Error("Canonical Program Vault balance query is unavailable.");
       const vaultBalance = await client.getBalance(cfg.vaultContract, "ujuno");
-      return { config, gauge, epochs, current, previous, options, previousOptions, ballot, votingPower, vaultBalance, chainTimeNanos, observationHeight: integer(observationHeight, "gauge height"), refreshedAt: new Date(), weakConsistency: true, adapterStopped, currentRegistryOptions };
+      return { config, gauge, epochs, current, previous, options, previousOptions, ballot, votingPower, vaultBalance, chainTimeNanos, observationHeight: integer(observationHeight, "gauge height"), refreshedAt: new Date(), weakConsistency: true, adapterStopped, currentRegistryOptions, registryProjects: activeProjects };
     } finally { client.disconnect(); }
   };
-  return { loadGauge: load, async loadActionContext(voter) { const data = await load(voter ?? undefined); return { data, fingerprint: JSON.stringify({ config: data.config, gauge: data.gauge, current: data.current, options: data.options, ballot: data.ballot, votingPower: data.votingPower, vaultBalance: data.vaultBalance, adapterStopped: data.adapterStopped, currentRegistryOptions: data.currentRegistryOptions }) }; } };
+  return { loadGauge: load, async loadActionContext(voter) { const data = await load(voter ?? undefined); return { data, fingerprint: JSON.stringify({ config: data.config, gauge: data.gauge, current: data.current, options: data.options, ballot: data.ballot, votingPower: data.votingPower, vaultBalance: data.vaultBalance, adapterStopped: data.adapterStopped, currentRegistryOptions: data.currentRegistryOptions, registryProjects: data.registryProjects }) }; } };
 }

@@ -1,6 +1,6 @@
 [package]
 name = "juno-voice-bounties"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
@@ -16,6 +16,7 @@ cosmwasm-schema = "=2.2.2"
 cosmwasm-std = "=2.2.2"
 cw-storage-plus = "=2.0.0"
 cw2 = "=2.0.0"
+cw-utils = "=2.0.0"
 thiserror = "=1.0.69"
 
 [dev-dependencies]

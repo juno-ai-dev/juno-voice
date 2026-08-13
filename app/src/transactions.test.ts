@@ -8,7 +8,7 @@ import {
   type TransactionDependencies,
   type TransactionIntent,
 } from "./transactions";
-import { DEFAULT_BOUNTY_CONTRACT, DEFAULT_GAUGE_CONTRACT, DEFAULT_REGISTRY_CONTRACT } from "./config";
+import { config } from "./test/bountyFixtures";
 import { WalletSession, type WalletConnector } from "./wallet";
 
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
@@ -30,6 +30,7 @@ function setup(reviewRegistry = new TransactionReviewRegistry()) {
   };
   const wallet = new WalletSession(walletPort, "juno-1");
   const dependencies: TransactionDependencies = {
+    contracts: config,
     wallet,
     readCanonicalState: vi.fn(async () => ({ fingerprint: "bounty:7:v3", height: 100 })),
     estimateFee: vi.fn(async () => ({ gas: "180000", amount: [{ denom: "ujuno", amount: "4500" }] })),
@@ -48,7 +49,7 @@ function setup(reviewRegistry = new TransactionReviewRegistry()) {
 }
 const intent: TransactionIntent = {
   chainId: "juno-1",
-  contract: DEFAULT_BOUNTY_CONTRACT,
+  contract: config.contract,
   executeMessage: { contribute: { bounty_id: 7 } },
   funds: [{ denom: "ujuno", amount: "250000" }],
   consequences: ["Send 0.25 JUNO to bounty #7 escrow."],
@@ -65,7 +66,7 @@ async function prepared() {
 describe("exact pre-sign transaction review", () => {
   it("shows and signs the exact disclosed request and reports successful refresh", async () => {
     const { dependencies, flow, review } = await prepared();
-    expect(review).toMatchObject({ sender, chainId: "juno-1", contract: DEFAULT_BOUNTY_CONTRACT,
+    expect(review).toMatchObject({ sender, chainId: "juno-1", contract: config.contract,
       executeMessage: intent.executeMessage, funds: intent.funds,
       fee: { gas: "180000", amount: [{ denom: "ujuno", amount: "4500" }] },
       consequences: intent.consequences, canonicalState: { fingerprint: "bounty:7:v3", height: 100 } });
@@ -123,7 +124,14 @@ describe("address and centrally-owned execute policy", () => {
     ["execute", { gauge: 0 }],
   ])("allows exact gauge action %s only on the pinned gauge", async (action, body) => {
     const { wallet, dependencies } = setup(); await wallet.connect();
-    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: DEFAULT_GAUGE_CONTRACT, executeMessage: { [action]: body }, funds: [] })).resolves.toMatchObject({ contract: DEFAULT_GAUGE_CONTRACT, funds: [] });
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: config.gaugeContract, executeMessage: { [action]: body }, funds: [] })).resolves.toMatchObject({ contract: config.gaugeContract, funds: [] });
+  });
+  it("rejects privileged abort_epoch through the public central signing policy", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: config.gaugeContract,
+      executeMessage: { abort_epoch: { gauge: 0, reason: "operator recovery" } }, funds: [] }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
+    expect(dependencies.estimateFee).not.toHaveBeenCalled();
   });
   it.each([
     ["wrong gauge", { place_votes: { gauge: 1, votes: [{ option: "alpha", weight: "1" }] } }],
@@ -133,29 +141,29 @@ describe("address and centrally-owned execute policy", () => {
     ["empty ballot", { place_votes: { gauge: 0, votes: [] } }],
   ])("rejects malformed gauge schema: %s", async (_, executeMessage) => {
     const { wallet, dependencies } = setup(); await wallet.connect();
-    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: DEFAULT_GAUGE_CONTRACT, executeMessage, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: config.gaugeContract, executeMessage, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
   });
   it.each([
-    ["register_project", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender }, [{ denom: "ujuno", amount: "1000000" }]],
-    ["update_pending_metadata", { project_id: "alpha", metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}` }, []],
-    ["propose_payout_address", { project_id: "alpha", address: sender }, []],
-    ["cancel_payout_address_change", { project_id: "alpha" }, []],
-    ["accept_payout_address", { project_id: "alpha" }, []],
-    ["claim_registration_bond", { project_id: "alpha" }, []],
-    ["retire", { project_id: "alpha", reason: { code: "voluntary_retirement", note: "done" } }, []],
+    ["register_project", { metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender }, [{ denom: "ujuno", amount: "1000000" }]],
+    ["update_pending_metadata", { project_id: 1, metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}` }, []],
+    ["propose_payout_address", { project_id: 1, address: sender }, []],
+    ["cancel_payout_address_change", { project_id: 1 }, []],
+    ["accept_payout_address", { project_id: 1 }, []],
+    ["claim_registration_bond", { project_id: 1 }, []],
+    ["retire", { project_id: 1, reason: { code: "voluntary_retirement", note: "done" } }, []],
   ])("allows exact registry public action %s", async (action, body, funds) => {
     const { wallet, dependencies } = setup(); await wallet.connect();
     const flow = createTransactionFlow(dependencies);
-    await expect(flow.prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT,
-      executeMessage: { [action]: body }, funds })).resolves.toMatchObject({ contract: DEFAULT_REGISTRY_CONTRACT, funds });
+    await expect(flow.prepare({ ...intent, contract: config.registryContract,
+      executeMessage: { [action]: body }, funds })).resolves.toMatchObject({ contract: config.registryContract, funds });
     await expect(flow.prepare({ ...intent, executeMessage: { [action]: body }, funds }))
       .rejects.toMatchObject({ code: "message_forbidden" });
   });
   it("rejects privileged registry actions and non-voluntary retirement", async () => {
     const { wallet, dependencies } = setup(); await wallet.connect(); const flow = createTransactionFlow(dependencies);
     for (const action of ["review_registration", "suspend", "override_project_status", "stop", "resume", "update_curator", "update_economic_config"])
-      await expect(flow.prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT, executeMessage: { [action]: {} }, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
-    await expect(flow.prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT, executeMessage: { retire: { project_id: "alpha", reason: { code: "governance_override", note: "no" } } }, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
+      await expect(flow.prepare({ ...intent, contract: config.registryContract, executeMessage: { [action]: {} }, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
+    await expect(flow.prepare({ ...intent, contract: config.registryContract, executeMessage: { retire: { project_id: 1, reason: { code: "governance_override", note: "no" } } }, funds: [] })).rejects.toMatchObject({ code: "message_forbidden" });
   });
   it.each([
     ["bad checksum", `${sender.slice(0, -1)}x`],
@@ -169,9 +177,9 @@ describe("address and centrally-owned execute policy", () => {
   });
 
   it.each([
-    ["bad checksum", `${DEFAULT_BOUNTY_CONTRACT.slice(0, -1)}x`],
-    ["mixed case", `J${DEFAULT_BOUNTY_CONTRACT.slice(1)}`],
-    ["wrong prefix", toBech32("cosmos", fromBech32(DEFAULT_BOUNTY_CONTRACT).data)],
+    ["bad checksum", `${config.contract.slice(0, -1)}x`],
+    ["mixed case", `J${config.contract.slice(1)}`],
+    ["wrong prefix", toBech32("cosmos", fromBech32(config.contract).data)],
     ["wrong contract length", toBech32("juno", new Uint8Array(20))],
   ])("rejects a %s contract", async (_, contract) => {
     const { wallet, dependencies } = setup(); await wallet.connect();
@@ -200,7 +208,7 @@ describe("address and centrally-owned execute policy", () => {
     const create = { ...intent, executeMessage: { create_bounty: { title: "Ship tooling", summary: "Useful tooling",
       acceptance_criteria: "Tests pass", content_uri: "ipfs://bafyterms", content_digest: digest,
       expires_at: "1800000000000000000", project_candidate: {
-        project_id: "tooling-1", metadata_uri: "ipfs://bafyproject", metadata_digest: digest,
+        metadata_uri: "ipfs://bafyproject", metadata_digest: digest,
       } } } };
     await expect(flow.prepare(create)).resolves.toMatchObject({ executeMessage: create.executeMessage });
     await expect(flow.prepare({ ...create, executeMessage: { create_bounty: {
@@ -208,7 +216,7 @@ describe("address and centrally-owned execute policy", () => {
     } } })).rejects.toMatchObject({ code: "message_forbidden" });
     await expect(flow.prepare({ ...create, executeMessage: { create_bounty: {
       ...create.executeMessage.create_bounty, project_candidate: {
-        ...create.executeMessage.create_bounty.project_candidate, project_id: "INVALID_ID",
+        ...create.executeMessage.create_bounty.project_candidate, project_id: 1,
       },
     } } })).rejects.toMatchObject({ code: "message_forbidden" });
   });
@@ -226,7 +234,7 @@ describe("address and centrally-owned execute policy", () => {
     ];
     for (const executeMessage of settlement) {
       await expect(flow.prepare({ ...intent, executeMessage, funds: [] })).resolves.toMatchObject({ executeMessage, funds: [] });
-      await expect(flow.prepare({ ...intent, contract: DEFAULT_REGISTRY_CONTRACT, executeMessage, funds: [] }))
+      await expect(flow.prepare({ ...intent, contract: config.registryContract, executeMessage, funds: [] }))
         .rejects.toMatchObject({ code: "message_forbidden" });
     }
     await expect(flow.prepare({ ...intent, executeMessage: settlement[1], funds: intent.funds }))

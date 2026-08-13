@@ -9,7 +9,7 @@ import { gaugeContext, gaugeData, voter } from "./test/gaugeFixtures";
 const cosmwasm = vi.hoisted(() => ({ connectWithSigner: vi.fn() }));
 vi.mock("@cosmjs/cosmwasm-stargate", () => ({ SigningCosmWasmClient: { connectWithSigner: cosmwasm.connectWithSigner } }));
 const after = { ...gaugeContext, data: { ...gaugeData, ballot: { ...gaugeData.ballot!, revisedAt: 2500, revisions: 2 } }, fingerprint: "gauge:after" };
-const intent = buildGaugeIntent(config, voter, gaugeContext, "place_votes", [{ option: "alpha", weight: "0.5" }]);
+const intent = buildGaugeIntent(config, voter, gaugeContext, "place_votes", [{ option: "project:1", weight: "0.5" }]);
 const success = { transactionHash: "GAUGE_HASH", height: 40_000_101, gasWanted: 1n, gasUsed: 1n, events: [{ type: "wasm", attributes: [
   { key: "action", value: "place_snapshot_vote" }, { key: "sender", value: voter }, { key: "gauge_id", value: "0" }, { key: "epoch_id", value: "2" }, { key: "option_count", value: "1" },
   { key: "snapshot_height", value: "40000002" }, { key: "voting_power", value: "100" }, { key: "participating_power", value: "500" }, { key: "total_cast", value: "400" },

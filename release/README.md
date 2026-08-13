@@ -1,35 +1,35 @@
 # Release evidence
 
-## Current mainnet application release
+## V2 release boundary
 
-The operational checklist for the current public mainnet application is
-[`docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md`](../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
-It records the production URL, deployed identities and checksums, dynamic web
-commit and funding checkpoints, bounded user trial, explicit approval boundary,
-pending/unknown transaction and RPC recovery, stop criteria, rollback, support
-triage, and final evidence packet.
+Juno Voice v2 is not deployed or authorized for funded use. The release is a
+fresh deployment with new identities and no v1 import. Deployment verification
+must prove initial empty state and old/new address separation before the client
+is configured or cut over.
 
-The Program Vault must be treated as unfunded unless a fresh authoritative
-`juno-1` query proves otherwise. Issue #37 funding and epoch rehearsal are not complete. Agent funds
-must not be used. Proposal preparation, proposal submission, deposit, signing,
-broadcast, and every follow-up transaction require separate approvals. Release
-documentation and read-only evidence do not authorize any of those actions.
+The new Program Vault must remain unfunded until the independent review and
+pre-canary gates pass. Agent funds must not be used. Proposal preparation,
+proposal submission, deposit, signing, upload, instantiate, broadcast, frontend
+cutover, and every follow-up transaction require their own authorization.
+Release documentation and read-only evidence authorize none of those actions.
 
-## Historical testnet evidence tooling
+## V2 testnet evidence tooling
 
-The remainder of this document describes the earlier exact-artifact `uni-7`
-evidence packet and remains as historical tooling documentation. It does not
-describe the current product deployment and does not establish current mainnet
-funding, availability, or epoch rehearsal.
+The tooling below assembles and validates an exact-artifact candidate packet.
+The checked-in `uni-7` configuration remains unusable until its `ujunox`/`ujuno`
+denomination mismatch is resolved or another compatible target is selected.
+Nothing here establishes a mainnet deployment, funding, or canary.
 
 `REQUIREMENTS_TRACEABILITY.md` maps each goal workstream and hard work bound to
 its direct test or external completion gate. `READINESS_AUDIT.md` is the concise
-point-in-time status summary.
+point-in-time status summary. `../audit/REMEDIATION_DISPOSITION.md` records the
+implementer-authored candidate disposition of each finding and the three new
+design decisions; it is explicitly not the independent security attestation.
 
 `release_manifest.py` is the final fail-closed evidence gate. It does not create
 or accept placeholder attestations. A valid packet must bind the deterministic
-build, verified deployment, accepted upstream commit, independent audit, all ten
-exact-artifact `uni-7` scenarios, snapshot behavior/retention, seven configured
+build, verified deployment, accepted upstream commit, independent audit, all 18
+exact-artifact remediation scenarios, snapshot behavior/retention, seven configured
 maximum gas cases, six operational runbooks, two canary epochs, and multi-role
 sign-off. Signed upstream and security attestations bind the accepted review,
 both audited commits, report hash, reviewers, finding set, timestamps, and
@@ -67,7 +67,7 @@ actual values are rejected.
 
 ## Capture release-only records
 
-`capture_release_evidence.py` is a read-only companion to the ten-scenario
+`capture_release_evidence.py` is a read-only companion to the 18-scenario
 harness. It retrieves indexed transactions and exact-height smart queries and
 normalizes them into release packet fragments. It does not broadcast, access a
 keyring, choose assertions, or approve evidence. Each output must be a new file
@@ -182,10 +182,10 @@ Every declared maintainer, security reviewer, and operations reviewer supplies
 an unauthenticated declaration for the resulting `signed_payload_sha256`. Each
 declaration file contains exactly `identity`, `payload_sha256`, `method`, and
 `value`. Separately, the release authority signs the hash plus a trailing newline
-using `ssh-keygen -Y sign` and namespace `juno-voice-release-v1`. Put that armored
+using `ssh-keygen -Y sign` and namespace `juno-voice-release-v2`. Put that armored
 SSHSIG in an authorization JSON object containing exactly `identity`,
 `payload_sha256`, `method` (`sshsig`), `namespace`
-(`juno-voice-release-v1`), and `signature`. Finalize with one `--declaration`
+(`juno-voice-release-v2`), and `signature`. Finalize with one `--declaration`
 argument per reviewer, the authorization record, and an explicit trusted
 OpenSSH allowed-signers file. Independently supply the exact principal expected
 to authorize this release; it must match the record identity and is passed to
@@ -220,7 +220,7 @@ Validate a checked-in evidence packet:
 ```sh
 python3 release/release_manifest.py validate-evidence \
   --config deployment/environments/uni-7.json \
-  --evidence release/evidence/uni-7-v1.json \
+  --evidence release/evidence/uni-7-v2.json \
   --allowed-signers /secure-work/juno-voice/release-trusted-signers \
   --authorization-principal release-authority
 ```
@@ -233,11 +233,11 @@ python3 release/release_manifest.py generate \
   --config deployment/environments/uni-7.json \
   --state /secure-work/juno-voice/uni-7/state.json \
   --verification deployment/evidence/uni-7-verification.json \
-  --build artifacts/v1/build-manifest.json \
-  --evidence release/evidence/uni-7-v1.json \
+  --build artifacts/v2/build-manifest.json \
+  --evidence release/evidence/uni-7-v2.json \
   --allowed-signers /secure-work/juno-voice/release-trusted-signers \
   --authorization-principal release-authority \
-  --output artifacts/v1/release-manifest.json
+  --output artifacts/v2/release-manifest.json
 ```
 
 Generation requires a clean checkout, a clean accepted submodule pin, exact

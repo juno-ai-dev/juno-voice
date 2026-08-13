@@ -7,7 +7,7 @@ branch is never a release input.
 ## Upstream acceptance
 
 1. Open the upstream change from the current pinned base. Include snapshot-mode
-   schemas, migration compatibility, hook regressions, package checks, Rust
+   schemas, fresh-instantiation compatibility, hook regressions, package checks, Rust
    1.81 host/Wasm checks, size/export/capability validation, and review evidence.
 2. Wait for upstream acceptance and an immutable commit reachable from the
    reviewed repository. Record the review URL and accepted commit.

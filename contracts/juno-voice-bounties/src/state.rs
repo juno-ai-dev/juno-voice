@@ -189,9 +189,18 @@ pub struct GraduationRecord {
     pub bounty_id: u64,
     pub agent: Addr,
     pub registry: Addr,
-    pub project_id: String,
+    pub project_id: u64,
     pub payout_address: Addr,
     pub graduated_at: Timestamp,
+}
+
+#[cw_serde]
+pub struct PendingGraduation {
+    pub bounty_id: u64,
+    pub agent: Addr,
+    pub registry: Addr,
+    pub payout_address: Addr,
+    pub requested_at: Timestamp,
 }
 
 #[cw_serde]
@@ -235,4 +244,5 @@ pub const VOTER_INDEX: Map<(u64, u32, u32), Addr> = Map::new("voter_index");
 pub const CLAIMS: Map<(u64, &Addr), ClaimRecord> = Map::new("claims");
 pub const MODERATIONS: Map<u64, ModerationRecord> = Map::new("moderations");
 pub const GRADUATIONS: Map<u64, GraduationRecord> = Map::new("graduations");
+pub const PENDING_GRADUATION: Item<PendingGraduation> = Item::new("pending_graduation");
 pub const HISTORY: Map<(u64, u64), HistoryEntry> = Map::new("history");

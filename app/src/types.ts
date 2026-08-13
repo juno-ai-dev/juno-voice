@@ -82,7 +82,6 @@ export interface Bounty {
   creator: string;
   terms: Terms;
   project_candidate: {
-    project_id: string;
     metadata_uri: string;
     metadata_digest: string;
   } | null;

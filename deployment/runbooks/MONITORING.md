@@ -46,22 +46,29 @@ native `ujuno` bank send to the current active payout address.
 ## Snapshot and epoch alerts
 
 For every epoch record snapshot height, total power, participating power,
-allocated power, turnout basis points, policy, selected set, outcome, adapter
-messages, and cleanup cursor. Alert on:
+allocated power, retained-option power, unallocated power, selected-project
+power, emitted value, retained value, policy version, execution deadline,
+outcome, adapter messages, and cleanup cursor. Reconcile
+`emitted_value + retained_value == epoch_budget` for every terminal epoch.
+Alert on:
 
 - failure to query total or voter power at the epoch's exact height;
-- observed history retention below epoch duration plus margin;
+- observed history retention below voting plus execution duration and margin;
 - mixed heights, zero total, arithmetic failure, or ballot/tally mismatch;
-- an open epoch beyond its execution SLO;
+- an open epoch at or beyond its execution deadline without an expiry attempt;
 - failed turnout that emits a transfer or affects a later epoch budget;
-- adapter failure, stopped gauge, or guardian resume attempt;
-- vault balance below the epoch budget before execution; and
+- a retrying adapter failure near the deadline, stopped gauge, or guardian
+  resume/abort attempt;
+- a Vault balance below the full epoch budget at open, or below calculated
+  emitted value at execution;
+- an insufficient-funds outcome that later becomes executable; and
 - cleanup that makes no progress or exceeds its bounded batch.
 
 ## Tranche alerts
 
-Track funded amount, every epoch ceiling, cumulative distributions, retained
-dust/abstention/threshold/cap amounts, and term end. Alert before the remaining
+Track funded amount, every epoch ceiling, cumulative distributions, and retained
+explicit-sink/unallocated/eligibility/threshold/cap/dust amounts separately.
+Alert before the remaining
 balance falls below one epoch ceiling and at 30/14/7/1 days before expiry. At
 term end follow the configured unused-funds policy; never infer rollover.
 

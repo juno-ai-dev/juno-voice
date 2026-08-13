@@ -1,11 +1,11 @@
 # Juno Voice product behavior
 
-**Status:** Accepted Juno Voice v1 behavior. The contracts and public frontend
-are deployed on `juno-1`; funded production trials remain separately gated.
+**Status:** Accepted Juno Voice v2 candidate behavior. V2 is not deployed;
+funded use remains blocked pending fresh deployment, review, and canary gates.
 
-**Implementation scope:** Backend behavior was specified by the historical,
-backend-only [GOAL.md](../../GOAL.md). The current [`app/`](../../app/) implements
-the public v1 bounty, registry, settlement, and gauge surfaces.
+**Implementation scope:** [GOAL.md](../../GOAL.md) specifies the remediation and
+release gates. The current [`app/`](../../app/) implements the v2 bounty,
+registry, settlement, and gauge surfaces without production address defaults.
 
 **Historical prototype:** the earlier `uni-7` request-prioritization interface is
 retained only in repository history and legacy contract documentation.
@@ -124,15 +124,15 @@ The exact contract enums may be more granular, but every state transition must b
 
 ## Historical prototype interface direction
 
-The original backend goal excluded frontend release work. The subsequently
-released v1-aligned surface includes:
+The historical backend goal excluded frontend release work. The current v2
+candidate surface includes:
 
 - a bounty ledger and bounty detail/ratification flow;
 - a project registry with provenance and status;
 - a Hack Juno epoch view with snapshot facts, allocations, and results;
 - an exact transaction review for every state-changing action.
 
-The redesigned prototype layout and Juno Design System assets can inform presentation, but its request statuses, roles, and non-binding ranking semantics are not part of v1.
+The redesigned prototype layout and Juno Design System assets can inform presentation, but its request statuses, roles, and non-binding ranking semantics are not part of v2.
 
 ## Accessibility and data integrity
 
@@ -147,4 +147,5 @@ The redesigned prototype layout and Juno Design System assets can inform present
 
 The earlier non-binding request-prioritization prototype is not silently
 reinterpreted as social-bounty or Hack Juno state and creates no migration
-requirement for v1. The current [`app/`](../../app/) uses the fresh v1 contracts.
+requirement for v2. The current [`app/`](../../app/) must be bound only to the
+verified fresh v2 contracts after deployment.

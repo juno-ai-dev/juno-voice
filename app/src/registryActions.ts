@@ -4,11 +4,10 @@ import type { Project, RegistryData } from "./registry";
 import type { TransactionIntent, TransactionReview, TransactionOutcome } from "./transactions";
 import { formatJuno } from "./junoAmount";
 
-export const PROJECT_ID_PATTERN = /^[a-z0-9-]{3,64}$/;
 export const METADATA_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 export type RegistryAction = "register_project" | "update_pending_metadata" | "propose_payout_address" |
   "cancel_payout_address_change" | "accept_payout_address" | "retire" | "claim_registration_bond";
-export interface RegistryActionInput { action: RegistryAction; projectId: string; metadataUri: string; metadataDigest: string; address: string; note: string }
+export interface RegistryActionInput { action: RegistryAction; projectId: number | null; metadataUri: string; metadataDigest: string; address: string; note: string }
 export interface RegistryActionContext { data: RegistryData; project: Project | null; chainTimeNanos: string; fingerprint: string }
 export interface RegistryTransactionFlow { connect?(): Promise<{ address: string }>; prepare(intent: TransactionIntent): Promise<TransactionReview>; submit(review: TransactionReview): Promise<TransactionOutcome> }
 
@@ -24,11 +23,12 @@ export function buildRegistryIntent(config: AppConfig, sender: string, context: 
   const { action, projectId, metadataUri, metadataDigest, address, note } = input;
   const { data, project } = context;
   if (!validAccount(sender)) fail("Connect a valid Juno account before preparing this action.");
-  if (!PROJECT_ID_PATTERN.test(projectId) || projectId === "do-not-distribute") fail("Project ID must be 3–64 lowercase ASCII letters, digits, or hyphens and not reserved.");
+  if (action === "register_project" ? projectId !== null : !Number.isSafeInteger(projectId) || (projectId ?? 0) <= 0)
+    fail(action === "register_project" ? "Registration IDs are assigned by the registry." : "Project ID must be a positive integer returned by the registry.");
   if (!data.health.fully_backed) fail("Registry bond accounting is not fully backed.");
   if (action === "register_project") {
     if (data.pause.admissions_stopped) fail("Registry admissions are stopped.");
-    if (project) fail("That project ID already exists.");
+    if (project) fail("Registration must not be bound to an existing project.");
     if (data.health.accounting.active_projects >= data.config.max_active_projects) fail("Registry active-project capacity is full.");
   } else if (!project) fail("Load an existing canonical project before preparing this action.");
   const owned = project?.owner === sender;
@@ -51,11 +51,11 @@ export function buildRegistryIntent(config: AppConfig, sender: string, context: 
   if (action === "propose_payout_address" && address === project?.payout_address) fail("New payout address must differ from the current payout address.");
   if (action === "retire" && (!note.trim() || bytes(note) > data.config.max_reason_bytes)) fail(`Retirement note must be non-empty and at most ${data.config.max_reason_bytes} UTF-8 bytes.`);
 
-  const body = action === "register_project" ? { project_id: projectId, metadata_uri: metadataUri, metadata_digest: metadataDigest, payout_address: address }
-    : action === "update_pending_metadata" ? { project_id: projectId, metadata_uri: metadataUri, metadata_digest: metadataDigest }
-    : action === "propose_payout_address" ? { project_id: projectId, address }
-    : action === "retire" ? { project_id: projectId, reason: { code: "voluntary_retirement", note } }
-    : { project_id: projectId };
+  const body = action === "register_project" ? { metadata_uri: metadataUri, metadata_digest: metadataDigest, payout_address: address }
+    : action === "update_pending_metadata" ? { project_id: projectId as number, metadata_uri: metadataUri, metadata_digest: metadataDigest }
+    : action === "propose_payout_address" ? { project_id: projectId as number, address }
+    : action === "retire" ? { project_id: projectId as number, reason: { code: "voluntary_retirement", note } }
+    : { project_id: projectId as number };
   const consequences: Record<RegistryAction, string> = {
     register_project: `Attach exactly ${formatJuno(data.config.registration_bond)} as a registration bond.`,
     update_pending_metadata: "Replace the pending application's metadata URI and digest.",

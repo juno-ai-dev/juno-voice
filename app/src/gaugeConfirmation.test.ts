@@ -12,6 +12,16 @@ const voteEvent = (context: GaugeActionContext, optionCount: number, extra: Reco
   total_cast: context.data.current!.totalCast,
   ...extra,
 });
+const terminalEvent = (context: GaugeActionContext, action: string, outcome: string) => event(action, {
+  outcome,
+  participating_power: context.data.current!.participatingPower,
+  allocated_power: context.data.current!.allocatedPower,
+  unallocated_power: context.data.current!.unallocatedPower,
+  selected_project_power: context.data.current!.selectedProjectPower,
+  emitted_value: context.data.current!.emittedValue,
+  retained_value: context.data.current!.retainedValue,
+  execution_deadline: String(context.data.current!.executionDeadline),
+});
 const mutation = (action: "place_votes" | "remove_votes", before: GaugeActionContext, refreshed: GaugeActionContext, votes: unknown) => ({
   action, events: [voteEvent(refreshed, Array.isArray(votes) ? votes.length : 0)], before, refreshed, sender: voter,
   executeMessage: { place_votes: { gauge: 0, votes } }, funds: [],
@@ -20,7 +30,7 @@ const mutation = (action: "place_votes" | "remove_votes", before: GaugeActionCon
 describe("canonical gauge post-transaction confirmation", () => {
   it("requires an existing ballot revision and rejects stale same-preference state", () => {
     const refreshed = { ...gaugeContext, data: { ...gaugeData, chainTimeNanos: "2501000000000", ballot: { ...gaugeData.ballot!, revisedAt: 2501, revisions: 2 } }, fingerprint: "gauge:after" };
-    const reviewed = [{ option: "alpha", weight: "0.500000000000000000" }];
+    const reviewed = [{ option: "project:1", weight: "0.500000000000000000" }];
     expect(() => confirmGaugeMutation(mutation("place_votes", gaugeContext, refreshed, reviewed))).not.toThrow();
     expect(() => confirmGaugeMutation(mutation("place_votes", gaugeContext, gaugeContext, reviewed))).toThrow(/revision|time/);
 
@@ -71,8 +81,8 @@ describe("canonical gauge post-transaction confirmation", () => {
     const beforeOpen = { ...gaugeContext, data: { ...gaugeData, current: gaugeData.previous } };
     expect(() => confirmGaugeMutation({ action: "open_epoch", events: [event("open_snapshot_epoch", { snapshot_height: String(gaugeData.current!.snapshotHeight) })], before: beforeOpen, refreshed: gaugeContext, sender: voter, executeMessage: { open_epoch: { gauge: 0 } }, funds: [] })).not.toThrow();
     const terminal = { ...gaugeContext, data: { ...gaugeData, current: { ...gaugeData.current!, outcome: "no_distribution_turnout" as const } } };
-    expect(() => confirmGaugeMutation({ action: "execute", events: [event("execute_snapshot_epoch", { outcome: "no_distribution_turnout" })], before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] })).not.toThrow();
-    expect(() => confirmGaugeMutation({ action: "execute", events: [event("execute_snapshot_epoch", { outcome: "distributed" })], before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] })).toThrow("outcome");
+    expect(() => confirmGaugeMutation({ action: "execute", events: [terminalEvent(terminal, "execute_snapshot_epoch", "no_distribution_turnout")], before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] })).not.toThrow();
+    expect(() => confirmGaugeMutation({ action: "execute", events: [terminalEvent(terminal, "execute_snapshot_epoch", "distributed")], before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] })).toThrow("outcome");
   });
 
   it("requires exactly one matching action event for open, vote, remove, and execute while allowing unrelated wasm events", () => {
@@ -84,7 +94,7 @@ describe("canonical gauge post-transaction confirmation", () => {
       { input: { action: "open_epoch", before: beforeOpen, refreshed: gaugeContext, sender: voter, executeMessage: { open_epoch: { gauge: 0 } }, funds: [] }, matching: event("open_snapshot_epoch", { snapshot_height: String(gaugeData.current!.snapshotHeight) }) },
       { input: { ...mutation("place_votes", gaugeContext, revised, gaugeData.ballot!.votes), events: undefined }, matching: voteEvent(revised, gaugeData.ballot!.votes.length) },
       { input: { ...mutation("remove_votes", gaugeContext, removed, null), events: undefined }, matching: voteEvent(removed, 0) },
-      { input: { action: "execute", before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] }, matching: event("execute_snapshot_epoch", { outcome: "no_distribution_turnout" }) },
+      { input: { action: "execute", before: gaugeContext, refreshed: terminal, sender: voter, executeMessage: { execute: { gauge: 0 } }, funds: [] }, matching: terminalEvent(terminal, "execute_snapshot_epoch", "no_distribution_turnout") },
     ] as const;
     const unrelated = event("unrelated_wasm_action");
     for (const { input, matching } of cases) {

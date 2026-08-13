@@ -163,14 +163,49 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     {"address": addresses["gauge"], "status": "enabled"}
                 ],
             },
+            "vault_balance": "0",
             "voting_dao": addresses["program_vault"],
             "bounty_config": {
                 **messages["bounty"],
                 "ratification_seconds": deploy.RATIFICATION_SECONDS,
             },
+            "bounty_identity_state": {"next_bounty_id": 1},
+            "bounty_page": {"bounties": []},
+            "bounty_health": {
+                "accounting": {
+                    "active_escrow": "0",
+                    "outstanding_refunds": "0",
+                    "pending_payout_liabilities": "0",
+                    "lifetime_received": "0",
+                    "lifetime_paid": "0",
+                    "lifetime_refunded": "0",
+                },
+                "actual_native_balance": "0",
+                "liabilities": "0",
+                "fully_backed": True,
+            },
             "registry_config": {
                 **messages["registry"],
                 "max_active_projects": deploy.MAX_ACTIVE_PROJECTS,
+            },
+            "registry_identity_state": {
+                "next_project_id": 1,
+                "consumed_source_bounties": 0,
+            },
+            "registry_projects": {"projects": []},
+            "registry_applications": {"projects": []},
+            "registry_options": {"options": ["do-not-distribute"]},
+            "registry_health": {
+                "accounting": {
+                    "active_projects": 0,
+                    "pending_applications": 0,
+                    "bond_liability": "0",
+                    "lifetime_bonds_received": "0",
+                    "lifetime_bonds_refunded": "0",
+                    "lifetime_bonds_forfeited": "0",
+                },
+                "actual_native_balance": "0",
+                "fully_backed": True,
             },
             "gauge_config": {
                 "dao_core": addresses["program_vault"],
@@ -184,7 +219,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
             "gauge_state": {
                 "id": 0,
                 **messages["gauge_inner"]["gauges"][0],
+                "is_stopped": False,
+                "current_epoch": None,
             },
+            "gauge_epochs": {"epochs": []},
             "agent_core_state": {
                 "voting_module": agent["voting_module_address"],
                 "proposal_modules": [
@@ -237,11 +275,16 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "catching_up": False,
                 "staking_bond_denom": self.config["chain"]["native_denom"],
                 "xgov_module_account": self.config["chain"]["xgov_module_account"],
+                "cutover": {
+                    "mode": "no_prior_composition",
+                    "historical_v1": None,
+                },
                 "checks": [
                     "chain_id",
                     "rpc_synced",
                     "staking_bond_denom",
                     "xgov_module_account",
+                    "cutover",
                 ],
             },
             "code_ids": code_ids,
@@ -390,6 +433,49 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     ]
                     fixed = requirement["fixed_attributes"]
                     attributes = []
+                    epoch_values = {
+                        "sender": self.config["chain"]["deployer_address"],
+                        "gauge_id": "0",
+                        "epoch_id": "1",
+                        "snapshot_height": "101",
+                        "snapshot_total_power": "100",
+                        "participating_power": "60",
+                        "allocated_power": "60",
+                        "total_cast": "60",
+                        "retained_option_power": "0",
+                        "unallocated_power": "0",
+                        "selected_project_power": "60",
+                        "emitted_value": "600",
+                        "retained_value": "400",
+                        "min_turnout_bps": "5000",
+                        "policy_version": "1",
+                        "epoch_budget": "1000",
+                        "denom": "ujuno",
+                        "execution_deadline": "3",
+                        "message_count": "1",
+                    }
+                    if scenario == "partial_ballot_retention":
+                        epoch_values.update(
+                            allocated_power="3", total_cast="3",
+                            unallocated_power="57", selected_project_power="3",
+                            emitted_value="30", retained_value="970",
+                        )
+                    elif scenario == "retained_only_no_distribution":
+                        epoch_values.update(
+                            retained_option_power="60", selected_project_power="0",
+                            emitted_value="0", retained_value="1000", message_count="0",
+                        )
+                    elif scenario == "underfunded_terminal_epoch":
+                        epoch_values.update(
+                            emitted_value="0", retained_value="1000", message_count="0",
+                            required_value="600", available_balance="599",
+                        )
+                    elif scenario in ("expired_terminal_epoch", "aborted_terminal_epoch"):
+                        epoch_values.update(
+                            selected_project_power="0", emitted_value="0",
+                            retained_value="1000", message_count="0",
+                            reason="adapter unavailable",
+                        )
                     for key in requirement["required_keys"]:
                         if key == "_contract_address":
                             value = addresses[requirement["contract"]]
@@ -397,6 +483,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
                             value = fixed[key]
                         elif key == "registry":
                             value = addresses["registry"]
+                        elif key == "project_id" and event_assertion_name == "registration_assignment_event":
+                            value = "1"
+                        elif key in epoch_values:
+                            value = epoch_values[key]
                         else:
                             value = f"fixture-{key}"
                         attributes.append({"key": key, "value": value})
@@ -431,6 +521,16 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 }
 
             def transaction_record(transaction_hash: str, code: int):
+                message = {
+                    "@type": "/cosmwasm.wasm.v1.MsgExecuteContract",
+                    "contract": addresses["bounty"],
+                }
+                if scenario == "bounty_source_rotation" and code != 0:
+                    message.update(
+                        contract=addresses["program_vault"],
+                        msg={"graduate_project": {"bounty_id": 1}},
+                        funds=[],
+                    )
                 response = {
                     "txhash": transaction_hash,
                     "height": "10",
@@ -440,12 +540,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     "events": [scenario_event()],
                     "tx": {
                         "body": {
-                            "messages": [
-                                {
-                                    "@type": "/cosmwasm.wasm.v1.MsgExecuteContract",
-                                    "contract": addresses["bounty"],
-                                }
-                            ]
+                            "messages": [message]
                         }
                     },
                 }
@@ -465,7 +560,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
             transaction_records = [transaction_record(scenario_tx, 0)]
             scenario_transactions = [scenario_tx]
-            if scenario == "guardian_stop_governor_recovery":
+            if scenario in ("guardian_stop_governor_recovery", "bounty_source_rotation"):
                 failed_tx = f"{1000 + scenario_index:064X}"
                 scenario_transactions.append(failed_tx)
                 transaction_records.append(transaction_record(failed_tx, 5))
@@ -476,7 +571,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 contract_name, query_name, semantics = release.QUERY_PROOFS[name]
                 voter = self.config["chain"]["deployer_address"]
                 second_voter = addresses["agent_operations"]
-                project_id = "fixture-project"
+                project_id = {
+                    "assigned_graduated_project_state": 2,
+                    "replacement_source_project_state": 2,
+                    "bond_active_state": 1,
+                    "bond_suspended_state": 1,
+                    "bond_rejected_refunded_state": 2,
+                    "bond_rejected_forfeited_state": 3,
+                    "bond_retired_claimable_state": 1,
+                    "bond_retired_claimed_state": 1,
+                    "graduated_bond_free_state": 4,
+                }.get(name, 1)
                 query_payloads = {
                     "bounty": {"bounty_id": 1},
                     "receipts": {
@@ -511,16 +616,28 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 }
 
                 def epoch_response(epoch_id: int, height: int, outcome):
+                    distributed = isinstance(outcome, dict) and "distributed" in outcome
                     return {
                         "gauge_id": 0,
                         "epoch_id": epoch_id,
                         "snapshot_height": height,
                         "snapshot_total_power": "100",
                         "participating_power": "60",
+                        "allocated_power": "60",
                         "total_cast": "60",
+                        "retained_option": "do-not-distribute",
+                        "retained_option_power": "0",
+                        "unallocated_power": "0",
+                        "selected_project_power": "60" if distributed else "0",
+                        "emitted_value": "600" if distributed else "0",
+                        "retained_value": "400" if distributed else "1000",
                         "min_turnout_bps": 5_000,
+                        "policy_version": 1,
                         "epoch_budget": "1000",
                         "denom": "ujuno",
+                        "opens_at": 1,
+                        "closes_at": 2,
+                        "execution_deadline": 3,
                         "outcome": outcome,
                     }
 
@@ -571,12 +688,27 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     }
                 elif semantics in (
                     "graduated_project",
+                    "graduated_project_any_source",
                     "pending_bonded_project",
                     "approved_bonded_project",
                     "suspended_project",
+                    "rejected_refunded_project",
+                    "rejected_forfeited_project",
+                    "retired_claimable_project",
+                    "retired_claimed_project",
                 ):
-                    if semantics == "graduated_project":
-                        provenance = {"graduated_bounty": {"source_bounty_id": 1}}
+                    if semantics in ("graduated_project", "graduated_project_any_source"):
+                        source_contract = (
+                            addresses["program_vault"]
+                            if name == "old_source_project_state"
+                            else addresses["bounty"]
+                        )
+                        provenance = {
+                            "graduated_bounty": {
+                                "source_bounty_contract": source_contract,
+                                "source_bounty_id": 1,
+                            }
+                        }
                         bond = None
                         status = "active"
                     else:
@@ -586,6 +718,19 @@ class ReleaseEvidenceTests(unittest.TestCase):
                             "pending_bonded_project": "pending",
                             "approved_bonded_project": "active",
                             "suspended_project": "suspended",
+                            "rejected_refunded_project": "rejected",
+                            "rejected_forfeited_project": "rejected",
+                            "retired_claimable_project": "retired",
+                            "retired_claimed_project": "retired",
+                        }[semantics]
+                        bond["state"] = {
+                            "pending_bonded_project": "deposited",
+                            "approved_bonded_project": "deposited",
+                            "suspended_project": "deposited",
+                            "rejected_refunded_project": "refunded",
+                            "rejected_forfeited_project": "forfeited",
+                            "retired_claimable_project": "claimable",
+                            "retired_claimed_project": "claimed",
                         }[semantics]
                     response = {
                         "id": project_id,
@@ -602,23 +747,60 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     "distributed_epoch",
                     "failed_turnout_epoch",
                     "no_eligible_epoch",
+                    "partial_epoch",
+                    "retained_only_epoch",
+                    "underfunded_epoch",
+                    "expired_epoch",
+                    "aborted_epoch",
                 ):
                     epoch_id = query_payloads["epoch"]["epoch"]
-                    if semantics == "distributed_epoch":
+                    if semantics in ("distributed_epoch", "partial_epoch"):
                         outcome = {"distributed": {"message_count": 1}}
                     elif semantics == "failed_turnout_epoch":
                         outcome = "no_distribution_turnout"
-                    else:
+                    elif semantics in ("no_eligible_epoch", "retained_only_epoch"):
                         outcome = "no_eligible_options"
+                    elif semantics == "underfunded_epoch":
+                        outcome = {"insufficient_funds": {"required": "600", "available": "599"}}
+                    elif semantics == "expired_epoch":
+                        outcome = "expired"
+                    else:
+                        outcome = {"aborted": {"reason": "adapter unavailable"}}
                     response = epoch_response(epoch_id, 100 + epoch_id, outcome)
                     if semantics == "failed_turnout_epoch":
                         response["participating_power"] = "49"
-                elif semantics == "epoch_ballot":
+                        response["allocated_power"] = "49"
+                        response["total_cast"] = "49"
+                    elif semantics == "partial_epoch":
+                        response["allocated_power"] = "3"
+                        response["total_cast"] = "3"
+                        response["unallocated_power"] = "57"
+                        response["selected_project_power"] = "3"
+                        response["emitted_value"] = "30"
+                        response["retained_value"] = "970"
+                    elif semantics == "retained_only_epoch":
+                        response["retained_option_power"] = "60"
+                        response["selected_project_power"] = "0"
+                        response["emitted_value"] = "0"
+                        response["retained_value"] = "1000"
+                    elif semantics in ("underfunded_epoch", "expired_epoch", "aborted_epoch"):
+                        if semantics == "underfunded_epoch":
+                            response["selected_project_power"] = "60"
+                        response["emitted_value"] = "0"
+                        response["retained_value"] = "1000"
+                elif semantics in ("epoch_ballot", "partial_ballot", "retained_only_ballot"):
+                    votes = (
+                        [{"option": "project:1", "weight": "0.05"}]
+                        if semantics == "partial_ballot"
+                        else [{"option": "do-not-distribute", "weight": "1"}]
+                        if semantics == "retained_only_ballot"
+                        else [{"option": "project:1", "weight": "1"}]
+                    )
                     response = {
                         "ballot": {
                             "voter": voter,
                             "power": "60",
-                            "votes": [{"option": "project-a", "weight": "1"}],
+                            "votes": votes,
                             "receipt_index": 1,
                         }
                     }
@@ -626,7 +808,11 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     response = {
                         "id": 0,
                         "is_stopped": semantics == "stopped_gauge",
-                        "snapshot_policy": {"denom": "ujuno"},
+                        "snapshot_policy": {
+                            "denom": "ujuno",
+                            "retained_option": "do-not-distribute",
+                            "execution_window_seconds": 86_400,
+                        },
                     }
                 elif semantics == "snapshot_authorities":
                     response = {
@@ -718,7 +904,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     )
                 ]
             transcript = {
-                "schema_version": "juno-voice/uni7-scenario-transcript/v1",
+                "schema_version": "juno-voice/uni7-scenario-transcript/v2",
                 "scenario_id": scenario,
                 "chain_id": "uni-7",
                 "config_sha256": deploy.config_hash(self.config),
@@ -914,7 +1100,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             elif case == "adapter_max_messages":
                 payload = {
                     "selected": [
-                        [f"project-{item:03}", "0.01"]
+                        [f"project:{item + 1}", "0.01"]
                         for item in range(configured_max)
                     ],
                     "epoch_budget": "1000",
@@ -1010,8 +1196,18 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     {"key": "snapshot_height", "value": str(snapshot_height)},
                     {"key": "snapshot_total_power", "value": "100"},
                     {"key": "participating_power", "value": "60"},
+                    {"key": "allocated_power", "value": "60"},
                     {"key": "total_cast", "value": "60"},
+                    {"key": "retained_option_power", "value": "0"},
+                    {"key": "unallocated_power", "value": "0"},
+                    {"key": "selected_project_power", "value": "60"},
+                    {"key": "emitted_value", "value": "1"},
+                    {
+                        "key": "retained_value",
+                        "value": str(int(self.config["gauge"]["epoch_budget"]) - 1),
+                    },
                     {"key": "min_turnout_bps", "value": "5000"},
+                    {"key": "policy_version", "value": "1"},
                     {
                         "key": "epoch_budget",
                         "value": str(self.config["gauge"]["epoch_budget"]),
@@ -1020,6 +1216,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                         "key": "denom",
                         "value": self.config["chain"]["native_denom"],
                     },
+                    {"key": "execution_deadline", "value": "3"},
                     {"key": "outcome", "value": "distributed"},
                     {"key": "message_count", "value": "1"},
                 ],
@@ -1072,12 +1269,21 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "snapshot_height": snapshot_height,
                 "snapshot_total_power": "100",
                 "participating_power": "60",
+                "allocated_power": "60",
                 "total_cast": "60",
+                "retained_option": "do-not-distribute",
+                "retained_option_power": "0",
+                "unallocated_power": "0",
+                "selected_project_power": "60",
+                "emitted_value": "1",
+                "retained_value": str(int(self.config["gauge"]["epoch_budget"]) - 1),
                 "min_turnout_bps": 5_000,
+                "policy_version": 1,
                 "epoch_budget": str(self.config["gauge"]["epoch_budget"]),
                 "denom": self.config["chain"]["native_denom"],
                 "opens_at": 1,
                 "closes_at": 2,
+                "execution_deadline": 3,
                 "voter_count": 1,
                 "option_count": 1,
                 "outcome": {"distributed": {"message_count": 1}},
@@ -1366,14 +1572,14 @@ class ReleaseEvidenceTests(unittest.TestCase):
         signature_path.unlink(missing_ok=True)
         message.write_text(payload_sha256 + "\n")
         subprocess.run(
-            ["ssh-keygen", "-Y", "sign", "-q", "-f", str(self.release_key), "-n", "juno-voice-release-v1", str(message)],
+            ["ssh-keygen", "-Y", "sign", "-q", "-f", str(self.release_key), "-n", "juno-voice-release-v2", str(message)],
             check=True,
         )
         return {
             "identity": "release-authority",
             "payload_sha256": payload_sha256,
             "method": "sshsig",
-            "namespace": "juno-voice-release-v1",
+            "namespace": "juno-voice-release-v2",
             "signature": signature_path.read_text(),
         }
 
@@ -1760,6 +1966,74 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(release.EvidenceError, "must equal 'paid'"):
             self.validate_evidence(wrong)
 
+    def test_v2_scenario_profiles_reject_weakened_remediation_evidence(self):
+        cases = (
+            (
+                "partial_ballot_retention",
+                "partial_epoch_state",
+                lambda response: response.update(
+                    allocated_power="60",
+                    total_cast="60",
+                    unallocated_power="0",
+                    selected_project_power="60",
+                    emitted_value="600",
+                    retained_value="400",
+                ),
+                "nonempty partial allocation",
+            ),
+            (
+                "bounty_source_rotation",
+                "replacement_source_project_state",
+                lambda response: response["provenance"]["graduated_bounty"].update(
+                    source_bounty_contract=deploy.derive_addresses(self.config)[
+                        "program_vault"
+                    ]
+                ),
+                "source-namespaced bounty ID reuse",
+            ),
+            (
+                "bond_transition_table",
+                "bond_suspended_state",
+                lambda response: response["bond"].update(state="refunded"),
+                "must equal 'deposited'",
+            ),
+        )
+        for scenario_id, assertion_name, mutate, expected_error in cases:
+            with self.subTest(scenario=scenario_id):
+                wrong = copy.deepcopy(self.evidence)
+                scenario = next(
+                    item
+                    for item in wrong["public_testnet"]["scenarios"]
+                    if item["id"] == scenario_id
+                )
+                transcript_path = self.root / scenario["evidence"]["path"]
+                original = transcript_path.read_text()
+                try:
+                    transcript = json.loads(original)
+                    assertion = next(
+                        item
+                        for item in transcript["assertions"]
+                        if item["name"] == assertion_name
+                    )
+                    response = transcript["queries"][assertion["source"]["query_index"]][
+                        "response"
+                    ]
+                    mutate(response)
+                    query = transcript["queries"][assertion["source"]["query_index"]]
+                    query["response_sha256"] = deploy.sha256_bytes(
+                        deploy.canonical_json(response)
+                    )
+                    assertion["expected"] = copy.deepcopy(response)
+                    assertion["actual"] = copy.deepcopy(response)
+                    transcript_path.write_text(
+                        json.dumps(transcript, indent=2, sort_keys=True) + "\n"
+                    )
+                    scenario["evidence"]["sha256"] = deploy.sha256_file(transcript_path)
+                    with self.assertRaisesRegex(release.EvidenceError, expected_error):
+                        self.validate_evidence(wrong)
+                finally:
+                    transcript_path.write_text(original)
+
     def test_contract_message_destination_must_be_verified(self):
         wrong = copy.deepcopy(self.evidence)
         scenario = wrong["public_testnet"]["scenarios"][0]
@@ -2137,6 +2411,91 @@ class ReleaseEvidenceTests(unittest.TestCase):
             verification["addresses"],
             verification["observations"],
         )
+
+    def test_verification_rejects_every_nonempty_fresh_v2_state_class(self):
+        verification = json.loads(
+            (self.root / "deployment" / "verification.json").read_text()
+        )
+        for label, mutate in (
+            (
+                "vault balance",
+                lambda value: value.__setitem__("vault_balance", "1"),
+            ),
+            (
+                "bounty counter",
+                lambda value: value["bounty_identity_state"].__setitem__(
+                    "next_bounty_id", 2
+                ),
+            ),
+            (
+                "bounty page",
+                lambda value: value.__setitem__("bounty_page", {"bounties": [{"id": 1}]}),
+            ),
+            (
+                "bounty liability",
+                lambda value: value["bounty_health"]["accounting"].__setitem__(
+                    "active_escrow", "1"
+                ),
+            ),
+            (
+                "project counter",
+                lambda value: value["registry_identity_state"].__setitem__(
+                    "next_project_id", 2
+                ),
+            ),
+            (
+                "source provenance",
+                lambda value: value["registry_identity_state"].__setitem__(
+                    "consumed_source_bounties", 1
+                ),
+            ),
+            (
+                "project page",
+                lambda value: value.__setitem__(
+                    "registry_projects", {"projects": [{"id": 1}]}
+                ),
+            ),
+            (
+                "application page",
+                lambda value: value.__setitem__(
+                    "registry_applications", {"projects": [{"id": 1}]}
+                ),
+            ),
+            (
+                "registry option",
+                lambda value: value.__setitem__(
+                    "registry_options", {"options": ["do-not-distribute", "project:1"]}
+                ),
+            ),
+            (
+                "registry liability",
+                lambda value: value["registry_health"]["accounting"].__setitem__(
+                    "bond_liability", "1"
+                ),
+            ),
+            (
+                "current epoch",
+                lambda value: value["gauge_state"].__setitem__("current_epoch", 1),
+            ),
+            (
+                "omitted current epoch",
+                lambda value: value["gauge_state"].pop("current_epoch"),
+            ),
+            (
+                "historical epoch",
+                lambda value: value.__setitem__("gauge_epochs", {"epochs": [{"id": 1}]}),
+            ),
+        ):
+            with self.subTest(label=label):
+                observations = copy.deepcopy(verification["observations"])
+                mutate(observations)
+                with self.assertRaises((deploy.ValidationError, RuntimeError)):
+                    deploy.validate_verification_observations(
+                        self.config,
+                        verification["code_ids"],
+                        verification["addresses"],
+                        observations,
+                    )
 
     def test_verification_rejects_boolean_agent_numeric_observations(self):
         verification = json.loads(

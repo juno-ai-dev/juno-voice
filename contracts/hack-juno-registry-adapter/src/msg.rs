@@ -30,6 +30,12 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
+pub struct ProjectCreatedResponse {
+    pub response_version: u16,
+    pub project_id: u64,
+}
+
+#[cw_serde]
 pub enum ReviewReasonCode {
     MeetsCriteria,
     IncompleteApplication,
@@ -81,55 +87,54 @@ pub struct EconomicConfigUpdate {
 }
 
 #[cw_serde]
+#[serde(deny_unknown_fields)]
 pub enum ExecuteMsg {
     RegisterProject {
-        project_id: String,
         metadata_uri: String,
         metadata_digest: String,
         payout_address: String,
     },
     Graduate {
         source_bounty_id: u64,
-        project_id: String,
         metadata_uri: String,
         metadata_digest: String,
         payout_address: String,
     },
     UpdatePendingMetadata {
-        project_id: String,
+        project_id: u64,
         metadata_uri: String,
         metadata_digest: String,
     },
     ReviewRegistration {
-        project_id: String,
+        project_id: u64,
         decision: ReviewDecision,
         reason: ReviewReason,
     },
     Suspend {
-        project_id: String,
+        project_id: u64,
         reason: ReviewReason,
     },
     Retire {
-        project_id: String,
+        project_id: u64,
         reason: ReviewReason,
     },
     OverrideProjectStatus {
-        project_id: String,
+        project_id: u64,
         status: OverrideStatus,
         reason: ReviewReason,
     },
     ProposePayoutAddress {
-        project_id: String,
+        project_id: u64,
         address: String,
     },
     CancelPayoutAddressChange {
-        project_id: String,
+        project_id: u64,
     },
     AcceptPayoutAddress {
-        project_id: String,
+        project_id: u64,
     },
     ClaimRegistrationBond {
-        project_id: String,
+        project_id: u64,
     },
     Stop {
         scope: StopScope,
@@ -185,6 +190,12 @@ pub struct HealthResponse {
 }
 
 #[cw_serde]
+pub struct IdentityStateResponse {
+    pub next_project_id: u64,
+    pub consumed_source_bounties: u64,
+}
+
+#[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(ConfigResponse)]
@@ -195,27 +206,29 @@ pub enum QueryMsg {
     Accounting {},
     #[returns(HealthResponse)]
     Health {},
+    #[returns(IdentityStateResponse)]
+    IdentityState {},
     #[returns(Project)]
-    Project { project_id: String },
+    Project { project_id: u64 },
     #[returns(ProjectsResponse)]
     Projects {
-        start_after: Option<String>,
+        start_after: Option<u64>,
         limit: Option<u32>,
     },
     #[returns(ProjectsResponse)]
     Applications {
-        start_after: Option<String>,
+        start_after: Option<u64>,
         limit: Option<u32>,
     },
     #[returns(StatusHistoryResponse)]
     StatusHistory {
-        project_id: String,
+        project_id: u64,
         start_after: Option<u64>,
         limit: Option<u32>,
     },
     #[returns(AddressHistoryResponse)]
     AddressHistory {
-        project_id: String,
+        project_id: u64,
         start_after: Option<u64>,
         limit: Option<u32>,
     },

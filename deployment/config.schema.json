@@ -1,22 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://juno-voice.invalid/schema/deployment-config-v1.json",
-  "title": "Juno Voice deployment configuration v1",
+  "$id": "https://juno-voice.invalid/schema/deployment-config-v2.json",
+  "title": "Juno Voice deployment configuration v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version", "environment", "chain", "source", "builder",
-    "artifacts", "deployment", "agent_operations", "bounty", "registry",
+    "artifacts", "deployment", "cutover", "agent_operations", "bounty", "registry",
     "gauge", "tranche"
   ],
   "properties": {
-    "schema_version": {"const": "juno-voice/deployment-config/v1"},
+    "schema_version": {"const": "juno-voice/deployment-config/v2"},
     "environment": {"type": "string", "minLength": 1},
     "chain": {"$ref": "#/$defs/chain"},
     "source": {"$ref": "#/$defs/source"},
     "builder": {"$ref": "#/$defs/builder"},
     "artifacts": {"$ref": "#/$defs/artifacts"},
     "deployment": {"$ref": "#/$defs/deployment"},
+    "cutover": {"$ref": "#/$defs/cutover"},
     "agent_operations": {"$ref": "#/$defs/agent_operations"},
     "bounty": {"$ref": "#/$defs/bounty"},
     "registry": {"$ref": "#/$defs/registry"},
@@ -133,13 +134,13 @@
         "juno_voice_bounties": {
           "allOf": [
             {"$ref": "#/$defs/artifact"},
-            {"properties": {"cw2_contract": {"const": "crates.io:juno-voice-bounties"}, "cw2_version": {"const": "1.0.0"}}}
+            {"properties": {"cw2_contract": {"const": "crates.io:juno-voice-bounties"}, "cw2_version": {"const": "2.0.0"}}}
           ]
         },
         "hack_juno_registry_adapter": {
           "allOf": [
             {"$ref": "#/$defs/artifact"},
-            {"properties": {"cw2_contract": {"const": "crates.io:hack-juno-registry-adapter"}, "cw2_version": {"const": "1.0.0"}}}
+            {"properties": {"cw2_contract": {"const": "crates.io:hack-juno-registry-adapter"}, "cw2_version": {"const": "2.0.0"}}}
           ]
         },
         "dao_dao_core": {
@@ -157,7 +158,7 @@
         "gauge_orchestrator": {
           "allOf": [
             {"$ref": "#/$defs/artifact"},
-            {"properties": {"cw2_contract": {"const": "crates.io:gauge"}, "cw2_version": {"const": "2.8.0-alpha.2"}}}
+            {"properties": {"cw2_contract": {"const": "crates.io:gauge"}, "cw2_version": {"const": "2.8.0-alpha.3"}}}
           ]
         }
       }
@@ -183,6 +184,52 @@
         "registry_salt": {"type": "string", "minLength": 1, "maxLength": 64},
         "registry_label": {"$ref": "#/$defs/safe_name"}
       }
+    },
+    "historical_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "code_id", "checksum"],
+      "properties": {
+        "address": {"$ref": "#/$defs/juno_address"},
+        "code_id": {"$ref": "#/$defs/positive_uint"},
+        "checksum": {"$ref": "#/$defs/hex64"}
+      }
+    },
+    "historical_composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bounty", "registry", "program_vault", "voting_module", "gauge"],
+      "properties": {
+        "bounty": {"$ref": "#/$defs/historical_contract"},
+        "registry": {"$ref": "#/$defs/historical_contract"},
+        "program_vault": {"$ref": "#/$defs/historical_contract"},
+        "voting_module": {"$ref": "#/$defs/historical_contract"},
+        "gauge": {"$ref": "#/$defs/historical_contract"}
+      }
+    },
+    "cutover": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "historical_v1"],
+      "properties": {
+        "mode": {"enum": ["no_prior_composition", "replace_historical_v1"]},
+        "historical_v1": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/historical_composition"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "no_prior_composition"}}, "required": ["mode"]},
+          "then": {"properties": {"historical_v1": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"mode": {"const": "replace_historical_v1"}}, "required": ["mode"]},
+          "then": {"properties": {"historical_v1": {"$ref": "#/$defs/historical_composition"}}}
+        }
+      ]
     },
     "agent_member": {
       "type": "object", "additionalProperties": false, "required": ["address", "weight"],
@@ -324,7 +371,8 @@
       "additionalProperties": false,
       "required": [
         "title", "power_source", "epoch_size_seconds", "min_turnout_bps",
-        "epoch_budget", "min_percent_selected", "max_available_percentage",
+        "epoch_budget", "retained_option", "execution_window_seconds",
+        "min_percent_selected", "max_available_percentage",
         "max_options_selected", "option_capacity", "reset_epoch_seconds"
       ],
       "properties": {
@@ -333,6 +381,8 @@
         "epoch_size_seconds": {"type": "integer", "minimum": 3600},
         "min_turnout_bps": {"type": "integer", "minimum": 0, "maximum": 10000},
         "epoch_budget": {"$ref": "#/$defs/positive_uint"},
+        "retained_option": {"const": "do-not-distribute"},
+        "execution_window_seconds": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
         "min_percent_selected": {"$ref": "#/$defs/decimal_fraction"},
         "max_available_percentage": {"$ref": "#/$defs/decimal_fraction"},
         "max_options_selected": {"type": "integer", "minimum": 1, "maximum": 99},

@@ -46,13 +46,17 @@ describe("read-only bounty ledger states", () => {
     ).toBeInTheDocument();
     done(ledger);
     expect(
-      await screen.findByText("Fund public goods tooling"),
+      await screen.findByText("Fund community tooling"),
     ).toBeInTheDocument();
     expect(screen.getByText("juno-1")).toBeInTheDocument();
     expect(screen.getByText("5150")).toBeInTheDocument();
     expect(screen.getByText("Fully backed")).toBeInTheDocument();
     expect(screen.getAllByText("$JUNO 1").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /connect|sign|contribute/i })).not.toBeInTheDocument();
+    const bountyRecord = screen.getByRole("button", { name: "Fund community tooling" });
+    const createAction = screen.getByRole("button", { name: "Create a bounty" });
+    expect(bountyRecord.compareDocumentPosition(createAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /^Title/ })).not.toBeInTheDocument();
     expect(document.querySelector("time")).toHaveAttribute(
       "datetime",
       "2027-01-15T08:00:00.000Z",
@@ -105,7 +109,6 @@ describe("read-only bounty ledger states", () => {
               ...ledger.bounties[0],
               status: "refunding",
               project_candidate: {
-                project_id: "voice-ui",
                 metadata_uri: "https://example.invalid/voice-ui.json",
                 metadata_digest: `sha256:${"ab".repeat(32)}`,
               },
@@ -116,7 +119,7 @@ describe("read-only bounty ledger states", () => {
       />,
     );
     expect(
-      await screen.findByText("Project candidate · voice-ui"),
+      await screen.findByText("Project candidate metadata attached"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Refund: Cancelled · scope changed"),
@@ -131,7 +134,7 @@ describe("read-only bounty ledger states", () => {
     expect(await screen.findByText("RPC offline")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Retry query" }));
     expect(
-      await screen.findByText("Fund public goods tooling"),
+      await screen.findByText("Fund community tooling"),
     ).toBeInTheDocument();
     expect(loadLedger).toHaveBeenCalledTimes(2);
   });

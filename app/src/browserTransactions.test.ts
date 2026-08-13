@@ -20,7 +20,7 @@ const detail: BountyDetail = {
 };
 const intent = contributeIntent(detail.bounty, "1", sender, [], {
   config: detail.config, pause: detail.pause, chainTimeNanos: detail.chainTimeNanos, fingerprint: detail.fingerprint,
-});
+}, config.contract);
 const successfulResult = {
   transactionHash: "KNOWN", height: 124, gasWanted: 1n, gasUsed: 1n,
   events: [{ type: "wasm-juno_voice_bounties.contributed", attributes: [
@@ -116,7 +116,7 @@ describe("browser transaction broadcast boundary", () => {
         { key: "vote", value: "yes" }, { key: "weight", value: "2500000" }, { key: "yes_weight", value: "2500000" },
         { key: "no_weight", value: "0" }, { key: "revisions", value: "0" }] }] });
     await fixture.access.connect();
-    const review = await fixture.access.prepare(votePayoutIntent(before, sender, 1, "yes", ""));
+    const review = await fixture.access.prepare(votePayoutIntent(before, sender, 1, "yes", "", config.contract));
     expect(review.funds).toEqual([]);
     await expect(fixture.access.submit(review)).resolves.toMatchObject({ status: "confirmed", txHash: "KNOWN" });
     expect(fixture.signing.execute).toHaveBeenCalledWith(sender, config.contract,

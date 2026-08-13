@@ -1,6 +1,6 @@
 # Juno Voice backend architecture
 
-**Status:** Accepted architecture for Juno Voice v1; implemented locally but
+**Status:** Accepted architecture for Juno Voice v2; implemented locally but
 not release-approved or deployed
 
 **Scope:** On-chain backend, deployment composition, and trust boundaries
@@ -183,11 +183,12 @@ The adapter combines a governed project registry with a deliberately narrow gaug
 
 ### 6.1 Stable project records
 
-Each record uses an immutable stable project ID and contains:
+Each record uses an immutable, registry-assigned, monotonically increasing
+numeric project ID and contains:
 
 - metadata URI and digest;
 - current and pending payout addresses;
-- admission path and optional source bounty ID;
+- admission path and optional source bounty contract plus bounty ID;
 - native registration bond, if any;
 - `PENDING`, `ACTIVE`, `SUSPENDED`, `REJECTED`, or `RETIRED` status; and
 - typed status/address history.
@@ -196,7 +197,7 @@ An address is a payout destination, not project identity. Payout changes use pro
 
 ### 6.2 Admission paths
 
-**Graduation:** after a successful payout, the Agent Operations DAO may instruct the authenticated bounty contract to register a qualifying project without a bond. Graduation is explicit, not automatic, and creates only future eligibility.
+**Graduation:** after a successful payout, the Agent Operations DAO may instruct the authenticated bounty contract to register a qualifying project without a bond. The registry allocates the ID and returns it through an atomic reply-on-success handshake; neither the bounty nor its creator supplies one. Graduation is explicit, not automatic, and creates only future eligibility.
 
 **Existing project:** an applicant deposits the configured native bond and enters `PENDING`. The Agent Operations DAO may approve, soft-reject with refund, hard-reject clear spam with the bond sent to the configured public destination, request corrected metadata, or later suspend/retire an active project. Good-standing retirement returns the bond.
 
@@ -228,7 +229,7 @@ The existing gauge orchestrator cannot be paired unchanged with `dao-voting-juno
 
 The orchestrator therefore gains an explicit `EpochSnapshot` mode upstream in `dao-contracts`:
 
-1. Opening an epoch records one historical snapshot height, total voting power, fixed option set, budget, denomination, window, and policy.
+1. Opening an epoch requires the Vault's full fixed budget, then records one historical snapshot height, total voting power, fixed option set, budget, denomination, execution deadline, and policy version.
 2. Every ballot queries `VotingPowerAtHeight` at that same height.
 3. A voter may revise allocations, but their epoch power never changes.
 4. Votes, receipts, tallies, and cleanup are scoped by epoch.
@@ -238,7 +239,7 @@ The orchestrator therefore gains an explicit `EpochSnapshot` mode upstream in `d
 The gauge tracks two distinct values:
 
 - `participating_power`: full snapshot power of each address with a nonempty current ballot, counted once, for turnout; and
-- `total_cast`: power actually allocated across options, for proportional distribution.
+- `allocated_power` (also exposed as legacy `total_cast`): power actually allocated across options, for accounting; project payout shares still use `participating_power` as their denominator.
 
 Execution requires:
 
@@ -246,7 +247,7 @@ Execution requires:
 participating_power * 10_000 >= snapshot_total_power * min_turnout_bps
 ```
 
-Failure produces a terminal no-distribution epoch and leaves the full budget in the vault. It does not automatically enlarge the next epoch.
+Failure produces a terminal no-distribution epoch and leaves the full budget in the vault. Successful execution requires only actual emitted value. Execution-time underfunding terminalizes without messages; anyone may expire an epoch at its deadline, and only Program Vault governance may abort an unrecoverable open epoch with a reason. No terminal path automatically enlarges the next epoch.
 
 The Agent Operations DAO receives guardian permission to stop an epoch or future execution, but only the Program Vault under Juno governance may resume it. Every snapshot, policy value, option set, ballot total, outcome, and actual transfer remains queryable.
 
@@ -333,4 +334,8 @@ No deployment resolves a moving branch or an unpinned package.
 
 ## 12. Delivery boundary
 
-The backend delivery plan is [GOAL.md](../../GOAL.md). Frontend implementation, an indexer, live mainnet funding, and governance proposal submission are outside that goal. Public testnet integration, deterministic artifacts, target-chain gas evidence, independent security review, and a loss-bounded canary are release gates, not optional follow-up work.
+The delivery plan is [GOAL.md](../../GOAL.md). An indexer, live mainnet funding,
+and governance proposal submission remain outside the implementation authority.
+Public testnet integration, deterministic artifacts, target-chain gas evidence,
+independent security review, and a loss-bounded canary are release gates, not
+optional follow-up work.

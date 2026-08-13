@@ -105,7 +105,6 @@ export function Ledger({
           verified backing.
         </section>
       )}
-      <BountyActions access={transactions} stale={stale} canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
       <section aria-labelledby="ledger-title">
         <div className="toolbar">
           <div>
@@ -167,7 +166,8 @@ export function Ledger({
           )}
         </div>
       </section>
-      {detail.kind !== "closed" && <BountyDetailPanel state={detail} transactions={transactions} onClose={() => setDetail({ kind: "closed" })} />}
+      <BountyActions access={transactions} bountyContract={config.contract} stale={stale} canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
+      {detail.kind !== "closed" && <BountyDetailPanel state={detail} bountyContract={config.contract} transactions={transactions} onClose={() => setDetail({ kind: "closed" })} />}
       <section className="facts-panel" aria-labelledby="economics">
         <h2 id="economics">Protocol economics</h2>
         <div className="network-grid">
@@ -259,7 +259,7 @@ function BountyRow({ bounty: b, onOpen }: { bounty: Bounty; onOpen: () => void }
         <small>Creator {compact(b.creator)}</small>
         {b.project_candidate && (
           <small className="project-badge">
-            Project candidate · {b.project_candidate.project_id}
+            Project candidate metadata attached
           </small>
         )}
         {b.refund_reason && (
@@ -283,8 +283,9 @@ function BountyRow({ bounty: b, onOpen }: { bounty: Bounty; onOpen: () => void }
     </article>
   );
 }
-function BountyDetailPanel({ state, onClose, transactions }: {
-  state: { kind: string; data?: BountyDetail; message?: string }; onClose: () => void; transactions?: BountyTransactionAccess;
+function BountyDetailPanel({ state, onClose, transactions, bountyContract }: {
+  state: { kind: string; data?: BountyDetail; message?: string }; onClose: () => void;
+  transactions?: BountyTransactionAccess; bountyContract: string;
 }) {
   const d = state.data;
   const action = (value: string | Record<string, unknown>) =>
@@ -304,7 +305,7 @@ function BountyDetailPanel({ state, onClose, transactions }: {
           <Fact label="Config snapshot" value={String(d.bounty.terms.config_version)} />
           {d.bounty.terms.content_uri && <p>Metadata <SafeUri uri={d.bounty.terms.content_uri} /> <code>{d.bounty.terms.content_digest}</code></p>}
         </section>
-        <section><h3>Project candidate</h3>{d.bounty.project_candidate ? <><p>{d.bounty.project_candidate.project_id}</p>
+        <section><h3>Project candidate</h3>{d.bounty.project_candidate ? <>
           <p><SafeUri uri={d.bounty.project_candidate.metadata_uri} /> <code>{d.bounty.project_candidate.metadata_digest}</code></p>
           <small>Candidate only; this is not a registry listing until a separate authorized graduation.</small></> : <p>None attached.</p>}
           <h3>Active round</h3>{d.activeRound ? <><p><strong>Round {d.activeRound.number} · {d.activeRound.rule.replaceAll("_", " ")}</strong></p>
@@ -322,7 +323,8 @@ function BountyDetailPanel({ state, onClose, transactions }: {
       <h3>Ballot receipts ({d.receipts.length})</h3>{d.receipts.length ? <ul>{d.receipts.map((x) => <li key={`${x.round}:${x.voter}`}>Round {x.round} · {compact(x.voter)} · {x.vote.toUpperCase()} · immutable weight {fmt(x.weight)} · revisions {x.revisions}</li>)}</ul> : <p>No ballots recorded.</p>}
       <h3>History ({d.history.length} of {d.bounty.history_count})</h3><ol className="history">{d.history.map((x) => <li key={x.sequence}><strong>{action(x.action)}</strong> · {compact(x.actor)} · <time dateTime={timestampDate(x.at).toISOString()}>{timestampDate(x.at).toLocaleString()}</time></li>)}</ol>
       <p className="chain-time">Eligibility reference: canonical chain time {d.chainTimeNanos} ns. Browser time is display-only.</p>
-      <BountyActions bounty={d.bounty} contributions={d.contributions} settlement={d} access={transactions} stale={false}
+      <BountyActions bounty={d.bounty} contributions={d.contributions} settlement={d} access={transactions}
+        bountyContract={bountyContract} stale={false}
         canonical={{ config: d.config, pause: d.pause, chainTimeNanos: d.chainTimeNanos, fingerprint: d.fingerprint }} />
     </>}
   </section>;
