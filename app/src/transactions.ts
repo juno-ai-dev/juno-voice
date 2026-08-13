@@ -216,8 +216,6 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
   place_votes: placeVotes,
   execute: gaugeOnly,
   expire_epoch: gaugeOnly,
-  abort_epoch: (body) => objectWithExactKeys(body, ["gauge", "reason"]) && body.gauge === 0 &&
-    typeof body.reason === "string" && body.reason.trim().length > 0 && new TextEncoder().encode(body.reason).length <= 2_048,
 });
 const BOUNTY_ACTIONS = new Set([
   "create_bounty", "contribute", "nominate_payout", "confirm_sole_payout", "decline_sole_payout",
@@ -227,7 +225,7 @@ const REGISTRY_ACTIONS = new Set([
   "register_project", "update_pending_metadata", "propose_payout_address", "cancel_payout_address_change",
   "accept_payout_address", "claim_registration_bond", "retire",
 ]);
-const GAUGE_ACTIONS = new Set(["open_epoch", "place_votes", "execute", "expire_epoch", "abort_epoch"]);
+const GAUGE_ACTIONS = new Set(["open_epoch", "place_votes", "execute", "expire_epoch"]);
 const PAYABLE_ACTIONS = new Set(["create_bounty", "contribute", "register_project"]);
 function validateIntent(intent: TransactionIntent, authorization: WalletAuthorization,
   contracts: TransactionDependencies["contracts"]): void {

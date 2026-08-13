@@ -6,6 +6,9 @@ import { cancelSoleFundedIntent, claimRefundIntent, confirmSolePayoutIntent, dec
   expireBountyIntent, finalizePayoutIntent, nominatePayoutIntent, type SettlementState,
   votePayoutIntent } from "./settlementFlows";
 import { formatJuno, formatJunoCoin } from "./junoAmount";
+import { DEFAULT_CHAIN_ID } from "./config";
+import { bountyActionFromReview, clearBountySubmission, loadLatestBountySubmission, markBountySubmissionUnavailable,
+  saveBountySubmission, type StoredBountySubmission } from "./bountySubmissionState";
 import "./bounty.css";
 
 export interface BountyTransactionAccess {
@@ -14,6 +17,18 @@ export interface BountyTransactionAccess {
   submit(review: TransactionReview): Promise<TransactionOutcome>;
 }
 type ReviewState = { review: TransactionReview; submitting: boolean } | null;
+const runtimeTransactionOutcome = (value: unknown): TransactionOutcome | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const result = value as Record<string, unknown>, status = result.status, keys = Object.keys(result);
+  const exact = (...allowed: string[]) => keys.every((field) => allowed.includes(field)) && allowed.every((field) => field in result);
+  if (status === "confirmed" && exact("status", "txHash", "height", "confirmationStatus", "refreshStatus", "explorerUrl") &&
+    typeof result.txHash === "string" && result.txHash.trim().length > 0 && Number.isSafeInteger(result.height) && (result.height as number) > 0 &&
+    result.confirmationStatus === "confirmed" && (result.refreshStatus === "refreshed" || result.refreshStatus === "failed") && typeof result.explorerUrl === "string") return value as TransactionOutcome;
+  if ((status === "failed" || status === "rejected") && (exact("status", "reason") || (status === "failed" && exact("status", "reason", "txHash", "explorerUrl"))) && typeof result.reason === "string" && result.reason.trim().length > 0) return value as TransactionOutcome;
+  if (status === "pending" && exact("status", "txHash", "explorerUrl") && typeof result.txHash === "string" && result.txHash.trim().length > 0 && typeof result.explorerUrl === "string") return value as TransactionOutcome;
+  if (status === "unknown" && (exact("status") || exact("status", "txHash", "explorerUrl")) && (!("txHash" in result) || (typeof result.txHash === "string" && result.txHash.trim().length > 0 && typeof result.explorerUrl === "string"))) return value as TransactionOutcome;
+  return null;
+};
 
 export function BountyActions({ canonical, access, stale, bountyContract, bounty, contributions = [], settlement }: {
   canonical: EligibilityState; access?: BountyTransactionAccess; stale: boolean;
@@ -24,7 +39,9 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
   const [review, setReview] = useState<ReviewState>(null);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
-  const [submissionLocked, setSubmissionLocked] = useState(false);
+  const contractScope = { chainId: DEFAULT_CHAIN_ID, contract: bountyContract };
+  const [storedSubmission, setStoredSubmission] = useState<StoredBountySubmission | null>(() => loadLatestBountySubmission(contractScope));
+  const submissionLocked = storedSubmission !== null;
   const act = async (make: (sender: string) => TransactionIntent) => {
     setMessage("");
     if (submissionLocked) return setMessage("This action is locked because an earlier submission is not canonically confirmed.");
@@ -40,8 +57,21 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
   const submit = async () => {
     if (!access || !review) return;
     setReview({ ...review, submitting: true }); setMessage("");
+    const submittedReview = review.review;
+    const action = bountyActionFromReview(submittedReview, contractScope);
+    const scope = { sender: submittedReview.sender, ...contractScope };
+    if (!action) {
+      markBountySubmissionUnavailable(scope); setStoredSubmission({ kind: "malformed" }); setReview(null); return;
+    }
+    const preSubmissionEvidence = { version: 1 as const, ...scope, action, status: "unknown" as const };
+    if (!saveBountySubmission(preSubmissionEvidence)) {
+      setStoredSubmission({ kind: "malformed" }); setReview(null); return;
+    }
+    setStoredSubmission({ kind: "uncertain", evidence: preSubmissionEvidence });
     try {
-      const result = await access.submit(review.review);
+      const runtimeResult: unknown = await access.submit(submittedReview), result = runtimeTransactionOutcome(runtimeResult);
+      if (!result) { setMessage("Stored submission evidence is malformed or unavailable. This action remains locked; inspect this account on Juno and do not submit again."); setReview(null); return; }
+      const status = result.status;
       setMessage(result.status === "confirmed" ? `Confirmed at height ${result.height}. Canonical state ${result.refreshStatus}.` :
         result.status === "failed" ? `Raw chain error: ${result.reason} Review the canonical bounty and account state before preparing a corrected transaction.` :
           result.status === "rejected" ? result.reason : result.txHash
@@ -49,10 +79,21 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
           : "Signing began and submission may have occurred, but no transaction hash is available. Do not submit again until you inspect this account on Juno.");
       if ("txHash" in result && result.txHash && result.explorerUrl)
         setReceipt({ hash: result.txHash, url: result.explorerUrl, confirmed: result.status === "confirmed" });
-      if (result.status === "pending" || result.status === "unknown") setSubmissionLocked(true);
+      if (status === "pending" || status === "unknown") {
+        const uncertain = result as Extract<TransactionOutcome, { status: "pending" | "unknown" }>;
+        const evidence = { ...preSubmissionEvidence, status, ...(uncertain.txHash ? { txHash: uncertain.txHash } : {}),
+          ...(uncertain.explorerUrl ? { explorerUrl: uncertain.explorerUrl } : {}) };
+        if (saveBountySubmission(evidence)) setStoredSubmission({ kind: "uncertain", evidence });
+        else setStoredSubmission({ kind: "malformed" });
+      } else if (clearBountySubmission(scope)) setStoredSubmission(null);
       setReview(null);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Transaction was blocked before signing."); setReview(null); }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Transaction submission failed; signing may have begun. Do not submit again."); setReview(null); }
   };
+  const persistedEvidence = storedSubmission?.kind === "uncertain" ? storedSubmission.evidence : null;
+  const restoredNotice = !message && storedSubmission ? (storedSubmission.kind === "malformed"
+    ? "Stored submission evidence is malformed or unavailable. This action remains locked; inspect this account on Juno and do not submit again."
+    : storedSubmission.evidence.txHash ? "Submission is not canonically confirmed. Use the transaction evidence below and do not submit again."
+    : "Signing began and submission may have occurred, but no transaction hash is available. Do not submit again until you inspect this account on Juno.") : "";
   if (!bounty && !creating) return <section className="bounty-create-launcher" aria-labelledby="create-launcher-title">
     <div>
       <p className="eyebrow">FUND A SHARED OUTCOME</p>
@@ -76,9 +117,9 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
       <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical, bountyContract))} />}
     {bounty && <p className="chain-time">Deadlines are checked against Juno network time.</p>}
     {!access && <p>Wallet actions are unavailable in this environment. Browsing does not require a wallet.</p>}
-    {message && <p role="status" className="notice">{message}</p>}
-    {receipt && <p><a href={receipt.url} target="_blank" rel="noopener noreferrer">
-      View {receipt.confirmed ? "confirmed transaction" : "transaction evidence"} {receipt.hash}
+    {(message || restoredNotice) && <p role="status" className="notice">{message || restoredNotice}</p>}
+    {(receipt || (persistedEvidence?.txHash && persistedEvidence.explorerUrl ? { hash: persistedEvidence.txHash, url: persistedEvidence.explorerUrl, confirmed: false } : null)) && <p><a href={(receipt ?? { hash: persistedEvidence!.txHash!, url: persistedEvidence!.explorerUrl!, confirmed: false }).url} target="_blank" rel="noopener noreferrer">
+      View {(receipt ?? { hash: persistedEvidence!.txHash!, url: persistedEvidence!.explorerUrl!, confirmed: false }).confirmed ? "confirmed transaction" : "transaction evidence"} {(receipt ?? { hash: persistedEvidence!.txHash!, url: persistedEvidence!.explorerUrl!, confirmed: false }).hash}
     </a></p>}
     {review && <TransactionReviewPanel value={review.review} busy={review.submitting} onCancel={() => setReview(null)} onSubmit={submit} />}
   </section>;

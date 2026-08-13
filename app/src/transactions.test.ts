@@ -126,6 +126,13 @@ describe("address and centrally-owned execute policy", () => {
     const { wallet, dependencies } = setup(); await wallet.connect();
     await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: config.gaugeContract, executeMessage: { [action]: body }, funds: [] })).resolves.toMatchObject({ contract: config.gaugeContract, funds: [] });
   });
+  it("rejects privileged abort_epoch through the public central signing policy", async () => {
+    const { wallet, dependencies } = setup(); await wallet.connect();
+    await expect(createTransactionFlow(dependencies).prepare({ ...intent, contract: config.gaugeContract,
+      executeMessage: { abort_epoch: { gauge: 0, reason: "operator recovery" } }, funds: [] }))
+      .rejects.toMatchObject({ code: "message_forbidden" });
+    expect(dependencies.estimateFee).not.toHaveBeenCalled();
+  });
   it.each([
     ["wrong gauge", { place_votes: { gauge: 1, votes: [{ option: "alpha", weight: "1" }] } }],
     ["duplicate option", { place_votes: { gauge: 0, votes: [{ option: "alpha", weight: "0.5" }, { option: "alpha", weight: "0.5" }] } }],

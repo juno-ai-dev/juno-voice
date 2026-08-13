@@ -107,6 +107,20 @@ describe("registry transaction UI evidence", () => {
     expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
   });
 
+  it("writes scoped unknown evidence before invoking transaction submission", async () => {
+    let finish!: (value: { status: "unknown" }) => void;
+    const signing = new Promise<{ status: "unknown" }>((resolve) => { finish = resolve; });
+    const port = flow(); vi.mocked(port.submit).mockReturnValueOnce(signing);
+    render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    await prepareAndSubmit(port);
+    await vi.waitFor(() => expect(port.submit).toHaveBeenCalledWith(review));
+    expect(Array.from({ length: sessionStorage.length }, (_, index) => sessionStorage.getItem(sessionStorage.key(index)!)))
+      .toContainEqual(expect.stringContaining('"action":"register_project"'));
+    expect(screen.getByLabelText("Project action")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Checking latest state…" })).toBeDisabled();
+    finish({ status: "unknown" });
+  });
+
   it("restores a hashless unknown lock after unmount and remount without inventing explorer evidence", async () => {
     const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
     const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);

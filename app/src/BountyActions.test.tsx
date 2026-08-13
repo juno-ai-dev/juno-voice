@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toBech32 } from "@cosmjs/encoding";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BountyActions, type BountyTransactionAccess } from "./BountyActions";
 import { config, ledger, bounty } from "./test/bountyFixtures";
 import type { TransactionReview } from "./transactions";
@@ -16,6 +16,7 @@ const access = (): BountyTransactionAccess => ({ connect: vi.fn(async () => ({ a
   prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "confirmed" as const, txHash: "ABC", height: 124,
     confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, explorerUrl: "https://example/tx/ABC" })) });
 describe("bounty action UI", () => {
+  beforeEach(() => sessionStorage.clear());
   it("keeps read-only access and explains unavailable wallet support", async () => {
     render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} />);
     expect(screen.queryByRole("textbox", { name: /^Title/ })).not.toBeInTheDocument();
@@ -93,6 +94,23 @@ describe("bounty action UI", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
     expect(port.submit).toHaveBeenCalledWith(review);
     expect(await screen.findByRole("status")).toHaveTextContent(/Confirmed at height 124/);
+  });
+  it("writes a hashless scoped uncertainty lock before invoking the signer and restores it after remount", async () => {
+    let finish!: (value: { status: "unknown" }) => void;
+    const signing = new Promise<{ status: "unknown" }>((resolve) => { finish = resolve; });
+    const port = access(); vi.mocked(port.submit).mockReturnValueOnce(signing);
+    const view = render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    await userEvent.type(screen.getByLabelText("Contribution ($JUNO)"), "1");
+    await userEvent.click(screen.getByRole("button", { name: /review contribution/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recheck state, then sign/ }));
+    await vi.waitFor(() => expect(port.submit).toHaveBeenCalledWith(review));
+    expect(Array.from({ length: sessionStorage.length }, (_, index) => sessionStorage.getItem(sessionStorage.key(index)!)))
+      .toContainEqual(expect.stringContaining('"status":"unknown"'));
+    view.unmount();
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty} />);
+    expect(screen.getByRole("button", { name: /review contribution/ })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(/no transaction hash is available.*Do not submit again/i);
+    finish({ status: "unknown" });
   });
   it("keeps known-hash evidence visible while canonical state is incomplete", async () => {
     const port = access();
