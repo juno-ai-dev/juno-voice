@@ -8,8 +8,10 @@ authorized for funded use.
 The implementation and local gates cover the five audit findings and the new
 fresh-deployment boundary. The implementation team's explicit candidate
 dispositions are recorded in `audit/REMEDIATION_DISPOSITION.md`; they do not
-constitute independent closure. Completion still requires an accepted immutable
-upstream commit, clean deterministic artifacts, target-chain evidence,
+constitute independent closure. The gauge remediation is pinned to immutable commit
+`d39094eea29a3642cfa0306fc34507ef2b07dd72`, merged as
+[`juno-ai-dev/dao-contracts#7`](https://github.com/juno-ai-dev/dao-contracts/pull/7).
+Completion still requires clean deterministic artifacts, target-chain evidence,
 independent security review, authorized fresh deployment, signed manifests, and
 a reconciled low-value canary.
 
@@ -66,10 +68,10 @@ working trees were not reconstructed twice from clean recursive clones. Their
 hashes are therefore not release identities. The clean deterministic build,
 byte comparison, and final checksum manifest remain open.
 
-These results are working-tree evidence, not immutable release evidence. The
-root contains uncommitted remediation changes and the submodule contains an
-unaccepted dirty upstream patch. Final verification must run from clean,
-reviewed commits.
+The recorded snapshot above predates commit review and is working-tree evidence,
+not immutable release evidence. The remediation is now committed and the
+submodule patch is accepted upstream, but final release verification must still
+run from clean recursive clones at frozen reviewed commits.
 
 ## Fresh-deployment boundary
 
@@ -116,9 +118,9 @@ The selected target must capture at least:
 
 ## External completion sequence
 
-1. Land the gauge patch in its upstream repository, obtain independent review,
-   and advance the submodule to the accepted immutable commit.
-2. Commit and review the root changes; run both full locked workspaces and all
+1. **Completed:** land and independently review the gauge patch upstream, then
+   advance the submodule to accepted immutable commit `d39094ee`.
+2. Review the root changes; run both full locked workspaces and all
    schema-diff gates in a clean recursive clone.
 3. Produce reproducible optimized `artifacts/v2` bytes, Wasm validation, and a
    signed build manifest bound to exact source commits.
