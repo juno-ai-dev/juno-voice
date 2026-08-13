@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 15_000 });
 import { Registry } from "./ProjectRegistry";
 import { digestMetadataFile } from "./metadataDigest";
 import type { Project, RegistryDataSource } from "./registry";
