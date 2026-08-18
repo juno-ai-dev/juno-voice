@@ -1,7 +1,8 @@
 # Juno Voice backend architecture
 
-**Status:** Accepted architecture for Juno Voice v2; implemented locally but
-not release-approved or deployed
+**Status:** Accepted architecture for Juno Voice v2; implemented, deployed, and
+query-verified on Juno mainnet, but not release-approved for funded use or a
+public trial
 
 **Scope:** On-chain backend, deployment composition, and trust boundaries
 

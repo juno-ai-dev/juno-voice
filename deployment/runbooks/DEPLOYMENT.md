@@ -18,8 +18,9 @@ broadcast, require all of the following:
 - the cutover mode is explicit: a new test target declares no prior
   composition, while `juno-1` supplies all five historical v1
   address/Code-ID/checksum triples from the independently reviewed record;
-- the current `uni-7` chain ID, RPC, gRPC, `ujuno` denomination, `juno` prefix,
-  and Juno `x/gov` module account were independently checked;
+- the selected target's chain ID, RPC, gRPC, exact `ujuno` staking/funding
+  denomination, `juno` prefix, and Juno `x/gov` module account were independently
+  checked; the historical `uni-7` `ujunox` profile is not compatible;
 - the bound Agent Operations DAO review records its core, voting, proposal, and
   tagged CW4-group or CW721-roles membership code IDs/checksums, exhaustive
   current membership and power, threshold, and voting duration;
@@ -57,7 +58,8 @@ checksum collides with v1. Uploaded v2 Code IDs must also be disjoint.
    registry exposes only `do-not-distribute`; and gauge 0 has no epoch. The
    runner repeats these checks before every `apply-next` broadcast.
 
-Use paths under `/secure-work/juno-voice/uni-7/` for mutable state, plans,
+Use paths under a target-specific directory such as
+`/secure-work/juno-voice/target/` for mutable state, plans,
 preflight reports, and the initial verification report. Do not write them into
 the checkout during deployment: the planner deliberately requires clean source
 and submodule trees on every restartable invocation.

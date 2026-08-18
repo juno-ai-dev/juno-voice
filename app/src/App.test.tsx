@@ -7,8 +7,8 @@ import { config, ledger } from "./test/bountyFixtures";
 
 const account = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
 const registry = {
-  config: { native_denom: "ujuno", registration_bond: "1000000", max_active_projects: 99,
-    max_metadata_uri_bytes: 512, max_page_limit: 50, max_reason_bytes: 500,
+  config: { native_denom: "ujuno", registration_bond: "100000000", max_active_projects: 99,
+    max_metadata_uri_bytes: 512, max_page_limit: 100, max_reason_bytes: 2048,
     payout_address_delay_seconds: 86400, curator: account, governor: account, version: 1 },
   pause: { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null },
   health: { accounting: { active_projects: 0, pending_applications: 0, bond_liability: "0",

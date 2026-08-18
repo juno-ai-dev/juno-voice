@@ -1,12 +1,10 @@
 # Juno Voice v2 UX contract interface freeze
 
-**Freeze baseline:** active v2 remediation candidate; exact root and accepted
-`deps/dao-contracts` commits are release inputs and remain pending.
+**Freeze baseline:** deployed v2 wire surface; exact root and accepted
+`deps/dao-contracts` commits remain release inputs.
 
-**Status:** v2 is not deployed. Funded use is blocked pending fresh deployment,
-verification, independent review, and an authorized canary. Section 11 preserves
-the quarantined historical v1 read-only profile; those identities are not v2
-defaults or valid cutover inputs.
+**Status:** v2 is deployed and independently verified. Funded use remains
+blocked pending the separate authorization and canary gates.
 
 **Audience:** wallet, frontend, explorer, and indexer implementers
 
@@ -246,8 +244,8 @@ All transaction UX must show exact message, sender, contract, and funds before s
 
 ## 9. Prototype assumptions reconciled with backend reality
 
-- The first `app/` release read only the deployed v1 bounty contract through the
-  historical profile in section 11. The removed request ledger/ranking,
+- The first `app/` release read only the deployed v1 bounty contract through a
+  historical profile that predates the production v2 profile below. The removed request ledger/ranking,
   support/oppose voting, builder/verifier evidence, and request-bond UI are
   **not** the v2 bounty UX.
 - The prototype’s `Submit a request` sends `submission_bond`; v2 `create_bounty` sends an initial **contribution** governed by bounty min/max and expiry. Do not rename one payload into the other.
@@ -264,18 +262,24 @@ All transaction UX must show exact message, sender, contract, and funds before s
 These do not block implementing the frozen wire messages, but require a product/indexer decision before a polished UX:
 
 1. **No returned next cursor/query height on most owned lists.** Clients can safely continue from the last item, but cannot distinguish “exactly full final page” without one extra query and cannot claim snapshot consistency. Decide whether UX accepts this or a future contract revision adds cursors/heights (which would change schemas).
-2. **Derived versus explicit product states.** Product language names reset/cancelled/stopped/failed-expired states not represented by the implemented enums. This document freezes derivation for v2 UX; decide whether that is acceptable before deployment or enums must change.
+2. **Derived versus explicit product states.** Product language names reset/cancelled/stopped/failed-expired states not represented by the implemented enums. This document freezes derivation for v2 UX; decide before a public frontend release whether that remains acceptable or requires a future contract revision.
 3. **Indexer stability governance.** Events are implemented and tested in places, but there is no separately versioned event schema. This freeze treats the listed names/keys as stable. Decide whether release gates should mechanically snapshot every event attribute.
 4. **Gauge adapter direct-query shape is snapshot-specific.** The owned adapter requires concrete `epoch_budget`, `available_balance`, and `denom`, and returns `execute`, `emitted_value`, and `retained_value`. The snapshot gauge validates all three response fields and their exact budget reconciliation. Generic hook-mode callers are not a supported UX path; snapshot-only deployment remains mandatory.
 
 Until any decision produces new checked-in schemas, this commit—not aspirational prose—is the UX integration baseline.
 
-## 11. Historical first production read-only bounty ledger profile
+## 11. Production v2 identity profile
 
-The first production UI slice was strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`. This v1 identity is quarantined historical evidence: it must not be funded, imported, or used as a v2 client default.
+The production client is pinned to the five verified Juno mainnet v2
+address/code-ID/checksum triples documented in the repository `README.md` and
+provided through the fail-closed build environment. There is no legacy identity
+fallback or runtime compatibility path.
 
-After verifying chain ID, contract address, Code ID, and wasm checksum, clients query `config {}`, `pause {}`, `health {}`, the first `bounties { start_after: null, limit: 50 }` page, and an independent observation height concurrently. Bounty pages are ascending by numeric `id`; a full page requires another query with `start_after` equal to the last ID, including an extra empty query for an exactly full final page. Repeated or non-increasing IDs are invalid. Contract pages have no observation height and are weakly consistent. Amounts and CosmWasm timestamps remain decimal strings and clients must parse them with arbitrary-precision integers.
-
-That historical production slice contained no wallet, signing, execute, admin,
-registry, gauge, sample, or fallback-data path. This is not the current frontend
-feature boundary.
+After verifying chain ID, contract addresses, Code IDs, and wasm checksums,
+clients query the bounded v2 bounty, registry, Vault, voting, and gauge surfaces.
+Bounty pages are ascending by numeric `id`; a full page requires another query
+with `start_after` equal to the last ID, including an extra empty query for an
+exactly full final page. Repeated or non-increasing IDs are invalid. Contract
+pages have no observation height and are weakly consistent. Amounts and
+CosmWasm timestamps remain decimal strings and clients must parse them with
+arbitrary-precision integers.

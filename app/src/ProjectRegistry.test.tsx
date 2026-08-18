@@ -13,8 +13,8 @@ import type { TransactionReview } from "./transactions";
 
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
 const data = {
-  config: { native_denom: "ujuno", registration_bond: "1000000", max_active_projects: 99,
-    max_metadata_uri_bytes: 512, max_page_limit: 50, max_reason_bytes: 500,
+  config: { native_denom: "ujuno", registration_bond: "100000000", max_active_projects: 99,
+    max_metadata_uri_bytes: 512, max_page_limit: 100, max_reason_bytes: 2048,
     payout_address_delay_seconds: 86400, curator: sender, governor: sender, version: 1 },
   pause: { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null },
   health: { accounting: { active_projects: 0, pending_applications: 0, bond_liability: "0",
@@ -28,7 +28,7 @@ const source = (): RegistryDataSource => ({
 });
 const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender, chainId: "juno-1",
   contract: config.registryContract, executeMessage: { register_project: { metadata_uri: "ipfs://alpha",
-    metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender } }, funds: [{ denom: "ujuno", amount: "1000000" }],
+    metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: sender } }, funds: [{ denom: "ujuno", amount: "100000000" }],
   fee: { gas: "180000", amount: [{ denom: "ujuno", amount: "4500" }] }, consequences: ["Register"],
   canonicalState: { fingerprint: "registry", height: 100 }, walletRevision: 1 };
 const flow = (): RegistryTransactionFlow => ({ connect: vi.fn(async () => ({ address: sender })),
@@ -46,9 +46,9 @@ async function prepareAndSubmit(port: RegistryTransactionFlow) {
   await userEvent.type(screen.getByLabelText("Payout address"), sender);
   await userEvent.click(screen.getByRole("button", { name: "Review project action" }));
   expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ contract: config.registryContract,
-    funds: [{ denom: "ujuno", amount: "1000000" }], expectedStateFingerprint: "registry" }));
+    funds: [{ denom: "ujuno", amount: "100000000" }], expectedStateFingerprint: "registry" }));
   const reviewBox = screen.getByText("Review before signing").parentElement!;
-  expect(reviewBox).toHaveTextContent("$JUNO 1");
+  expect(reviewBox).toHaveTextContent("$JUNO 100");
   expect(reviewBox).toHaveTextContent("$JUNO 0.0045");
   expect(reviewBox).not.toHaveTextContent("ujuno");
   await userEvent.click(await screen.findByRole("button", { name: "Confirm and open wallet" }));
@@ -64,7 +64,7 @@ describe("registry transaction UI evidence", () => {
       metadata_digest: `sha256:${"a".repeat(64)}`, status: "active", created_at: "1",
       updated_at: "1", status_history_count: 1, address_history_count: 0,
       provenance: { kind: "bonded_registration", applicant: sender },
-      bond: { amount: "1000000", depositor: sender, state: "deposited" },
+      bond: { amount: "100000000", depositor: sender, state: "deposited" },
       pending_payout_address: null, latest_review: null,
     };
     const populated = source();

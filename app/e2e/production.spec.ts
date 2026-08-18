@@ -8,7 +8,7 @@ import {
   QuerySmartContractStateResponse,
 } from "cosmjs-types/cosmwasm/wasm/v1/query.js";
 import { QueryBalanceResponse } from "cosmjs-types/cosmos/bank/v1beta1/query.js";
-import fixture from "../src/test/live-mainnet-empty.json" with { type: "json" };
+import fixture from "../src/test/v2-empty-state.json" with { type: "json" };
 import { TEST_DEPLOYMENT_ENV } from "../src/test/deployment";
 
 const rpc = TEST_DEPLOYMENT_ENV.VITE_RPC_URL;
@@ -17,11 +17,11 @@ const releaseCommit = process.env.PLAYWRIGHT_RELEASE_COMMIT;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const deployments = {
-  "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw": [5150, "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1"],
-  "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n": [5151, "1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf"],
-  "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg": [5152, "bc8b049a03496d3383376a469ccb581996238003532083895f68d4a02990a2da"],
-  "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2": [5153, "2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64"],
-  "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn": [5154, "524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f"],
+  "juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh": [5155, "2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa"],
+  "juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t": [5156, "513aa9264013e29c18007a85818ccfdbb1f3c4177d58cb4e13d9af3ae9d42a6a"],
+  "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt": [5157, "3600206880f8f24ab867aac6b17b844b16a7b58712c5ca336a076bc13c98f2c0"],
+  "juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr": [5158, "1a08d78f7364ba461253a6cf71ea00d35600906a065d49702bd87ba210adacb4"],
+  "juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v": [5159, "b38915a07a79104768d37b109bb7c21517441a21802fec2b7a49c3fde4ae813d"],
 } as const;
 
 function captureBrowserErrors(page: Page) {
@@ -143,18 +143,18 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
       const query = JSON.parse(decoder.decode(request.queryData)) as Record<string, unknown>;
       const key = Object.keys(query)[0];
       let response: unknown = key in fixture.responses ? fixture.responses[key as keyof typeof fixture.responses] : undefined;
-      if (request.address === "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg") response = key === "voting_module" ? "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2" : [{ address: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", prefix: "A", status: "enabled" }];
-      if (request.address === "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2") response = "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg";
-      if (request.address === "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n") {
-        if (key === "config") response = { native_denom: "ujuno", registration_bond: "1000000", max_active_projects: 99, max_metadata_uri_bytes: 512, max_page_limit: 50, max_reason_bytes: 500, payout_address_delay_seconds: 86400, curator: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac", governor: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", version: 1 };
+      if (request.address === "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt") response = key === "voting_module" ? "juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr" : [{ address: "juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v", prefix: "A", status: "enabled" }];
+      if (request.address === "juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr") response = "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt";
+      if (request.address === "juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t") {
+        if (key === "config") response = { native_denom: "ujuno", registration_bond: "100000000", max_active_projects: 99, max_metadata_uri_bytes: 512, max_page_limit: 100, max_reason_bytes: 2048, payout_address_delay_seconds: 86400, curator: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac", governor: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", version: 1 };
         else if (key === "pause") response = { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null };
         else if (key === "health") response = { accounting: { active_projects: 0, pending_applications: 0, bond_liability: "0", lifetime_bonds_received: "0", lifetime_bonds_refunded: "0", lifetime_bonds_forfeited: "0" }, actual_native_balance: "0", fully_backed: true };
         else if (key === "projects" || key === "applications") response = { projects: [] };
         else if (key === "all_options") response = { options: ["do-not-distribute"] };
       }
-      if (request.address === "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn") {
-        if (key === "config") response = { owner: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", dao_core: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", voting_powers: "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2", hook_caller: "juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn", power_source: { epoch_snapshot: { guardian: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } } };
-        if (key === "gauge") response = { id: 0, title: "Hack Juno", adapter: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n", epoch_size: 604800, min_percent_selected: "0.01", max_options_selected: 20, max_available_percentage: "0.2", is_stopped: false, next_epoch: 0, reset: null, snapshot_policy: { min_turnout_bps: 1000, epoch_budget: "100000000", denom: "ujuno", retained_option: "do-not-distribute", execution_window_seconds: 86400 }, current_epoch: null };
+      if (request.address === "juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v") {
+        if (key === "config") response = { owner: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", dao_core: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", voting_powers: "juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr", hook_caller: "juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v", power_source: { epoch_snapshot: { guardian: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } } };
+        if (key === "gauge") response = { id: 0, title: "Hack Juno weekly allocation", adapter: "juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t", epoch_size: 604800, min_percent_selected: "0.01", max_options_selected: 20, max_available_percentage: "0.2", is_stopped: false, next_epoch: 0, reset: null, snapshot_policy: { min_turnout_bps: 100, epoch_budget: "1000000000", denom: "ujuno", retained_option: "do-not-distribute", execution_window_seconds: 86400 }, current_epoch: null };
         if (key === "list_epochs") response = { epochs: [] };
       }
       const bytes = QuerySmartContractStateResponse.encode({
@@ -168,15 +168,15 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
   return { requests: () => requests };
 }
 
-test("configured juno-1 artifact proves provenance and renders authoritative live-empty state", async ({ page }) => {
+test("configured juno-1 artifact proves provenance and renders accepted-v2 empty state", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
   await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   await expect(page.getByText("No sample or demo records are shown.")).toBeVisible();
   await expect(page.getByText("juno-1", { exact: true })).toBeVisible();
-  await expect(page.getByText("5150", { exact: true })).toBeVisible();
-  await expect(page.getByText("40,681,635", { exact: true })).toBeVisible();
+  await expect(page.getByText("5155", { exact: true })).toBeVisible();
+  await expect(page.getByText("40,746,625", { exact: true })).toBeVisible();
   await expect(
     page.getByText((releaseCommit ?? "").slice(0, 12) + "…", { exact: true }),
   ).toBeVisible();
@@ -220,7 +220,7 @@ test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
   expect(observed.requests()).toBeGreaterThan(first);
 });
 
-test("gauge route verifies the full deployment and renders live-empty safety semantics", async ({ page }) => {
+test("gauge route checks the mocked v2 identity profile and empty-state safety semantics", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
   await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Gauge", exact: true }).click();

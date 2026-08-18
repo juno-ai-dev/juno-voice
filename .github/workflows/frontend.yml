@@ -40,26 +40,26 @@ jobs:
         run: npm run audit:all
       - name: Production dependency audit
         run: npm run audit:production
-      - name: Build test-identity artifact (never published)
+      - name: Build v2-identity artifact (never published)
         env:
           VITE_BASE_PATH: /juno-voice/
           VITE_RELEASE_COMMIT: ${{ github.sha }}
           VITE_PROTOCOL_VERSION: v2
-          VITE_BOUNTY_CONTRACT_ADDRESS: juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw
-          VITE_BOUNTY_CODE_ID: "5150"
-          VITE_BOUNTY_CODE_CHECKSUM: f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1
-          VITE_REGISTRY_CONTRACT_ADDRESS: juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n
-          VITE_REGISTRY_CODE_ID: "5151"
-          VITE_REGISTRY_CODE_CHECKSUM: 1edaf206f87958e3be62225c2cdb71345b39ca07f16b74005c463bbf7c1debbf
-          VITE_VAULT_CONTRACT_ADDRESS: juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg
-          VITE_VAULT_CODE_ID: "5152"
-          VITE_VAULT_CODE_CHECKSUM: bc8b049a03496d3383376a469ccb581996238003532083895f68d4a02990a2da
-          VITE_VOTING_CONTRACT_ADDRESS: juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2
-          VITE_VOTING_CODE_ID: "5153"
-          VITE_VOTING_CODE_CHECKSUM: 2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64
-          VITE_GAUGE_CONTRACT_ADDRESS: juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn
-          VITE_GAUGE_CODE_ID: "5154"
-          VITE_GAUGE_CODE_CHECKSUM: 524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f
+          VITE_BOUNTY_CONTRACT_ADDRESS: juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh
+          VITE_BOUNTY_CODE_ID: "5155"
+          VITE_BOUNTY_CODE_CHECKSUM: 2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa
+          VITE_REGISTRY_CONTRACT_ADDRESS: juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t
+          VITE_REGISTRY_CODE_ID: "5156"
+          VITE_REGISTRY_CODE_CHECKSUM: 513aa9264013e29c18007a85818ccfdbb1f3c4177d58cb4e13d9af3ae9d42a6a
+          VITE_VAULT_CONTRACT_ADDRESS: juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt
+          VITE_VAULT_CODE_ID: "5157"
+          VITE_VAULT_CODE_CHECKSUM: 3600206880f8f24ab867aac6b17b844b16a7b58712c5ca336a076bc13c98f2c0
+          VITE_VOTING_CONTRACT_ADDRESS: juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr
+          VITE_VOTING_CODE_ID: "5158"
+          VITE_VOTING_CODE_CHECKSUM: 1a08d78f7364ba461253a6cf71ea00d35600906a065d49702bd87ba210adacb4
+          VITE_GAUGE_CONTRACT_ADDRESS: juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v
+          VITE_GAUGE_CODE_ID: "5159"
+          VITE_GAUGE_CODE_CHECKSUM: b38915a07a79104768d37b109bb7c21517441a21802fec2b7a49c3fde4ae813d
         run: npm run build
       - name: Bundle-size and signing-symbol regression gates
         run: npm run check:production
@@ -70,8 +70,8 @@ jobs:
       - name: Browser smoke (provenance, states, retry, refresh)
         run: npm run test:e2e
 
-  pages-artifact:
-    name: Package explicitly approved v2 artifact
+  review-artifact:
+    name: Package v2 review artifact
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: gates
     runs-on: ubuntu-24.04
@@ -80,8 +80,6 @@ jobs:
     steps:
       - name: Checkout exact main source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Install Node.js 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -113,23 +111,10 @@ jobs:
           npm ci
           npm run build
           npm run check:production
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+      - name: Upload non-deployed review artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
+          name: juno-voice-v2-review-${{ github.sha }}
           path: app/dist
-
-  deploy:
-    name: Deploy explicitly approved v2 artifact to Pages
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: pages-artifact
-    runs-on: ubuntu-24.04
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy immutable Pages artifact
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+          if-no-files-found: error
+          retention-days: 14

@@ -17,7 +17,7 @@ describe("fail-closed production configuration", () => {
       protocolVersion: "v2",
       chainId: "juno-1",
       contract: TEST_DEPLOYMENT_ENV.VITE_BOUNTY_CONTRACT_ADDRESS,
-      codeId: 5150,
+      codeId: 5155,
       releaseCommit: TEST_DEPLOYMENT_ENV.VITE_RELEASE_COMMIT,
     });
   });

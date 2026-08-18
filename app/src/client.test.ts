@@ -9,7 +9,7 @@ const base = () => ({
   getChainTimeNanos: vi.fn().mockResolvedValue("1700000000000000000"),
   getContract: vi
     .fn()
-    .mockResolvedValue({ address: config.contract, codeId: 5150 }),
+    .mockResolvedValue({ address: config.contract, codeId: 5155 }),
   getCodeDetails: vi.fn().mockResolvedValue({ checksum: config.codeChecksum }),
   disconnect: vi.fn(),
 });
@@ -220,7 +220,7 @@ describe("mainnet bounty client", () => {
       (rpc: ReturnType<typeof base>) =>
         rpc.getContract.mockResolvedValue({
           address: "juno1wrong",
-          codeId: 5150,
+          codeId: 5155,
         }),
     ],
     [
@@ -228,7 +228,7 @@ describe("mainnet bounty client", () => {
       (rpc: ReturnType<typeof base>) =>
         rpc.getContract.mockResolvedValue({
           address: config.contract,
-          codeId: 5149,
+          codeId: 9999,
         }),
     ],
     [

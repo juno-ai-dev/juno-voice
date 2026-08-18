@@ -1,11 +1,11 @@
 {
   "provenance": {
     "chain_id": "juno-1",
-    "contract_address": "juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw",
-    "code_id": 5150,
-    "checksum": "f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1",
-    "observation_height": 40681635,
-    "purpose": "test-only live juno-1 capture; never runtime or fallback data"
+    "contract_address": "juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh",
+    "code_id": 5155,
+    "checksum": "2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa",
+    "observation_height": 40746625,
+    "purpose": "synthetic deterministic empty-state responses shaped from accepted v2 policy and identities; not a live capture, chain evidence, runtime input, or fallback"
   },
   "queries": {
     "config": {
@@ -27,9 +27,9 @@
   "responses": {
     "config": {
       "native_denom": "ujuno",
-      "governor": "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg",
+      "governor": "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt",
       "agent": "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac",
-      "registry": "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n",
+      "registry": "juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t",
       "ratification_seconds": 259200,
       "min_contribution": "1000000",
       "max_bounty_total": "100000000000",
@@ -52,7 +52,7 @@
       "paused": false,
       "reason": null,
       "actor": null,
-      "changed_at": "1786489623553137306"
+      "changed_at": null
     },
     "health": {
       "accounting": {

@@ -46,7 +46,7 @@ describe("credential-free RPC adapter", () => {
               QueryContractInfoResponse.encode(
                 QueryContractInfoResponse.fromPartial({
                   address: "juno1contract",
-                  contractInfo: { codeId: 5150n },
+                  contractInfo: { codeId: 5155n },
                 }),
               ).finish(),
             ),
@@ -56,7 +56,7 @@ describe("credential-free RPC adapter", () => {
             abciResponse(
               QueryCodeResponse.encode(
                 QueryCodeResponse.fromPartial({
-                  codeInfo: { dataHash: new Uint8Array([0xf0, 0x5e]) },
+                  codeInfo: { dataHash: new Uint8Array([0xab, 0xcd]) },
                 }),
               ).finish(),
             ),
@@ -77,9 +77,9 @@ describe("credential-free RPC adapter", () => {
     expect(await client.getChainTimeNanos()).toBe("1786514400123456789");
     expect(await client.getContract("juno1contract")).toEqual({
       address: "juno1contract",
-      codeId: 5150,
+      codeId: 5155,
     });
-    expect(await client.getCodeDetails(5150)).toEqual({ checksum: "f05e" });
+    expect(await client.getCodeDetails(5155)).toEqual({ checksum: "abcd" });
     expect(
       await client.queryContractSmart("juno1contract", { pause: {} }),
     ).toEqual({ paused: false });

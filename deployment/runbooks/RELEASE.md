@@ -1,22 +1,25 @@
 # Release runbook
 
-## Current public application
+## Current deployment and release status
 
-For the deployed `juno-1` product, use the
+The v2 contracts are deployed and query-verified on `juno-1`, but no public
+frontend deployment or rollback mechanism is configured and no public trial is
+authorized. Use the
 [mainnet user-trial and release runbook](../../docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md).
-Its per-release record is authoritative for the exact production URL and web
-commit, deployed contracts/checksums, live funding checkpoint, limitations,
-approval gates, support recovery, stop conditions, and web rollback. The
-Program Vault remains unfunded unless a fresh authoritative query proves
-otherwise; no issue #37 funding or epoch rehearsal is claimed complete.
+It defines the records and approvals required before any future public frontend,
+funded use, or trial, including exact artifact provenance, deployed contract
+identities/checksums, live funding checkpoint, limitations, support recovery,
+stop conditions, and a reviewed rollback mechanism. The Program Vault remains
+unfunded unless a fresh authoritative query proves otherwise; no issue #37
+funding or epoch rehearsal is claimed complete.
 
 ## Candidate construction
 
-This process constructs a fresh v2 deployment. It does not migrate v1 state or
-preserve v1 contract addresses. Before cutover, query and record that the old
-Program Vault remains unfunded and that no old epoch is open; any unexpected
-funds or user state require a separate recovery decision rather than import
-into v2.
+This process constructs reproducible Wasm candidates; it does not publish a
+frontend or authorize a deployment. It does not migrate legacy state or preserve
+legacy contract addresses. Any future deployment or replacement must query and
+record existing balances and epochs first; unexpected funds or user state
+require a separate recovery decision rather than import into a new deployment.
 
 From a clean checkout with a clean, accepted submodule pin, run
 `scripts/build-release.sh`. It clones the repository recursively twice, checks
@@ -38,7 +41,9 @@ build and deployment config:
 - accepted upstream review and clean gitlink;
 - independent security review of bounty, registry, and changed gauge paths,
   with no unresolved critical/high finding;
-- verified `uni-7` code IDs, addresses, admins, roles, and module relationships;
+- verified compatible-target code IDs, addresses, admins, roles, and module
+  relationships, after the currently `uni-7`-bound release schemas are
+  generalized and retested;
 - all 18 end-to-end scenarios with final balances/states/events, including the
   v2 partial, retained-only, terminal-liveness, numeric-ID, source-rotation, and
   bond-transition profiles;
