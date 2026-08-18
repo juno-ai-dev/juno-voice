@@ -244,8 +244,8 @@ All transaction UX must show exact message, sender, contract, and funds before s
 
 ## 9. Prototype assumptions reconciled with backend reality
 
-- The first `app/` release read only the deployed v1 bounty contract through the
-  historical profile in section 11. The removed request ledger/ranking,
+- The first `app/` release read only the deployed v1 bounty contract through a
+  historical profile that predates the production v2 profile below. The removed request ledger/ranking,
   support/oppose voting, builder/verifier evidence, and request-bond UI are
   **not** the v2 bounty UX.
 - The prototype’s `Submit a request` sends `submission_bond`; v2 `create_bounty` sends an initial **contribution** governed by bounty min/max and expiry. Do not rename one payload into the other.
@@ -262,7 +262,7 @@ All transaction UX must show exact message, sender, contract, and funds before s
 These do not block implementing the frozen wire messages, but require a product/indexer decision before a polished UX:
 
 1. **No returned next cursor/query height on most owned lists.** Clients can safely continue from the last item, but cannot distinguish “exactly full final page” without one extra query and cannot claim snapshot consistency. Decide whether UX accepts this or a future contract revision adds cursors/heights (which would change schemas).
-2. **Derived versus explicit product states.** Product language names reset/cancelled/stopped/failed-expired states not represented by the implemented enums. This document freezes derivation for v2 UX; decide whether that is acceptable before deployment or enums must change.
+2. **Derived versus explicit product states.** Product language names reset/cancelled/stopped/failed-expired states not represented by the implemented enums. This document freezes derivation for v2 UX; decide before a public frontend release whether that remains acceptable or requires a future contract revision.
 3. **Indexer stability governance.** Events are implemented and tested in places, but there is no separately versioned event schema. This freeze treats the listed names/keys as stable. Decide whether release gates should mechanically snapshot every event attribute.
 4. **Gauge adapter direct-query shape is snapshot-specific.** The owned adapter requires concrete `epoch_budget`, `available_balance`, and `denom`, and returns `execute`, `emitted_value`, and `retained_value`. The snapshot gauge validates all three response fields and their exact budget reconciliation. Generic hook-mode callers are not a supported UX path; snapshot-only deployment remains mandatory.
 

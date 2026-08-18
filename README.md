@@ -140,9 +140,12 @@ stops the build before an artifact is uploaded. There is no automatic push-to-
 main deployment during remediation. Pull-request gates build the same v2
 identity set and never publish that test artifact.
 
-The GitHub Pages artifact is produced only by the manually dispatched v2
-packaging job. The deployed contracts must remain unfunded unless the separate
-funding authorization gates have passed.
+No public frontend is currently released. The historical `gh-pages` branch and
+its v1 artifact were retired on 2026-08-18. The manually dispatched workflow
+packages a v2 review artifact but does not publish it to GitHub Pages. Any public
+frontend release requires separate authorization and verification. The deployed
+contracts must remain unfunded unless the separate funding authorization gates
+have passed.
 
 ## Local verification
 
