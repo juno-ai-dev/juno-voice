@@ -220,7 +220,7 @@ test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
   expect(observed.requests()).toBeGreaterThan(first);
 });
 
-test("gauge route verifies the full deployment and renders live-empty safety semantics", async ({ page }) => {
+test("gauge route checks the mocked v2 identity profile and empty-state safety semantics", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
   await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Gauge", exact: true }).click();

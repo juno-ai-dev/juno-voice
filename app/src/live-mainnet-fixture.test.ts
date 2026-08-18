@@ -3,8 +3,8 @@ import { createDataSource, queries } from "./client";
 import { config } from "./test/bountyFixtures";
 import fixture from "./test/live-mainnet-empty.json";
 
-describe("live mainnet fixture contract", () => {
-  it("binds complete captured query and response shapes to verified provenance", async () => {
+describe("deterministic v2 empty-state fixture", () => {
+  it("binds complete synthetic query and response shapes to verified provenance", async () => {
     expect(fixture.provenance).toMatchObject({
       chain_id: config.chainId,
       contract_address: config.contract,
