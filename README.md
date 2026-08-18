@@ -25,13 +25,13 @@ epoch was open at deployment verification.
 
 ### Juno mainnet v2 identities
 
-| Component | Code ID | Contract address |
-|---|---:|---|
-| Juno Voice bounty | `5155` | `juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh` |
-| Hack Juno registry adapter | `5156` | `juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t` |
-| Program Vault | `5157` | `juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt` |
-| Juno-staked voting module | `5158` | `juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr` |
-| Epoch-snapshot gauge | `5159` | `juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v` |
+| Component / label | Code ID | Contract address | Wasm SHA-256 |
+|---|---:|---|---|
+| Juno Voice bounty / `juno-voice-v2-bounty` | `5155` | `juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh` | `2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa` |
+| Hack Juno registry adapter / `juno-voice-v2-registry` | `5156` | `juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t` | `513aa9264013e29c18007a85818ccfdbb1f3c4177d58cb4e13d9af3ae9d42a6a` |
+| Program Vault / `juno-voice-v2-vault` | `5157` | `juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt` | `3600206880f8f24ab867aac6b17b844b16a7b58712c5ca336a076bc13c98f2c0` |
+| Juno-staked voting module / `juno-voice-v2-voting` | `5158` | `juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr` | `1a08d78f7364ba461253a6cf71ea00d35600906a065d49702bd87ba210adacb4` |
+| Epoch-snapshot gauge / `juno-voice-v2-gauge` | `5159` | `juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v` | `b38915a07a79104768d37b109bb7c21517441a21802fec2b7a49c3fde4ae813d` |
 
 ## What v2 changes
 
