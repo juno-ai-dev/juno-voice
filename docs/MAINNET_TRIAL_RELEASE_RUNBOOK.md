@@ -5,11 +5,9 @@ summary: Safely exercise, support, stop, and evidence an independently approved 
 
 # Juno Voice mainnet user-trial and release runbook
 
-**NOT ACTIVE:** Juno Voice v2 is not deployed or authorized for a public trial.
-The historical v1 identities are quarantined and must not be substituted into
-this runbook. Activate this checklist only after fresh v2 deployment,
-independent review, signed release-manifest publication, frontend cutover, and
-separate trial authorization.
+**NOT ACTIVE:** Juno Voice v2 is deployed but is not authorized for a public
+trial or funded use. Activate this checklist only after signed release-manifest
+publication, frontend cutover, and separate trial authorization.
 
 Once activated, use this runbook for a bounded public trial on Juno mainnet and
 for first-line support. It is an operational checklist, not transaction
@@ -21,9 +19,9 @@ Never retry a pending or unknown action.
 ## 1. Fixed release identity and dynamic release record
 
 Copy these values from the independently approved v2 release manifest. Do not
-use repository history, a browser bundle, or the historical v1 deployment as
-the source of truth. Stop if the application, wallet review, manifest, explorer,
-or an independent chain query differs.
+use repository history or a browser bundle as the source of truth. Stop if the
+application, wallet review, manifest, explorer, or an independent chain query
+differs.
 
 | Item | Required value |
 |---|---|

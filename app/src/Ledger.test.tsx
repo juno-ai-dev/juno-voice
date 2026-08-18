@@ -49,7 +49,7 @@ describe("read-only bounty ledger states", () => {
       await screen.findByText("Fund community tooling"),
     ).toBeInTheDocument();
     expect(screen.getByText("juno-1")).toBeInTheDocument();
-    expect(screen.getByText("5150")).toBeInTheDocument();
+    expect(screen.getByText("5155")).toBeInTheDocument();
     expect(screen.getByText("Fully backed")).toBeInTheDocument();
     expect(screen.getAllByText("$JUNO 1").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /connect|sign|contribute/i })).not.toBeInTheDocument();

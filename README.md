@@ -13,36 +13,25 @@ budget using historical voting power.
 
 ## Security and release status
 
-Juno Voice v2 is an active security-remediation candidate. It is **not deployed
-or authorized for funded use**. The Program Vault must remain unfunded and no
-production epoch may be opened. An explicitly authorized, tightly capped canary
-is the only funded epoch permitted after the pre-canary gates in [GOAL.md](GOAL.md)
-have passed.
+Juno Voice v2 is deployed on Juno mainnet at the deterministic addresses below.
+The deployment is **not authorized for funded use**: the Program Vault must
+remain unfunded and no production epoch may be opened. An explicitly authorized,
+tightly capped canary is the only funded epoch permitted after the pre-canary
+gates in [GOAL.md](GOAL.md) have passed.
 
-The v2 release will be a fresh deployment at new deterministic addresses. No v1
-state or funds will be imported. Deployment must prove that the new bounty and
-project sets are empty, the counters are initial, there is no open epoch, and
-the old system remains empty immediately before client cutover.
+The v2 deployment started from fresh state. No prior state or funds were
+imported; the bounty and project sets were empty, counters were initial, and no
+epoch was open at deployment verification.
 
-The previously deployed v1 contracts are historical, unfunded, and quarantined
-by the current security review. Their existence is not evidence that v2 is
-ready, and they must not be funded or used to open an epoch.
+### Juno mainnet v2 identities
 
-### Historical v1 identities — do not fund or reuse for v2
-
-Status recorded on 2026-08-11:
-
-| Component | Code ID | Historical contract address |
+| Component | Code ID | Contract address |
 |---|---:|---|
-| Juno Voice bounty | `5150` | `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw` |
-| Hack Juno registry adapter | `5151` | `juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n` |
-| Program Vault | `5152` | `juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg` |
-| Juno-staked voting module | `5153` | `juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2` |
-| Epoch-snapshot gauge | `5154` | `juno1sz0m458ym24lzl3xga7j698jqq2x2mpvrjvleafzkkkxevf5x3dslwfdqn` |
-
-The historical transaction and checksum record remains in repository history
-and in the captured frontend fixtures. Those values are test/history inputs,
-not production defaults for the v2 client.
+| Juno Voice bounty | `5155` | `juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh` |
+| Hack Juno registry adapter | `5156` | `juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t` |
+| Program Vault | `5157` | `juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt` |
+| Juno-staked voting module | `5158` | `juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr` |
+| Epoch-snapshot gauge | `5159` | `juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v` |
 
 ## What v2 changes
 
@@ -137,8 +126,8 @@ git submodule update --init --recursive
 
 ## Browser client and cutover
 
-The checked-in app implements the v2 wire surface, but it has no production
-contract defaults. Startup and production builds fail closed unless all five v2
+The checked-in app implements only the v2 wire surface. Startup and production
+builds fail closed unless all five v2
 address/code-ID/checksum triples, `VITE_PROTOCOL_VERSION=v2`, and an exact
 release commit are supplied. Transaction construction and the central signing
 allowlist use the same injected bounty, registry, and gauge addresses.
@@ -148,12 +137,12 @@ variables named `V2_<COMPONENT>_CONTRACT_ADDRESS`, `V2_<COMPONENT>_CODE_ID`, and
 `V2_<COMPONENT>_CODE_CHECKSUM`, where component is `BOUNTY`, `REGISTRY`, `VAULT`,
 `VOTING`, or `GAUGE`. Missing, malformed, duplicate, or non-v2 configuration
 stops the build before an artifact is uploaded. There is no automatic push-to-
-main deployment during remediation. Pull-request gates build only a clearly
-labelled, never-published historical test fixture.
+main deployment during remediation. Pull-request gates build the same v2
+identity set and never publish that test artifact.
 
-The current GitHub Pages URL may still serve an earlier v1 artifact until an
-authorized v2 cutover is completed. Do not treat that URL as a v2 deployment or
-use it for funded actions.
+The GitHub Pages artifact is produced only by the manually dispatched v2
+packaging job. The deployed contracts must remain unfunded unless the separate
+funding authorization gates have passed.
 
 ## Local verification
 
@@ -171,8 +160,8 @@ npm run test:e2e
 ```
 
 `npm run build` and `npm run verify` additionally require a complete v2 build
-environment. Use identities exported from a reviewed deployment verification;
-never substitute the historical v1 identities for a production build. Browser
+environment. Use the identities above or identities exported from a reviewed
+deployment verification. Browser
 smoke tests use deterministic intercepted RPC responses and a test-only identity
 fixture, so they do not prove that a live RPC or deployment is healthy.
 

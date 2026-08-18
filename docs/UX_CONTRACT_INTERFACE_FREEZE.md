@@ -1,12 +1,10 @@
 # Juno Voice v2 UX contract interface freeze
 
-**Freeze baseline:** active v2 remediation candidate; exact root and accepted
-`deps/dao-contracts` commits are release inputs and remain pending.
+**Freeze baseline:** deployed v2 wire surface; exact root and accepted
+`deps/dao-contracts` commits remain release inputs.
 
-**Status:** v2 is not deployed. Funded use is blocked pending fresh deployment,
-verification, independent review, and an authorized canary. Section 11 preserves
-the quarantined historical v1 read-only profile; those identities are not v2
-defaults or valid cutover inputs.
+**Status:** v2 is deployed and independently verified. Funded use remains
+blocked pending the separate authorization and canary gates.
 
 **Audience:** wallet, frontend, explorer, and indexer implementers
 
@@ -270,12 +268,18 @@ These do not block implementing the frozen wire messages, but require a product/
 
 Until any decision produces new checked-in schemas, this commit—not aspirational prose—is the UX integration baseline.
 
-## 11. Historical first production read-only bounty ledger profile
+## 11. Production v2 identity profile
 
-The first production UI slice was strictly read-only and pinned to Juno mainnet contract `juno1jmngxh7kdelch3v5xu02ze2gup887v55csqns4qmxeskgy2ldl5qj494qw`, Code ID `5150`, checksum `f05e9eaf3f90c7a5273bea3e8db8ff570b4f9192a4032472865cd4293b49bce1`. This v1 identity is quarantined historical evidence: it must not be funded, imported, or used as a v2 client default.
+The production client is pinned to the five verified Juno mainnet v2
+address/code-ID/checksum triples documented in the repository `README.md` and
+provided through the fail-closed build environment. There is no legacy identity
+fallback or runtime compatibility path.
 
-After verifying chain ID, contract address, Code ID, and wasm checksum, clients query `config {}`, `pause {}`, `health {}`, the first `bounties { start_after: null, limit: 50 }` page, and an independent observation height concurrently. Bounty pages are ascending by numeric `id`; a full page requires another query with `start_after` equal to the last ID, including an extra empty query for an exactly full final page. Repeated or non-increasing IDs are invalid. Contract pages have no observation height and are weakly consistent. Amounts and CosmWasm timestamps remain decimal strings and clients must parse them with arbitrary-precision integers.
-
-That historical production slice contained no wallet, signing, execute, admin,
-registry, gauge, sample, or fallback-data path. This is not the current frontend
-feature boundary.
+After verifying chain ID, contract addresses, Code IDs, and wasm checksums,
+clients query the bounded v2 bounty, registry, Vault, voting, and gauge surfaces.
+Bounty pages are ascending by numeric `id`; a full page requires another query
+with `start_after` equal to the last ID, including an extra empty query for an
+exactly full final page. Repeated or non-increasing IDs are invalid. Contract
+pages have no observation height and are weakly consistent. Amounts and
+CosmWasm timestamps remain decimal strings and clients must parse them with
+arbitrary-precision integers.

@@ -90,9 +90,9 @@ The browser client is also cutover-gated. Production startup/build requires:
 - an exact release commit.
 
 Transaction intents and the central signer allowlist use those injected
-identities. The historical v1 values survive only in captured test fixtures and
-cannot become production defaults accidentally. The manually dispatched Pages
-packaging job reads the eventual v2 identities from protected repository
+identities. Frontend examples, CI, and test fixtures use only the verified v2
+identity set. The manually dispatched Pages packaging job reads the v2
+identities from protected repository
 variables and fails before upload when any value is absent or malformed. Pushes
 to `main` cannot deploy during remediation.
 

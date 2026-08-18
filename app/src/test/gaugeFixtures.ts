@@ -12,8 +12,8 @@ export const priorEpoch = {
   selectedProjectPower: "400", emittedValue: "8000000", retainedValue: "2000000", outcome: "distributed", messageCount: 1,
 } as const;
 export const gaugeData: GaugeData = {
-  config: { owner: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", daoCore: "juno19uup47y5refnvl3qvq6kygcmuh2urgs40ty6kg32v9pgkpqsadasegg9jg", votingPowers: "juno1r6z5a6xggxsxgycv747e36td50pcpjf6vf9mpqrgnx4yeqnvzrtqwsjel2", guardian: voter },
-  gauge: { id: 0, title: "Hack Juno", adapter: "juno1pg3vxw74jdwyp9w8kzsjec87lkdfyrztvqnuyp3anyevyette7cq0p377n", epochSize: 1000, minPercentSelected: "0.01", maxOptionsSelected: 10, maxAvailablePercentage: "0.5", isStopped: false, nextEpoch: 3000, currentEpoch: 2, snapshotPolicy: { minTurnoutBps: 2000, epochBudget: "10000000", denom: "ujuno", retainedOption: "do-not-distribute", executionWindowSeconds: 1000 } },
+  config: { owner: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", daoCore: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", votingPowers: "juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr", guardian: voter },
+  gauge: { id: 0, title: "Hack Juno", adapter: "juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t", epochSize: 1000, minPercentSelected: "0.01", maxOptionsSelected: 10, maxAvailablePercentage: "0.5", isStopped: false, nextEpoch: 3000, currentEpoch: 2, snapshotPolicy: { minTurnoutBps: 2000, epochBudget: "10000000", denom: "ujuno", retainedOption: "do-not-distribute", executionWindowSeconds: 1000 } },
   epochs: [priorEpoch, openEpoch], current: openEpoch, previous: priorEpoch,
   options: [{ option: "do-not-distribute", power: "100" }, { option: "project:1", power: "300" }],
   previousOptions: [{ option: "do-not-distribute", power: "0" }, { option: "project:1", power: "400" }],

@@ -2,13 +2,13 @@
 
 ## V2 release boundary
 
-Juno Voice v2 is not deployed or authorized for funded use. The release is a
-fresh deployment with new identities and no v1 import. Deployment verification
-must prove initial empty state and old/new address separation before the client
+Juno Voice v2 is deployed but is not authorized for funded use. The release is
+a fresh deployment with new identities and no prior-state import. Deployment
+verification proved initial empty state and address separation before the client
 is configured or cut over.
 
-The new Program Vault must remain unfunded until the independent review and
-pre-canary gates pass. Agent funds must not be used. Proposal preparation,
+The new Program Vault must remain unfunded until the pre-canary gates pass.
+Agent funds must not be used. Proposal preparation,
 proposal submission, deposit, signing, upload, instantiate, broadcast, frontend
 cutover, and every follow-up transaction require their own authorization.
 Release documentation and read-only evidence authorize none of those actions.
@@ -18,7 +18,7 @@ Release documentation and read-only evidence authorize none of those actions.
 The tooling below assembles and validates an exact-artifact candidate packet.
 The checked-in `uni-7` configuration remains unusable until its `ujunox`/`ujuno`
 denomination mismatch is resolved or another compatible target is selected.
-Nothing here establishes a mainnet deployment, funding, or canary.
+Nothing here authorizes mainnet funding or a canary.
 
 `REQUIREMENTS_TRACEABILITY.md` maps each goal workstream and hard work bound to
 its direct test or external completion gate. `READINESS_AUDIT.md` is the concise

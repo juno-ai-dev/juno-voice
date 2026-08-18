@@ -1,7 +1,7 @@
 # Juno Voice product behavior
 
-**Status:** Accepted Juno Voice v2 candidate behavior. V2 is not deployed;
-funded use remains blocked pending fresh deployment, review, and canary gates.
+**Status:** Accepted and deployed Juno Voice v2 behavior. Funded use remains
+blocked pending the separate authorization and canary gates.
 
 **Implementation scope:** [GOAL.md](../../GOAL.md) specifies the remediation and
 release gates. The current [`app/`](../../app/) implements the v2 bounty,
