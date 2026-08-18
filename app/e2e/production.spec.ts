@@ -8,7 +8,7 @@ import {
   QuerySmartContractStateResponse,
 } from "cosmjs-types/cosmwasm/wasm/v1/query.js";
 import { QueryBalanceResponse } from "cosmjs-types/cosmos/bank/v1beta1/query.js";
-import fixture from "../src/test/live-mainnet-empty.json" with { type: "json" };
+import fixture from "../src/test/v2-empty-state.json" with { type: "json" };
 import { TEST_DEPLOYMENT_ENV } from "../src/test/deployment";
 
 const rpc = TEST_DEPLOYMENT_ENV.VITE_RPC_URL;

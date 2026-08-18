@@ -38,27 +38,30 @@ No historical identity is inferred from a repository default.
 Typical operator flow:
 
 ```sh
-python3 deployment/juno_voice_deploy.py \
-  --config deployment/environments/uni-7.json validate
+export TARGET_CONFIG=/secure-work/juno-voice/target.json
+export TARGET_STATE_DIR=/secure-work/juno-voice/target
 
 python3 deployment/juno_voice_deploy.py \
-  --config deployment/environments/uni-7.json preflight \
-  --output /secure-work/juno-voice/uni-7/preflight.json
+  --config "$TARGET_CONFIG" validate
 
 python3 deployment/juno_voice_deploy.py \
-  --config deployment/environments/uni-7.json \
-  plan --state /secure-work/juno-voice/uni-7/state.json \
-  --output /secure-work/juno-voice/uni-7/plan.json
+  --config "$TARGET_CONFIG" preflight \
+  --output "$TARGET_STATE_DIR/preflight.json"
+
+python3 deployment/juno_voice_deploy.py \
+  --config "$TARGET_CONFIG" \
+  plan --state "$TARGET_STATE_DIR/state.json" \
+  --output "$TARGET_STATE_DIR/plan.json"
 
 # Inspect and sign off the exact plan, then broadcast exactly one step.
 python3 deployment/juno_voice_deploy.py \
-  --config deployment/environments/uni-7.json \
-  apply-next --state /secure-work/juno-voice/uni-7/state.json --yes
+  --config "$TARGET_CONFIG" \
+  apply-next --state "$TARGET_STATE_DIR/state.json" --yes
 
 python3 deployment/juno_voice_deploy.py \
-  --config deployment/environments/uni-7.json \
-  verify --state /secure-work/juno-voice/uni-7/state.json \
-  --output /secure-work/juno-voice/uni-7/verification.json
+  --config "$TARGET_CONFIG" \
+  verify --state "$TARGET_STATE_DIR/state.json" \
+  --output "$TARGET_STATE_DIR/verification.json"
 ```
 
 Keep mutable plan, state, preflight, and verification files outside the source

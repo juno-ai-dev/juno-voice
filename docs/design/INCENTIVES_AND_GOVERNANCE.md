@@ -513,7 +513,7 @@ The gauge UI must display snapshot height, total snapshot power, participating p
 - Instantiate the Program Vault with Juno `x/gov` as external admin and no independent policy proposal lane.
 - Configure the Program Vault core as application governor and the reviewed Agent Operations DAO as curator and one-way safety guardian.
 - Launch native-JUNO bounties with low value limits.
-- Exercise creation, multiple contributors, yes/no/tie/no-vote finalization, reset, expiry, moderation, payout failure, and pull refunds on `uni-7`.
+- Exercise creation, multiple contributors, yes/no/tie/no-vote finalization, reset, expiry, moderation, payout failure, and pull refunds on an authorized Juno-compatible target with exact `ujuno` staking/funding denomination.
 
 This phase delivers incentives immediately without waiting for recurring gauge rewards.
 

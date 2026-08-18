@@ -16,9 +16,19 @@ Release documentation and read-only evidence authorize none of those actions.
 ## V2 testnet evidence tooling
 
 The tooling below assembles and validates an exact-artifact candidate packet.
-The checked-in `uni-7` configuration remains unusable until its `ujunox`/`ujuno`
-denomination mismatch is resolved or another compatible target is selected.
+No deployable target configuration is checked in. The historical `uni-7`
+registry profile uses `ujunox` and is incompatible with v2's exact `ujuno`
+configuration. The release schemas and validator still require chain ID `uni-7`
+and must be generalized and retested before a separately reviewed compatible
+target can be used. Until then, the testnet evidence tooling is blocked.
 Nothing here authorizes mainnet funding or a canary.
+
+After that tooling gate is closed, the command examples below assume:
+
+```sh
+export TARGET_CONFIG=/secure-work/juno-voice/target.json
+export TARGET_STATE_DIR=/secure-work/juno-voice/target
+```
 
 `REQUIREMENTS_TRACEABILITY.md` maps each goal workstream and hard work bound to
 its direct test or external completion gate. `READINESS_AUDIT.md` is the concise
@@ -79,13 +89,13 @@ Capture a native staking change and a named historical-power observation:
 
 ```sh
 python3 release/capture_release_evidence.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/delegate.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/delegate.json" \
   staking-change --tx-hash "$TX_HASH" --kind delegate --voter "$VOTER"
 
 python3 release/capture_release_evidence.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/first-total-after.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/first-total-after.json" \
   smart-query --contract voting_module --query-file /secure-work/query.json \
   --height 123456 --name first_total_after_change
 ```
@@ -101,14 +111,14 @@ rehearsal case:
 
 ```sh
 python3 release/capture_release_evidence.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/canary-7.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/canary-7.json" \
   canary-epoch --tx-hash "$TX_HASH" --gauge-id 0 --epoch-id 7 \
   --snapshot-height 123400 --distributed-value 1000 --query-height 123460
 
 python3 release/capture_release_evidence.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/adapter-failure-transactions.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/adapter-failure-transactions.json" \
   rehearsal-transactions --case adapter_failure \
   --transaction "${SUCCESS_TX}:0" --transaction "${REJECTED_TX}:5"
 ```
@@ -127,9 +137,9 @@ reviewer will declare they reviewed:
 
 ```sh
 python3 release/gas_report.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/gas-report-payload.json \
-  prepare --gas-input /secure-work/juno-voice/uni-7/gas-input.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/gas-report-payload.json" \
+  prepare --gas-input "$TARGET_STATE_DIR/gas-input.json" \
   --measured-by testnet-gas-operator \
   --reviewed-by independent-gas-reviewer \
   --measured-at 2026-08-05T00:00:00Z \
@@ -145,12 +155,12 @@ different new external file:
 
 ```sh
 python3 release/gas_report.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/gas-report.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/gas-report.json" \
   finalize \
-  --payload /secure-work/juno-voice/uni-7/gas-report-payload.json \
-  --declaration /secure-work/juno-voice/uni-7/measurer-declaration.json \
-  --declaration /secure-work/juno-voice/uni-7/reviewer-declaration.json
+  --payload "$TARGET_STATE_DIR/gas-report-payload.json" \
+  --declaration "$TARGET_STATE_DIR/measurer-declaration.json" \
+  --declaration "$TARGET_STATE_DIR/reviewer-declaration.json"
 ```
 
 Copy only the finalized report into the reviewed evidence packet and bind its
@@ -172,9 +182,9 @@ snapshot, gas record/report, canary, runbook, or rehearsal:
 
 ```sh
 python3 release/release_decision.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/release-decision-payload.json \
-  prepare --evidence /secure-work/juno-voice/uni-7/evidence-candidate.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/release-decision-payload.json" \
+  prepare --evidence "$TARGET_STATE_DIR/evidence-candidate.json" \
   --decided-at 2026-08-05T02:00:00Z
 ```
 
@@ -193,15 +203,15 @@ to authorize this release; it must match the record identity and is passed to
 
 ```sh
 python3 release/release_decision.py \
-  --config deployment/environments/uni-7.json \
-  --output /secure-work/juno-voice/uni-7/release-decision.json \
+  --config "$TARGET_CONFIG" \
+  --output "$TARGET_STATE_DIR/release-decision.json" \
   finalize \
-  --payload /secure-work/juno-voice/uni-7/release-decision-payload.json \
-  --declaration /secure-work/juno-voice/uni-7/maintainer-one.json \
-  --declaration /secure-work/juno-voice/uni-7/maintainer-two.json \
-  --declaration /secure-work/juno-voice/uni-7/security-reviewer.json \
-  --declaration /secure-work/juno-voice/uni-7/operations-reviewer.json \
-  --authorization /secure-work/juno-voice/uni-7/release-authorization.json \
+  --payload "$TARGET_STATE_DIR/release-decision-payload.json" \
+  --declaration "$TARGET_STATE_DIR/maintainer-one.json" \
+  --declaration "$TARGET_STATE_DIR/maintainer-two.json" \
+  --declaration "$TARGET_STATE_DIR/security-reviewer.json" \
+  --declaration "$TARGET_STATE_DIR/operations-reviewer.json" \
+  --authorization "$TARGET_STATE_DIR/release-authorization.json" \
   --allowed-signers /secure-work/juno-voice/release-trusted-signers \
   --authorization-principal release-authority
 ```
@@ -219,8 +229,8 @@ Validate a checked-in evidence packet:
 
 ```sh
 python3 release/release_manifest.py validate-evidence \
-  --config deployment/environments/uni-7.json \
-  --evidence release/evidence/uni-7-v2.json \
+  --config "$TARGET_CONFIG" \
+  --evidence release/evidence/target-v2.json \
   --allowed-signers /secure-work/juno-voice/release-trusted-signers \
   --authorization-principal release-authority
 ```
@@ -230,11 +240,11 @@ verification and every external gate are complete:
 
 ```sh
 python3 release/release_manifest.py generate \
-  --config deployment/environments/uni-7.json \
-  --state /secure-work/juno-voice/uni-7/state.json \
-  --verification deployment/evidence/uni-7-verification.json \
+  --config "$TARGET_CONFIG" \
+  --state "$TARGET_STATE_DIR/state.json" \
+  --verification deployment/evidence/target-verification.json \
   --build artifacts/v2/build-manifest.json \
-  --evidence release/evidence/uni-7-v2.json \
+  --evidence release/evidence/target-v2.json \
   --allowed-signers /secure-work/juno-voice/release-trusted-signers \
   --authorization-principal release-authority \
   --output artifacts/v2/release-manifest.json

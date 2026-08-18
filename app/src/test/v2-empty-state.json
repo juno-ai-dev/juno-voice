@@ -5,7 +5,7 @@
     "code_id": 5155,
     "checksum": "2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa",
     "observation_height": 40746625,
-    "purpose": "deterministic accepted-v2 empty-state fixture derived from Phase 2A verification; never runtime or fallback data"
+    "purpose": "synthetic deterministic empty-state responses shaped from accepted v2 policy and identities; not a live capture, chain evidence, runtime input, or fallback"
   },
   "queries": {
     "config": {

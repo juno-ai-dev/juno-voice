@@ -41,7 +41,9 @@ build and deployment config:
 - accepted upstream review and clean gitlink;
 - independent security review of bounty, registry, and changed gauge paths,
   with no unresolved critical/high finding;
-- verified `uni-7` code IDs, addresses, admins, roles, and module relationships;
+- verified compatible-target code IDs, addresses, admins, roles, and module
+  relationships, after the currently `uni-7`-bound release schemas are
+  generalized and retested;
 - all 18 end-to-end scenarios with final balances/states/events, including the
   v2 partial, retained-only, terminal-liveness, numeric-ID, source-rotation, and
   bond-transition profiles;

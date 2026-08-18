@@ -22,7 +22,7 @@ manifest, and reconciled low-value canary gates.
 
 | Requirement | Status | Current evidence / remaining gate |
 |---|---|---|
-| JV-01 partial-ballot denominator and retained accounting | Locally demonstrated | Gauge tests use participating power independently from allocated power, preserve retained-option and unallocated power, and reconcile emitted plus retained value. Upstream acceptance and chain evidence remain open. |
+| JV-01 partial-ballot denominator and retained accounting | Merged; behavioral evidence open | Gauge tests use participating power independently from allocated power, preserve retained-option and unallocated power, and reconcile emitted plus retained value. The upstream patch is merged and cleanly pinned; funded target-chain behavioral evidence remains open. |
 | JV-02 fully funded opening and bounded terminal liveness | Locally demonstrated | Open checks the full fixed budget; execution requires only emitted value; insufficient funds, expiry, and governor abort are terminal and tested. Live funded/underfunded/expired/aborted transcripts remain open. |
 | JV-03 registry-assigned numeric identity | Locally demonstrated | Numeric monotonic IDs, canonical `project:<id>` options, chain-execution ordering, failure rollback, pagination, typed responses, and loud rejection of legacy caller-chosen IDs are covered locally. Fresh-chain registration/graduation evidence remains open. |
 | JV-04 source-namespaced graduation replay | Locally demonstrated | Provenance and replay keys bind source contract plus bounty ID; source replacement behavior is tested. Live rotation evidence remains open. |

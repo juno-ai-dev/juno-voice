@@ -46,7 +46,7 @@ Abstaining does not become an implicit yes. There is no early majority shortcut 
 
 ### Project
 
-A project has a stable project ID, metadata digest, payout address, admission path, status, and status history. A graduated bounty can create or link a project without a registration bond. An existing project may apply with a refundable anti-spam bond.
+A project has a stable project ID, metadata digest, payout address, admission path, status, and status history. A graduated bounty creates a new registry-assigned project without a registration bond; linking graduation to an existing project is unsupported. An existing project may apply for a new registry entry with a refundable anti-spam bond.
 
 Only active projects appear as gauge options. Suspension removes an option from future resolution without rewriting earlier epochs. Payout-address changes use an explicit delay so stakers can see where an allocation will be sent.
 
@@ -78,7 +78,7 @@ The Agent Operations DAO can hide spam from curated discovery or stop unsafe ent
 ### Graduate a project
 
 1. A bounty pays successfully.
-2. The Agent Operations DAO checks the public graduation policy and registers or links the project.
+2. The Agent Operations DAO checks the public graduation policy and registers a new project; it cannot link graduation to an existing project.
 3. The registry gives the project a stable ID and records provenance from the bounty.
 4. The project becomes eligible for a later gauge epoch when included in that epoch's fixed option set.
 

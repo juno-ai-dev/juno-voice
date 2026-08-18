@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDataSource, queries } from "./client";
 import { config } from "./test/bountyFixtures";
-import fixture from "./test/live-mainnet-empty.json";
+import fixture from "./test/v2-empty-state.json";
 
 describe("deterministic v2 empty-state fixture", () => {
   it("binds complete synthetic query and response shapes to verified provenance", async () => {

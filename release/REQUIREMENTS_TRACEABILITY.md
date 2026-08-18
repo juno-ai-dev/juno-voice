@@ -50,7 +50,7 @@ release decision remains the fail-closed validator in `release_manifest.py`.
 | Guardian stop-only and governor resume/update | Separate authenticated stop and owner-only resume; open epoch locks selection config | `snapshot_mode_rejects_hooks_and_guardian_can_stop_but_not_resume`, `snapshot_policy_updates_are_future_only_and_selection_config_locks_while_open` | Local |
 | Option, selected-set, hook, message, and arithmetic bounds | Gauge/options/messages/hook inputs use hard caps and lookahead rejection | `snapshot_open_and_execution_enforce_option_and_message_bounds_atomically`, `attachment_accepts_one_hundred_options_and_rejects_lookahead_101_atomically`, `execution_rejects_overlong_adapter_message_list_without_advancing_epoch`, `power_hooks_reject_oversized_batches_before_mutating_state`, `power_change_votes_enforces_complete_iteration_boundary` | Local |
 | Adapter failure, status change between vote/execution, and atomic rollback | Adapter is queried at execution; state commits follow fallible external reads | `adapter_failure_leaves_epoch_open_and_cleanup_makes_bounded_progress`, `suspended_project_between_ballot_and_execution_receives_nothing` | Local |
-| Upstream acceptance, full upstream checks, clean gitlink, and manifest commit binding | The complete locked upstream workspace test run passes locally (1,350 passed, 10 ignored), and the affected gauge/interface/adapter crates also pass formatting and strict no-dependency clippy. The remediation changes remain a dirty local submodule worktree: they must be reviewed and committed upstream, then the parent must advance to that exact clean gitlink. Release validation requires a signed upstream attestation binding repository, immutable commit, review URL, acceptor, and acceptance time | Clean pinned CI, upstream commit/review, clean gitlink, and signed attestation remain Gate inputs | Gate |
+| Upstream acceptance, full upstream checks, clean gitlink, and manifest commit binding | The complete locked upstream workspace test run passes locally (1,350 passed, 10 ignored), and the affected gauge/interface/adapter crates also pass formatting and strict no-dependency clippy. The remediation is merged through `juno-ai-dev/dao-contracts#7`, and the parent cleanly pins immutable commit `d39094eea29a3642cfa0306fc34507ef2b07dd72`. Release validation still requires a signed upstream attestation binding repository, immutable commit, review URL, acceptor, and acceptance time | Clean pin and upstream merge are complete; signed acceptance attestation remains a Gate input | Local + Gate |
 
 ## Bounded-work inventory
 
@@ -83,16 +83,17 @@ release decision remains the fail-closed validator in `release_manifest.py`.
 
 ## Remaining completion gates
 
-1. Select an authorized Juno-compatible testnet whose native staking/funding
+1. Generalize and retest the currently `uni-7`-bound release schemas, then select
+   an authorized Juno-compatible testnet whose native staking/funding
    denomination matches the exact v2 `ujuno` configuration.
-2. Commit and independently review the upstream remediation, advance the clean
-   parent gitlink, run full pinned upstream checks, and record the signed
-   acceptance attestation.
+2. Record the signed acceptance attestation for merged upstream remediation
+   commit `d39094eea29a3642cfa0306fc34507ef2b07dd72` and its review; the clean parent
+   gitlink and pinned checks are complete.
 3. Run the two-clean-clone deterministic build and publish its exact artifacts
    and build manifest.
 4. Complete an independent security review and resolve/disposition its findings.
-5. Obtain deployment authority, bind the reviewed Agent Operations DAO, and
-   produce the query-confirmed fresh-v2 deployment and old/new cutover record.
+5. Preserve the completed query-confirmed fresh-v2 deployment and old/new
+   cutover evidence in the signed release packet; deployment itself is complete.
 6. Capture all 18 exact-artifact public-testnet scenarios, Juno snapshot and
    retention behavior, and all seven configured-maximum gas cases.
 7. Complete the six operational rehearsals, two positive low-value canary
