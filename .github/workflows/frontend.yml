@@ -70,8 +70,8 @@ jobs:
       - name: Browser smoke (provenance, states, retry, refresh)
         run: npm run test:e2e
 
-  pages-artifact:
-    name: Package explicitly approved v2 artifact
+  review-artifact:
+    name: Package v2 review artifact
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: gates
     runs-on: ubuntu-24.04
@@ -80,8 +80,6 @@ jobs:
     steps:
       - name: Checkout exact main source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Install Node.js 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -113,23 +111,10 @@ jobs:
           npm ci
           npm run build
           npm run check:production
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+      - name: Upload non-deployed review artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
+          name: juno-voice-v2-review-${{ github.sha }}
           path: app/dist
-
-  deploy:
-    name: Deploy explicitly approved v2 artifact to Pages
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: pages-artifact
-    runs-on: ubuntu-24.04
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy immutable Pages artifact
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+          if-no-files-found: error
+          retention-days: 14

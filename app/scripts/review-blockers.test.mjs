@@ -15,7 +15,7 @@ test("full-tree and production dependency audits are enforced locally and in CI"
   assert.match(workflow, /Production dependency audit[\s\S]*npm run audit:production/);
 });
 
-test("browser smoke builds and exercises the deployable Pages artifact", async () => {
+test("browser smoke builds and exercises the packaged review artifact", async () => {
   const config = await read("playwright.config.ts");
   const spec = await read("e2e/production.spec.ts");
 
@@ -32,7 +32,10 @@ test("browser smoke builds and exercises the deployable Pages artifact", async (
 test("production packaging is manual and requires the complete v2 deployment identity", async () => {
   const workflow = await read("../.github/workflows/frontend.yml");
   assert.doesNotMatch(workflow, /\n {2}push:/);
-  assert.match(workflow, /pages-artifact:[\s\S]*github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /review-artifact:[\s\S]*github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /actions\/upload-artifact@/);
+  assert.doesNotMatch(workflow, /actions\/(?:configure|deploy|upload)-pages/);
+  assert.doesNotMatch(workflow, /pages:\s*write/);
   assert.match(workflow, /VITE_PROTOCOL_VERSION:\s*v2/);
   for (const component of ["BOUNTY", "REGISTRY", "VAULT", "VOTING", "GAUGE"]) {
     assert.match(workflow, new RegExp(`vars\\.V2_${component}_CONTRACT_ADDRESS`));
