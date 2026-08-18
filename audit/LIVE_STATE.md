@@ -1,5 +1,10 @@
 # Point-in-time Juno mainnet state
 
+> **Historical v1 audit evidence — not active deployment configuration.** This
+> record is retained to preserve the 2026-08-12 security-audit observation. The
+> current v2 identities are documented in `README.md`; no runtime, build, or test
+> path reads identities from this file.
+
 This is a read-only observation used to bound the impact of the audit findings.
 It is not a promise about current state after the observation time.
 
@@ -43,11 +48,12 @@ review. It does not make JV-01 safe once the Vault is funded.
 | Epoch ceiling | 1,000,000,000 `ujuno` |
 | Active-project capacity | 99 |
 
-## Deployed identity verification
+## Historical v1 identity verification
 
 All five contract code IDs, SHA-256 code checksums, creators, and administrators
-were queried directly. Checksums matched `README.md` and
-`docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md`. Every contract administrator was the
+were queried directly. At the observation time, checksums matched the then-current
+`README.md` and `docs/MAINNET_TRIAL_RELEASE_RUNBOOK.md`. Every contract
+administrator was the
 documented Juno governance module account
 `juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730`.
 
@@ -59,8 +65,9 @@ documented Juno governance module account
 | Voting module | 5153 | `2f336e39f9c05ad57c972eb3a51ce58ba0afaeb5944ff337d68e67644f1dad64` |
 | Gauge | 5154 | `524d5728994950bccb471ed586d2726f3594157fafccd484aa3c0c3012e8794f` |
 
-## Immediate operational constraint
+## Constraint recorded with the observation
 
-Keep the Vault unfunded and do not open an epoch. Re-query the Vault balance,
-current epoch, gauge stop state, registry options, code identities, and admins
-immediately before any v2 deployment or client-cutover transaction.
+The audit required the historical Vault to remain unfunded and required a fresh
+query before any v2 deployment or client-cutover transaction. That deployment
+has since occurred; current funded-use and public-trial gates are documented in
+`README.md` and `release/READINESS_AUDIT.md`.
