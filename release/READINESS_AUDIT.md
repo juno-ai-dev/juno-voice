@@ -94,10 +94,10 @@ The browser client is also cutover-gated. Production startup/build requires:
 
 Transaction intents and the central signer allowlist use those injected
 identities. Frontend examples, CI, and test fixtures use only the verified v2
-identity set. The manually dispatched Pages packaging job reads the v2
-identities from protected repository
-variables and fails before upload when any value is absent or malformed. Pushes
-to `main` cannot deploy during remediation.
+identity set. The manually dispatched review-artifact packaging job reads the v2
+identities from protected repository variables and fails before upload when any
+value is absent or malformed. It has no Pages actions or deployment permissions;
+pushes to `main` cannot deploy during remediation.
 
 ## Funded-use evidence blocker
 

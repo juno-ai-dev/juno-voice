@@ -132,11 +132,11 @@ address/code-ID/checksum triples, `VITE_PROTOCOL_VERSION=v2`, and an exact
 release commit are supplied. Transaction construction and the central signing
 allowlist use the same injected bounty, registry, and gauge addresses.
 
-The manually dispatched Pages packaging job reads the public deployment identities from repository
+The manually dispatched review-artifact packaging job reads the deployment identities from repository
 variables named `V2_<COMPONENT>_CONTRACT_ADDRESS`, `V2_<COMPONENT>_CODE_ID`, and
 `V2_<COMPONENT>_CODE_CHECKSUM`, where component is `BOUNTY`, `REGISTRY`, `VAULT`,
 `VOTING`, or `GAUGE`. Missing, malformed, duplicate, or non-v2 configuration
-stops the build before an artifact is uploaded. There is no automatic push-to-
+stops the build before a review artifact is uploaded. There is no automatic push-to-
 main deployment during remediation. Pull-request gates build the same v2
 identity set and never publish that test artifact.
 

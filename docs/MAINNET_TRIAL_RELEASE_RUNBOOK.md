@@ -271,11 +271,12 @@ deposit, authority, funding-source, or approval mismatch.
 
 ### Rollback
 
-A web release rollback is a reviewed revert of `main` to the last known good
-commit followed by the configured Pages workflow. Do not rely on that path until
-Actions and repository protections have been verified live; as of 2026-08-12,
-Actions dispatch was disabled for this user and `main` was unprotected. Record
-old/new commits, workflow URL, reason, and post-deploy provenance checks.
+No public frontend deployment or rollback mechanism is currently configured.
+Before authorizing a public release, define and review both the deployment and
+rollback procedures, verify Actions and repository protections live, and require
+exact release-commit provenance. A future rollback must restore a reviewed,
+known-good artifact through that approved mechanism and record old/new commits,
+the release-system URL, reason, and post-deploy provenance checks.
 **Frontend rollback does
 not revert chain state.** Never compensate, migrate, resubmit, redirect, top up,
 or manually pay as a “rollback.” Preserve on-chain state and use the narrow stop
