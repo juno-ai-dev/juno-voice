@@ -34,10 +34,11 @@ Use five principal components:
 
 Do **not** create a DAO core for every bounty. A bounty needs a dynamic escrow ledger and a single temporary yes/no decision. A per-bounty DAO would require a core, CW4 group, voting module, and proposal module, introduce asynchronous membership synchronization, and leave large amounts of disposable governance state. The bounty contract can implement the exact rule in a few bounded state transitions. DAO DAO remains valuable as the `x/gov`-controlled program execution shell and for agent operations, not as a second sovereign government over Juno stakers.
 
-V2 is the security-remediated production candidate. The checked-in legacy
-non-binding request contract is a prototype, not a migration input. The current
-browser client implements the v2 wire surface but remains undeployable until it
-is bound to verified fresh-deployment identities.
+V2 is the deployed, security-remediated composition. The checked-in legacy
+non-binding request contract is a prototype, not a migration input. The browser
+client is bound to the verified fresh-deployment identities and fails closed on
+any mismatch. Publishing a public artifact, funded use, and a public trial remain
+separately gated.
 
 ## 1. Design goals
 
@@ -162,7 +163,7 @@ A creator calls `CreateBounty` with:
 
 The attached amount must meet the minimum bounty amount. It is the creator's first contribution, not a separate submission bond. The specification and expiry become immutable. Material changes require a new bounty so contributors never fund a moving target.
 
-V1 should accept only native `ujuno`. A single-denomination escrow keeps contribution weights, refunds, and voting power identical and auditable. CW20 or cross-denomination bounties can be a later protocol version.
+V2 accepts only native `ujuno`. A single-denomination escrow keeps contribution weights, refunds, and voting power identical and auditable. CW20 or cross-denomination bounties can be a later protocol version.
 
 ### 3.2 Contributions
 
