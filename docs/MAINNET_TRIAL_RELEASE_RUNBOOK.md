@@ -27,11 +27,11 @@ differs.
 |---|---|
 | Chain / native denomination | `juno-1` / `ujuno` |
 | Production URL | `[REQUIRED FROM APPROVED CUTOVER RECORD]` |
-| Bounty, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
-| Registry, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
-| Program Vault, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
-| Voting module, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
-| Gauge, Code ID, SHA-256 | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
+| Bounty, Code ID, SHA-256 | `juno1r4j8cpvd4e0t8p2hgyvnk5q2s2y8dpqd99ltymtkq99qq2j40waqph80dh` / `5155` / `2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa` |
+| Registry, Code ID, SHA-256 | `juno1f55krdtt936k9d5vel043gpe4axqyq7ysgk59j25ev0lxlzwkvxqsswx4t` / `5156` / `513aa9264013e29c18007a85818ccfdbb1f3c4177d58cb4e13d9af3ae9d42a6a` |
+| Program Vault, Code ID, SHA-256 | `juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt` / `5157` / `3600206880f8f24ab867aac6b17b844b16a7b58712c5ca336a076bc13c98f2c0` |
+| Voting module, Code ID, SHA-256 | `juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr` / `5158` / `1a08d78f7364ba461253a6cf71ea00d35600906a065d49702bd87ba210adacb4` |
+| Gauge, Code ID, SHA-256 | `juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v` / `5159` / `b38915a07a79104768d37b109bb7c21517441a21802fec2b7a49c3fde4ae813d` |
 | Deployment source commit | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
 | `dao-contracts` source commit | `[REQUIRED FROM V2 RELEASE MANIFEST]` |
 | Release-manifest hash/signature | `[REQUIRED AND INDEPENDENTLY VERIFIED]` |

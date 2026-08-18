@@ -228,7 +228,7 @@ describe("mainnet bounty client", () => {
       (rpc: ReturnType<typeof base>) =>
         rpc.getContract.mockResolvedValue({
           address: config.contract,
-          codeId: 5149,
+          codeId: 9999,
         }),
     ],
     [

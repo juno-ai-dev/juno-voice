@@ -168,7 +168,7 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
   return { requests: () => requests };
 }
 
-test("configured juno-1 artifact proves provenance and renders authoritative live-empty state", async ({ page }) => {
+test("configured juno-1 artifact proves provenance and renders accepted-v2 empty state", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
   await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();

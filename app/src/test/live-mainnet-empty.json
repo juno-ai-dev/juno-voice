@@ -5,7 +5,7 @@
     "code_id": 5155,
     "checksum": "2d8265a9ce58d1057da3cea3b06c80d8dd89acf066e44073dd09008b3cd44ffa",
     "observation_height": 40746625,
-    "purpose": "test-only verified v2 live-empty capture; never runtime or fallback data"
+    "purpose": "deterministic accepted-v2 empty-state fixture derived from Phase 2A verification; never runtime or fallback data"
   },
   "queries": {
     "config": {
@@ -52,7 +52,7 @@
       "paused": false,
       "reason": null,
       "actor": null,
-      "changed_at": "1786489623553137306"
+      "changed_at": null
     },
     "health": {
       "accounting": {

@@ -13,8 +13,8 @@ vi.mock("@cosmjs/cosmwasm-stargate", () => ({
 const sender = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
 const digest = `sha256:${"a".repeat(64)}`;
 const registryData = {
-  config: { native_denom: "ujuno", registration_bond: "1000000", max_active_projects: 99,
-    max_metadata_uri_bytes: 512, max_page_limit: 50, max_reason_bytes: 500,
+  config: { native_denom: "ujuno", registration_bond: "100000000", max_active_projects: 99,
+    max_metadata_uri_bytes: 512, max_page_limit: 100, max_reason_bytes: 2048,
     payout_address_delay_seconds: 86400, curator: sender, governor: sender, version: 1 },
   pause: { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null },
   health: { accounting: { active_projects: 0, pending_applications: 0, bond_liability: "0",
@@ -27,9 +27,9 @@ const before: RegistryActionContext = { data: registryData, project: null, chain
 const registered: Project = { id: 1, owner: sender, payout_address: sender, metadata_uri: "ipfs://alpha",
   metadata_digest: digest, status: "pending", created_at: "10", updated_at: "10", status_history_count: 1,
   address_history_count: 0, provenance: { kind: "bonded_registration", applicant: sender },
-  bond: { amount: "1000000", depositor: sender, state: "deposited" }, pending_payout_address: null, latest_review: null };
+  bond: { amount: "100000000", depositor: sender, state: "deposited" }, pending_payout_address: null, latest_review: null };
 const after: RegistryActionContext = { ...before, data: { ...registryData, health: { ...registryData.health,
-  accounting: { ...registryData.health.accounting, pending_applications: 1, bond_liability: "1000000", lifetime_bonds_received: "1000000" }, actual_native_balance: "1000000" } },
+  accounting: { ...registryData.health.accounting, pending_applications: 1, bond_liability: "100000000", lifetime_bonds_received: "100000000" }, actual_native_balance: "100000000" } },
   project: registered, fingerprint: "registry-after" };
 const intent = buildRegistryIntent(config, sender, before, { action: "register_project", projectId: null,
   metadataUri: "ipfs://alpha", metadataDigest: digest, address: sender, note: "" });
@@ -69,7 +69,7 @@ describe("production registry browser transaction adapter", () => {
       confirmationStatus: "confirmed", refreshStatus: "refreshed",
       explorerUrl: "https://www.mintscan.io/juno/tx/REGISTRY_HASH" });
     expect(fixture.signing.execute).toHaveBeenCalledWith(sender, config.registryContract,
-      intent.executeMessage, review.fee, "", [{ denom: "ujuno", amount: "1000000" }]);
+      intent.executeMessage, review.fee, "", [{ denom: "ujuno", amount: "100000000" }]);
     expect(fixture.loadActionContext.mock.calls).toEqual([
       [null], [null], [1],
     ]);
