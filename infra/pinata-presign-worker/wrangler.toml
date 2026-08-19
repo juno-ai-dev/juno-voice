@@ -1,0 +1,13 @@
+# Operator-deployed Cloudflare Worker. No route is committed here; deployment
+# is a deliberate operator action (see README.md).
+name = "juno-voice-pinata-presign"
+main = "worker.mjs"
+compatibility_date = "2026-08-01"
+
+# Required secret (never commit): wrangler secret put PINATA_JWT
+# Required var: ALLOWED_ORIGINS — comma-separated exact browser origins, e.g.
+#   "https://voice.example.org"
+# Optional var: PINATA_GROUP_ID — scopes all pins to one Pinata group so
+#   operators can list and clean up orphaned pins.
+[vars]
+ALLOWED_ORIGINS = ""
