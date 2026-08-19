@@ -3,8 +3,9 @@ import type { AppConfig } from "./config";
 import type { Project, RegistryData } from "./registry";
 import type { TransactionIntent, TransactionReview, TransactionOutcome } from "./transactions";
 import { formatJuno } from "./junoAmount";
+import { METADATA_DIGEST_PATTERN, URI_SCHEME_PATTERN } from "./metadataDigest";
 
-export const METADATA_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
+export { METADATA_DIGEST_PATTERN } from "./metadataDigest";
 export type RegistryAction = "register_project" | "update_pending_metadata" | "propose_payout_address" |
   "cancel_payout_address_change" | "accept_payout_address" | "retire" | "claim_registration_bond";
 export interface RegistryActionInput { action: RegistryAction; projectId: number | null; metadataUri: string; metadataDigest: string; address: string; note: string }
@@ -45,6 +46,7 @@ export function buildRegistryIntent(config: AppConfig, sender: string, context: 
   if (action === "claim_registration_bond" && (!project?.bond || project.bond.depositor !== sender || project.bond.state !== "claimable")) fail("Only the depositor may claim a claimable registration bond.");
   if (["register_project", "update_pending_metadata"].includes(action)) {
     if (!metadataUri.trim() || bytes(metadataUri) > data.config.max_metadata_uri_bytes) fail(`Metadata URI must be non-empty and at most ${data.config.max_metadata_uri_bytes} UTF-8 bytes.`);
+    if (!URI_SCHEME_PATTERN.test(metadataUri)) fail("Metadata URI must be a bounded HTTPS or IPFS URI.");
     if (!METADATA_DIGEST_PATTERN.test(metadataDigest)) fail("Metadata digest must be sha256: followed by exactly 64 lowercase hex characters.");
   }
   if (["register_project", "propose_payout_address"].includes(action) && !validAccount(address)) fail("Payout address must be a valid Juno account address.");

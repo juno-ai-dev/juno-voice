@@ -1,0 +1,14 @@
+{
+  "siteName": "Juno Voice",
+  "ogImage": "assets/og-card.png",
+  "routes": [
+    { "path": "", "title": "Juno Voice · Community funding on Juno", "description": "Fund useful work with accountable bounties, graduate proven projects, and let Juno stakers direct recurring Hack Juno funding.", "prerender": true, "index": true },
+    { "path": "bounties", "title": "Public bounty ledger · Juno Voice", "description": "Authoritative bounty state queried directly from the verified Juno Voice contract on Juno mainnet.", "prerender": true, "index": true },
+    { "path": "bounties/create", "title": "Create a bounty · Juno Voice", "description": "Define an outcome, fund the first contribution, and review the exact on-chain terms before signing.", "prerender": true, "index": false },
+    { "path": "gauge", "title": "Funding gauge · Juno Voice", "description": "Follow each fixed funding epoch from snapshot to outcome, shaped by weighted preferences from Juno stakers.", "prerender": true, "index": true },
+    { "path": "gauge/vote", "title": "Gauge voting workbench · Juno Voice", "description": "Place or revise weighted gauge preferences with an exact pre-sign review.", "prerender": true, "index": false },
+    { "path": "projects", "title": "Project registry · Juno Voice", "description": "Explore active projects and pending applications recorded in the verified Juno Voice registry.", "prerender": true, "index": true },
+    { "path": "projects/manage", "title": "Manage a project · Juno Voice", "description": "Apply to the registry or manage a project you own, with an exact pre-sign review.", "prerender": true, "index": false },
+    { "path": "faq", "title": "FAQ · Juno Voice", "description": "How the funding loop works, who makes each decision, and what happens before a wallet asks you to sign.", "prerender": true, "index": true }
+  ]
+}

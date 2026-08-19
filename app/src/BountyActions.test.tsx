@@ -17,17 +17,14 @@ const access = (): BountyTransactionAccess => ({ connect: vi.fn(async () => ({ a
     confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, explorerUrl: "https://www.mintscan.io/juno/tx/ABC" })) });
 describe("bounty action UI", () => {
   beforeEach(() => sessionStorage.clear());
-  it("keeps read-only access and explains unavailable wallet support", async () => {
+  it("keeps read-only access and explains unavailable wallet support", () => {
     render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} />);
-    expect(screen.queryByRole("textbox", { name: /^Title/ })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
     expect(screen.queryByText(/Eligibility uses canonical chain time/)).not.toBeInTheDocument();
     expect(screen.getByText(/Browsing does not require a wallet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Connect wallet and review bounty/ })).toBeInTheDocument();
   });
   it("constructs exact create message/funds from accessible controls and discloses review", async () => {
     const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} />);
-    await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
     await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
     await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
     await userEvent.type(screen.getByLabelText(/^Acceptance criteria/), "Tests pass");
@@ -42,7 +39,6 @@ describe("bounty action UI", () => {
   });
   it("makes optional project-candidate semantics explicit and reviews the exact metadata", async () => {
     const port = access(); render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} />);
-    await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
     await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
     await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
     await userEvent.type(screen.getByLabelText(/^Acceptance criteria/), "Tests pass");
@@ -55,12 +51,63 @@ describe("bounty action UI", () => {
     }) } }));
     expect(screen.getByText(/does not allocate a registry ID/)).toBeInTheDocument();
   });
+  it("publishes structured content and candidate documents before preparing the intent", async () => {
+    const port = access();
+    const publisher = {
+      publishDocument: vi.fn(async (filename: string) => filename === "project.json"
+        ? { uri: "ipfs://bafycandidate", digest: `sha256:${"d".repeat(64)}`, size: 1 }
+        : { uri: "ipfs://bafycontent", digest: `sha256:${"e".repeat(64)}`, size: 1 }),
+      publishImage: vi.fn(),
+    };
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} publisher={publisher} />);
+    await userEvent.type(screen.getByLabelText(/^Title/), "Ship tooling");
+    await userEvent.type(screen.getByLabelText(/^Summary/), "Useful tooling");
+    await userEvent.type(screen.getByLabelText(/^Acceptance criteria/), "Tests pass");
+    await userEvent.click(screen.getByText("Add supporting content"));
+    expect(screen.queryByLabelText(/^Content URI/)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/^Full brief/), "The full brief.");
+    await userEvent.click(screen.getByText("Propose a project candidate"));
+    await userEvent.type(screen.getByLabelText(/^Project name/), "Alpha");
+    await userEvent.type(screen.getByLabelText(/^Short summary/), "A project.");
+    await userEvent.click(screen.getByRole("button", { name: /Connect wallet and review bounty/ }));
+    await vi.waitFor(() => expect(port.prepare).toHaveBeenCalled());
+    expect(publisher.publishDocument).toHaveBeenCalledWith("bounty-content.json", expect.objectContaining({ brief: "The full brief." }));
+    expect(publisher.publishDocument).toHaveBeenCalledWith("project.json", expect.objectContaining({ name: "Alpha" }));
+    expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { create_bounty: expect.objectContaining({
+      content_uri: "ipfs://bafycontent", content_digest: `sha256:${"e".repeat(64)}`,
+      project_candidate: { metadata_uri: "ipfs://bafycandidate", metadata_digest: `sha256:${"d".repeat(64)}` },
+    }) } }));
+  });
+  it("publishes a structured evidence document for a payout nomination", async () => {
+    const port = access(), recipient = toBech32("juno", new Uint8Array(20).fill(4));
+    const publisher = {
+      publishDocument: vi.fn(async () => ({ uri: "ipfs://bafyevidence", digest: `sha256:${"f".repeat(64)}`, size: 1 })),
+      publishImage: vi.fn(),
+    };
+    const settlement: BountyDetail = { bounty, config: ledger.config, pause: ledger.pause, activeRound: null, rounds: [], receipts: [],
+      moderation: null, graduation: null, contributions: [{ bounty_id: 1, contributor: bounty.creator, contributor_index: 1,
+        current_amount: "2500000", weight_at_round: null }], claims: [], history: [], observationHeight: 1,
+      chainTimeNanos: ledger.chainTimeNanos, fingerprint: ledger.fingerprint };
+    render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty}
+      contributions={settlement.contributions} settlement={settlement} publisher={publisher} />);
+    await userEvent.type(screen.getByLabelText("Recipient Juno address"), recipient);
+    expect(screen.queryByLabelText("Evidence URI (HTTPS/IPFS)")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/^What was delivered/), "Shipped the tooling.");
+    await userEvent.type(screen.getByLabelText("Evidence link 1"), "https://github.example/pr/1");
+    await userEvent.type(screen.getByLabelText("Nomination rationale"), "Acceptance criteria shipped");
+    await userEvent.click(screen.getByRole("button", { name: "Review payout nomination" }));
+    await vi.waitFor(() => expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { nominate_payout: expect.objectContaining({
+      evidence_uri: "ipfs://bafyevidence", evidence_digest: `sha256:${"f".repeat(64)}`,
+    }) } })));
+    expect(publisher.publishDocument).toHaveBeenCalledWith("evidence.json", expect.objectContaining({
+      summary: "Shipped the tooling.", items: [{ kind: "pull_request", url: "https://github.example/pr/1" }],
+    }));
+  });
   it("calculates a lowercase SHA-256 digest locally from a selected metadata file", async () => {
     const digestBytes = new Uint8Array(32).fill(0xab);
     vi.stubGlobal("crypto", { subtle: { digest: vi.fn(async () => digestBytes.buffer) } });
     try {
       render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={access()} />);
-      await userEvent.click(screen.getByRole("button", { name: "Create a bounty" }));
       await userEvent.click(screen.getByText("Add supporting content"));
       const file = new File(["metadata"], "metadata.json", { type: "application/json" });
       Object.defineProperty(file, "arrayBuffer", { value: async () => new TextEncoder().encode("metadata").buffer });

@@ -48,8 +48,8 @@
 .destination-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
 .destination-grid article { min-height: 290px; display: flex; flex-direction: column; padding: 28px; border: 1px solid #6f3e40; background: #160608; }
 .destination-grid h3 { margin: 32px 0 8px; font-size: 26px; }
-.destination-grid button { margin-top: auto; padding: 14px 0 0; border: 0; border-top: 1px solid #553033; background: transparent; color: #ff9a9b; text-align: left; font-weight: 700; cursor: pointer; }
-.destination-grid button span { float: right; }
+.destination-grid button, .destination-grid a { display: block; margin-top: auto; padding: 14px 0 0; border: 0; border-top: 1px solid #553033; background: transparent; color: #ff9a9b; text-align: left; font-weight: 700; cursor: pointer; text-decoration: none; }
+.destination-grid button span, .destination-grid a span { float: right; }
 
 @media (max-width: 900px) {
   .landing-hero { min-height: auto; grid-template-columns: 1fr; }

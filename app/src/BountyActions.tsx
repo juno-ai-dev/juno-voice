@@ -10,6 +10,13 @@ import { formatJuno, formatJunoCoin } from "./junoAmount";
 import { DEFAULT_CHAIN_ID } from "./config";
 import { bountyActionFromReview, clearBountySubmission, loadLatestBountySubmission,
   saveBountySubmission, type StoredBountySubmission } from "./bountySubmissionState";
+import { UriDigestFields } from "./UriDigestFields";
+import { Modal } from "./components/Modal";
+import { ProjectFields } from "./ProjectFields";
+import { bountyContentFieldsFilled, bountyContentDocumentFrom, EMPTY_BOUNTY_CONTENT_FIELDS, EMPTY_PROJECT_FIELDS,
+  EVIDENCE_KIND_LABELS, evidenceDocumentFrom, projectDocumentFrom, projectFieldsFilled, type EvidenceItemValue } from "./metadataForms";
+import { EVIDENCE_ITEM_KINDS, type EvidenceItemKind } from "./metadataDocuments";
+import type { DocumentPublisher } from "./metadataPublish";
 import "./bounty.css";
 
 export interface BountyTransactionAccess {
@@ -18,12 +25,12 @@ export interface BountyTransactionAccess {
   submit(review: TransactionReview): Promise<TransactionOutcome>;
 }
 type ReviewState = { review: TransactionReview; submitting: boolean } | null;
-export function BountyActions({ canonical, access, stale, bountyContract, bounty, contributions = [], settlement }: {
+export function BountyActions({ canonical, access, stale, bountyContract, bounty, contributions = [], settlement, publisher }: {
   canonical: EligibilityState; access?: BountyTransactionAccess; stale: boolean;
   bountyContract: string;
   bounty?: Bounty; contributions?: readonly Contribution[]; settlement?: SettlementState;
+  publisher?: DocumentPublisher;
 }) {
-  const [creating, setCreating] = useState(false);
   const [review, setReview] = useState<ReviewState>(null);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<{ hash: string; url: string; confirmed: boolean } | null>(null);
@@ -89,27 +96,17 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
     ? "Stored submission evidence is malformed or unavailable. This action remains locked; inspect this account on Juno and do not submit again."
     : storedSubmission.evidence.txHash ? "Submission is not canonically confirmed. Use the transaction evidence below and do not submit again."
     : "Signing began and submission may have occurred, but no transaction hash is available. Do not submit again until you inspect this account on Juno.") : "";
-  if (!bounty && !creating) return <section className="bounty-create-launcher" aria-labelledby="create-launcher-title">
-    <div>
-      <p className="eyebrow">FUND A SHARED OUTCOME</p>
-      <h2 id="create-launcher-title">Have work the community can rally around?</h2>
-      <p>Define the outcome and fund the first contribution. You will review the exact on-chain terms before signing.</p>
-    </div>
-    <button className="button" type="button" aria-expanded="false" aria-controls="create-bounty-panel"
-      onClick={() => setCreating(true)}>Create a bounty</button>
-  </section>;
   return <section id={!bounty ? "create-bounty-panel" : undefined} className="action-panel"
     aria-labelledby={bounty ? settlement ? "settlement-title" : "contribute-title" : "create-title"}>
     {!bounty && <div className="action-panel-heading">
-      <div><p className="eyebrow">CREATE BOUNTY</p><p>Complete the essentials first. Optional metadata stays out of the way until you need it.</p></div>
-      <button className="button secondary" type="button" onClick={() => { setCreating(false); setReview(null); setMessage(""); }}>Close form</button>
+      <div><p className="eyebrow">CREATE BOUNTY</p><p>Define the outcome and fund the first contribution. Complete the essentials first; optional metadata stays out of the way until you need it.</p></div>
     </div>}
     <p className="eyebrow">OPTIONAL WALLET ACTION · READ BEFORE SIGNING</p>
     {bounty ? <>{bounty.status === "open" && BigInt(canonical.chainTimeNanos) < BigInt(bounty.expires_at) &&
       <ContributeForm bounty={bounty} disabled={submissionLocked} onPrepare={(value) => act((sender) =>
         contributeIntent(bounty, value, sender, contributions.map((item) => item.contributor), canonical, bountyContract))} />}
-      {settlement && <SettlementControls state={settlement} bountyContract={bountyContract} disabled={submissionLocked} onPrepare={(make) => act(make)} />}</> :
-      <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical, bountyContract))} />}
+      {settlement && <SettlementControls state={settlement} bountyContract={bountyContract} disabled={submissionLocked} onPrepare={(make) => act(make)} publisher={publisher} />}</> :
+      <CreateForm canonical={canonical} disabled={submissionLocked} onPrepare={(input) => act(() => createBountyIntent(input, canonical, bountyContract))} publisher={publisher} />}
     {bounty && <p className="chain-time">Deadlines are checked against Juno network time.</p>}
     {!access && <p>Wallet actions are unavailable in this environment. Browsing does not require a wallet.</p>}
     {(message || restoredNotice) && <p role="status" className="notice">{message || restoredNotice}</p>}
@@ -119,7 +116,7 @@ export function BountyActions({ canonical, access, stale, bountyContract, bounty
     {review && <TransactionReviewPanel value={review.review} busy={review.submitting} onCancel={() => setReview(null)} onSubmit={submit} />}
   </section>;
 }
-function CreateForm({ canonical, disabled, onPrepare }: { canonical: EligibilityState; disabled: boolean; onPrepare: (input: Parameters<typeof createBountyIntent>[0]) => void }) {
+function CreateForm({ canonical, disabled, onPrepare, publisher }: { canonical: EligibilityState; disabled: boolean; onPrepare: (input: Parameters<typeof createBountyIntent>[0]) => void; publisher?: DocumentPublisher }) {
   const now = BigInt(canonical.chainTimeNanos);
   const minLifetime = BigInt(canonical.config.min_lifetime_seconds);
   const maxLifetime = BigInt(canonical.config.max_lifetime_seconds);
@@ -135,20 +132,53 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
   const defaultExpiryMillis = (now + defaultLifetime * nanosPerSecond + nanosPerMillisecond - 1n) / nanosPerMillisecond;
   const [expiry, setExpiry] = useState(() => localDateTimeValue(defaultExpiryMillis));
   const [expiryError, setExpiryError] = useState("");
+  const [contentManual, setContentManual] = useState(!publisher);
+  const [candidateManual, setCandidateManual] = useState(!publisher);
+  const [content, setContent] = useState(EMPTY_BOUNTY_CONTENT_FIELDS);
+  const [candidate, setCandidate] = useState(EMPTY_PROJECT_FIELDS);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState("");
   const expiresAtNanos = localDateTimeToNanos(expiry);
   const expiryHintId = useId();
+  const submitCreate = async (f: FormData, exactExpiry: string) => {
+    setPublishError("");
+    try {
+      let contentUri = String(f.get("uri") ?? ""), contentDigest = String(f.get("digest") ?? "");
+      let projectCandidate: { metadataUri: string; metadataDigest: string } | undefined;
+      if (!contentManual && publisher && bountyContentFieldsFilled(content)) {
+        setPublishing(true);
+        const pinned = await publisher.publishDocument("bounty-content.json", bountyContentDocumentFrom(content));
+        contentUri = pinned.uri; contentDigest = pinned.digest;
+      }
+      if (!candidateManual && publisher) {
+        if (projectFieldsFilled(candidate)) {
+          setPublishing(true);
+          const logo = candidate.logo ? await publisher.publishImage(candidate.logo) : null;
+          const pinned = await publisher.publishDocument("project.json", projectDocumentFrom(candidate, logo?.uri));
+          projectCandidate = { metadataUri: pinned.uri, metadataDigest: pinned.digest };
+        }
+      } else if (["projectUri", "projectDigest"].some((name) => String(f.get(name) ?? "").trim())) {
+        projectCandidate = { metadataUri: String(f.get("projectUri") ?? ""), metadataDigest: String(f.get("projectDigest") ?? "") };
+      }
+      onPrepare({
+        title: String(f.get("title")), summary: String(f.get("summary")), acceptanceCriteria: String(f.get("criteria")),
+        contentUri, contentDigest, expiresAtNanos: exactExpiry, initialJuno: String(f.get("amount")),
+        ...(projectCandidate ? { projectCandidate } : {}),
+      });
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : "Publishing the supporting details failed. Nothing was signed.");
+    } finally {
+      setPublishing(false);
+    }
+  };
   return <form className="create-bounty-form" onSubmit={(event) => {
     event.preventDefault();
     const exactExpiry = localDateTimeToNanos(expiry);
     if (!exactExpiry) return setExpiryError("Choose a valid expiration date and time.");
     setExpiryError("");
-    const f = new FormData(event.currentTarget); onPrepare({
-    title: String(f.get("title")), summary: String(f.get("summary")), acceptanceCriteria: String(f.get("criteria")),
-    contentUri: String(f.get("uri")), contentDigest: String(f.get("digest")), expiresAtNanos: exactExpiry, initialJuno: String(f.get("amount")),
-    ...(["projectUri", "projectDigest"].some((name) => String(f.get(name)).trim()) ? { projectCandidate: {
-      metadataUri: String(f.get("projectUri")), metadataDigest: String(f.get("projectDigest")),
-    } } : {}),
-  }); }}>
+    // Read the form synchronously; the event target is not stable across awaits.
+    void submitCreate(new FormData(event.currentTarget), exactExpiry);
+  }}>
     <h2 id="create-title">Create a bounty</h2>
     <p className="form-intro">Describe a specific outcome and seed its escrow. Limits come from live config version {canonical.config.version}; nothing is signed on this screen.</p>
     <fieldset className="form-section">
@@ -172,11 +202,29 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
     </fieldset>
     <details className="form-disclosure">
       <summary>Add supporting content <span>Optional</span></summary>
-      <p>Link to a brief, specification, or other stable content. The URI and its SHA-256 digest must be provided together.</p>
-      <div className="action-grid">
-        <label>Content URI<span className="field-hint">HTTPS or IPFS</span><input name="uri" type="url" placeholder="ipfs://… or https://…" /></label>
-        <HashDigestField name="digest" label="Content SHA-256 digest" fileLabel="Calculate content digest from file" />
-      </div>
+      {contentManual ? <>
+        <p>Link to a brief, specification, or other stable content. The URI and its SHA-256 digest must be provided together.</p>
+        <div className="action-grid">
+          <UriDigestFields uriName="uri" uriLabel="Content URI" uriHint="HTTPS or IPFS" uriType="url"
+            digestName="digest" digestLabel="Content SHA-256 digest"
+            digestHint="Paste a sha256: digest, or calculate it from the exact file published at the URI."
+            fileLabel="Calculate content digest from file" />
+        </div>
+        {publisher
+          ? <button type="button" className="button secondary" onClick={() => setContentManual(false)}>Write the brief here instead</button>
+          : <small className="field-hint">Publishing from this app is not configured. Link a file you published yourself.</small>}
+      </> : <>
+        <p>Write the full brief here. Juno Voice publishes it to IPFS and commits its exact fingerprint on chain when you continue.</p>
+        <div className="action-grid">
+          <label className="wide">Full brief<span className="field-hint">The complete specification of the work.</span>
+            <textarea value={content.brief} disabled={publishing} onChange={(event) => setContent({ ...content, brief: event.target.value })} /></label>
+          <label className="wide">Deliverables<span className="field-hint">One per line, optional.</span>
+            <textarea value={content.deliverables} disabled={publishing} onChange={(event) => setContent({ ...content, deliverables: event.target.value })} /></label>
+          <label className="wide">More acceptance detail<span className="field-hint">Optional detail beyond the on-chain criteria.</span>
+            <textarea value={content.acceptanceDetails} disabled={publishing} onChange={(event) => setContent({ ...content, acceptanceDetails: event.target.value })} /></label>
+        </div>
+        <button type="button" className="button secondary" onClick={() => setContentManual(true)}>Advanced: link a file you already published</button>
+      </>}
     </details>
     <details className="form-disclosure">
       <summary>Propose a project candidate <span>Optional</span></summary>
@@ -184,13 +232,26 @@ function CreateForm({ canonical, disabled, onPrepare }: { canonical: Eligibility
         <strong>What is a project candidate?</strong>
         <p>It links this bounty to proposed project metadata. A candidate is only a proposal: creating the bounty does not allocate a registry ID, endorse, or graduate the project. Graduation is a separate authorized action; the registry assigns the numeric ID atomically.</p>
       </div>
-      <div className="action-grid">
-        <label>Project metadata URI<span className="field-hint">HTTPS or IPFS; required with a candidate</span><input name="projectUri" type="url" placeholder="ipfs://… or https://…" /></label>
-        <div className="wide"><HashDigestField name="projectDigest" label="Project metadata SHA-256 digest" fileLabel="Calculate project metadata digest from file" /></div>
-      </div>
+      {candidateManual ? <>
+        <div className="action-grid">
+          <UriDigestFields uriName="projectUri" uriLabel="Project metadata URI" uriHint="HTTPS or IPFS; required with a candidate" uriType="url"
+            digestName="projectDigest" digestLabel="Project metadata SHA-256 digest"
+            digestHint="Paste a sha256: digest, or calculate it from the exact file published at the URI."
+            fileLabel="Calculate project metadata digest from file" digestWide />
+        </div>
+        {publisher
+          ? <button type="button" className="button secondary" onClick={() => setCandidateManual(false)}>Fill in project details instead</button>
+          : <small className="field-hint">Publishing from this app is not configured. Link a file you published yourself.</small>}
+      </> : <>
+        <div className="action-grid">
+          <ProjectFields value={candidate} onChange={setCandidate} disabled={publishing} />
+        </div>
+        <button type="button" className="button secondary" onClick={() => setCandidateManual(true)}>Advanced: link a file you already published</button>
+      </>}
     </details>
+    {publishError && <p className="notice danger" role="alert">{publishError}</p>}
     <div className="form-submit-row"><div><strong>Ready for the safety check?</strong><small>You will see the exact message, funds, fee, and consequences before signing.</small></div>
-      <button className="button" type="submit" disabled={disabled}>Connect wallet and review bounty</button></div>
+      <button className="button" type="submit" disabled={disabled || publishing}>{publishing ? "Publishing details…" : "Connect wallet and review bounty"}</button></div>
   </form>;
 }
 
@@ -210,37 +271,6 @@ const localDateTimeToNanos = (value: string) => {
   return Number.isFinite(milliseconds) && milliseconds >= 0 ? (BigInt(milliseconds) * 1_000_000n).toString() : null;
 };
 
-function HashDigestField({ name, label, fileLabel }: { name: string; label: string; fileLabel: string }) {
-  const [digest, setDigest] = useState("");
-  const [hashStatus, setHashStatus] = useState("");
-  const hashGeneration = useRef(0);
-  const hintId = useId();
-  const hashFile = async (file?: File) => {
-    const generation = ++hashGeneration.current;
-    if (!file) return setHashStatus("");
-    if (file.size > 20 * 1024 * 1024) return setHashStatus("Choose a file no larger than 20 MB, or paste its digest instead.");
-    if (!globalThis.crypto?.subtle) return setHashStatus("File hashing is unavailable in this browser. Paste a verified digest instead.");
-    setHashStatus(`Calculating SHA-256 for ${file.name}…`);
-    try {
-      const bytes = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
-      if (generation !== hashGeneration.current) return;
-      const value = `sha256:${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-      setDigest(value);
-      setHashStatus(`Digest calculated locally from ${file.name}. The file was not uploaded.`);
-    } catch {
-      if (generation !== hashGeneration.current) return;
-      setHashStatus("This file could not be hashed. Paste a verified digest instead.");
-    }
-  };
-  return <div className="hash-field">
-    <label>{label}<span className="field-hint" id={hintId}>Paste a sha256: digest, or calculate it from the exact file published at the URI.</span>
-      <input name={name} value={digest} onChange={(event) => { hashGeneration.current += 1; setDigest(event.target.value); setHashStatus(""); }}
-        pattern="sha256:[0-9a-f]{64}" placeholder="sha256:…" spellCheck={false} autoComplete="off" aria-describedby={hintId} />
-    </label>
-    <label className="file-picker">{fileLabel}<input type="file" onChange={(event) => void hashFile(event.target.files?.[0])} /></label>
-    {hashStatus && <small className="hash-status" role="status">{hashStatus}</small>}
-  </div>;
-}
 function ContributeForm({ bounty, disabled, onPrepare }: { bounty: Bounty; disabled: boolean; onPrepare: (amount: string) => void }) {
   return <form onSubmit={(event) => { event.preventDefault(); onPrepare(String(new FormData(event.currentTarget).get("amount"))); }}>
     <h2 id="contribute-title">Contribute to bounty #{bounty.id}</h2>
@@ -248,25 +278,71 @@ function ContributeForm({ bounty, disabled, onPrepare }: { bounty: Bounty; disab
     <button className="button" type="submit" disabled={disabled}>Connect and review contribution</button>
   </form>;
 }
-function SettlementControls({ state, bountyContract, disabled, onPrepare }: {
+function SettlementControls({ state, bountyContract, disabled, onPrepare, publisher }: {
   state: SettlementState; bountyContract: string; disabled: boolean;
   onPrepare: (make: (sender: string) => TransactionIntent) => void;
+  publisher?: DocumentPublisher;
 }) {
+  const [evidenceManual, setEvidenceManual] = useState(!publisher);
+  const [evidenceSummary, setEvidenceSummary] = useState("");
+  const [items, setItems] = useState<EvidenceItemValue[]>([{ kind: "pull_request", url: "", note: "" }]);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState("");
   const b = state.bounty, round = state.activeRound, now = BigInt(state.chainTimeNanos);
   const closed = Boolean(round?.closes_at && now >= BigInt(round.closes_at));
+  const setItem = (index: number, patch: Partial<EvidenceItemValue>) =>
+    setItems((current) => current.map((item, i) => i === index ? { ...item, ...patch } : item));
+  const submitNomination = async (f: FormData) => {
+    setPublishError("");
+    try {
+      let evidenceUri = String(f.get("evidenceUri") ?? ""), evidenceDigest = String(f.get("evidenceDigest") ?? "");
+      if (!evidenceManual && publisher) {
+        setPublishing(true);
+        const pinned = await publisher.publishDocument("evidence.json", evidenceDocumentFrom(evidenceSummary, items));
+        evidenceUri = pinned.uri; evidenceDigest = pinned.digest;
+      }
+      onPrepare((sender) => nominatePayoutIntent(state, sender, { recipient: String(f.get("recipient")),
+        evidenceUri, evidenceDigest, rationale: String(f.get("nominationRationale")) }, bountyContract));
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : "Publishing the evidence failed. Nothing was signed.");
+    } finally {
+      setPublishing(false);
+    }
+  };
   return <div aria-labelledby="settlement-title">
     <h2 id="settlement-title">Contributor-controlled settlement</h2>
     <p>All actor, state, round, and deadline checks use the canonical detail shown below and are rechecked immediately before signing.</p>
-    {b.status === "open" && now < BigInt(b.expires_at) && <form onSubmit={(event) => { event.preventDefault(); const f = new FormData(event.currentTarget);
-      onPrepare((sender) => nominatePayoutIntent(state, sender, { recipient: String(f.get("recipient")),
-        evidenceUri: String(f.get("evidenceUri")), evidenceDigest: String(f.get("evidenceDigest")), rationale: String(f.get("nominationRationale")) }, bountyContract)); }}>
+    {b.status === "open" && now < BigInt(b.expires_at) && <form onSubmit={(event) => { event.preventDefault(); void submitNomination(new FormData(event.currentTarget)); }}>
       <h3>Nominate payout</h3><p>The public control is creator-only; no agent or governor controls are exposed.</p>
       <div className="action-grid">
         <label>Recipient Juno address<input name="recipient" required /></label>
-        <label>Evidence URI (HTTPS/IPFS)<input name="evidenceUri" required /></label>
-        <label className="wide">Evidence digest (sha256: + 64 lowercase hex)<input name="evidenceDigest" pattern="sha256:[0-9a-f]{64}" required /></label>
+        {evidenceManual ? <>
+          <label>Evidence URI (HTTPS/IPFS)<input name="evidenceUri" required /></label>
+          <label className="wide">Evidence digest (sha256: + 64 lowercase hex)<input name="evidenceDigest" pattern="sha256:[0-9a-f]{64}" required /></label>
+        </> : <>
+          <label className="wide">What was delivered<span className="field-hint">Published to IPFS with the evidence links; its exact fingerprint goes on chain.</span>
+            <textarea value={evidenceSummary} required disabled={publishing} onChange={(event) => setEvidenceSummary(event.target.value)} /></label>
+          {items.map((item, index) => <div className="wide evidence-item" key={index}>
+            <label>Evidence kind<select aria-label={`Evidence kind ${index + 1}`} value={item.kind} disabled={publishing}
+              onChange={(event) => setItem(index, { kind: event.target.value as EvidenceItemKind })}>
+              {EVIDENCE_ITEM_KINDS.map((kind) => <option key={kind} value={kind}>{EVIDENCE_KIND_LABELS[kind]}</option>)}
+            </select></label>
+            <label>Evidence link<input aria-label={`Evidence link ${index + 1}`} value={item.url} required disabled={publishing}
+              placeholder="https://… or ipfs://…" onChange={(event) => setItem(index, { url: event.target.value })} /></label>
+            <label>Note<input aria-label={`Evidence note ${index + 1}`} value={item.note} disabled={publishing}
+              onChange={(event) => setItem(index, { note: event.target.value })} /></label>
+            {items.length > 1 && <button type="button" className="button secondary" disabled={publishing}
+              onClick={() => setItems((current) => current.filter((_, i) => i !== index))}>Remove item {index + 1}</button>}
+          </div>)}
+          <button type="button" className="button secondary" disabled={publishing}
+            onClick={() => setItems((current) => [...current, { kind: "other", url: "", note: "" }])}>Add another evidence item</button>
+        </>}
         <label className="wide">Nomination rationale<textarea name="nominationRationale" required /></label>
-      </div><button className="button" type="submit" disabled={disabled}>Review payout nomination</button>
+      </div>
+      {evidenceManual && publisher && <button type="button" className="button secondary" onClick={() => setEvidenceManual(false)}>Describe the delivery here instead</button>}
+      {!evidenceManual && <button type="button" className="button secondary" onClick={() => setEvidenceManual(true)}>Advanced: link a file you already published</button>}
+      {publishError && <p className="notice danger" role="alert">{publishError}</p>}
+      <button className="button" type="submit" disabled={disabled || publishing}>{publishing ? "Publishing evidence…" : "Review payout nomination"}</button>
     </form>}
     {b.status === "open" && b.contributor_count === 1 && <ReasonForm label="Cancel sole-funded bounty" field="cancelReason"
       button="Review cancellation" disabled={disabled} onSubmit={(reason) => onPrepare((sender) => cancelSoleFundedIntent(state, sender, reason, bountyContract))} />}
@@ -309,11 +385,11 @@ function ReasonForm({ label, field, button, disabled, onSubmit }: {
   </form>;
 }
 function TransactionReviewPanel({ value, busy, onCancel, onSubmit }: { value: TransactionReview; busy: boolean; onCancel: () => void; onSubmit: () => void }) {
-  return <section className="review" role="dialog" aria-modal="true" aria-labelledby="review-title">
+  return <Modal titleId="review-title" onClose={onCancel} closeDisabled={busy} closeLabel="Cancel">
     <h2 id="review-title">Exact transaction review</h2><p>Nothing is signed until you select the final button.</p>
     <dl><dt>Sender</dt><dd>{value.sender}</dd><dt>Contract</dt><dd>{value.contract}</dd><dt>Message</dt><dd><code>{JSON.stringify(value.executeMessage)}</code></dd>
       <dt>Attached funds</dt><dd>{value.funds.length ? value.funds.map(formatJunoCoin).join(", ") : "None"}</dd><dt>Estimated fee</dt><dd>{value.fee.amount.map(formatJunoCoin).join(", ")} · gas {value.fee.gas}</dd><dt>Canonical height</dt><dd>{value.canonicalState.height}</dd></dl>
     <ul>{value.consequences.map((item) => <li key={item}>{item}</li>)}</ul>
-    <button className="button secondary" onClick={onCancel} disabled={busy}>Cancel</button>{" "}<button className="button" onClick={onSubmit} disabled={busy}>{busy ? "Checking canonical state…" : "Recheck state, then sign"}</button>
-  </section>;
+    <button className="button" onClick={onSubmit} disabled={busy}>{busy ? "Checking canonical state…" : "Recheck state, then sign"}</button>
+  </Modal>;
 }

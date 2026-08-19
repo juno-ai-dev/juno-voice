@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate, useOutletContext, useParams } from "react-router";
 import type { AppConfig } from "./config";
 import type { Project, ProjectDetail, RegistryDataSource } from "./registry";
 import { buildRegistryIntent, type RegistryAction, type RegistryTransactionFlow } from "./registryActions";
@@ -7,10 +8,23 @@ import type { TransactionOutcome, TransactionReview } from "./transactions";
 import { runtimeTransactionOutcome } from "./transactionOutcome";
 import { useAsync } from "./useAsync";
 import { formatJuno, userFacingTransactionAmounts } from "./junoAmount";
-import { digestMetadataFile } from "./metadataDigest";
+import { UriDigestFields } from "./UriDigestFields";
+import { compact } from "./format";
+import { Fact } from "./components/Fact";
+import { State } from "./components/State";
+import { MetadataPanel, VerifiedName } from "./MetadataView";
+import type { MetadataClient } from "./metadataFetch";
+import { Modal } from "./components/Modal";
+import { PageHeader } from "./components/PageHeader";
+import { PageMeta } from "./components/PageMeta";
+import { SubmissionEvidenceBanner } from "./components/SubmissionEvidenceBanner";
+import { NotFound } from "./routes/NotFound";
+import { useCloseModal } from "./routes/useCloseModal";
+import { ProjectFields } from "./ProjectFields";
+import { EMPTY_PROJECT_FIELDS, projectDocumentFrom } from "./metadataForms";
+import type { DocumentPublisher } from "./metadataPublish";
 import "./registry-gauge.css";
 
-const compact = (value: string) => value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-6)}` : value;
 const juno = formatJuno;
 const utc = (nanos: string) => new Date(Number(BigInt(nanos) / 1_000_000n)).toISOString();
 const statusLabel = (status: Project["status"]) => ({ pending: "Pending curator review", active: "Active", suspended: "Suspended by curator", rejected: "Rejected by curator", retired: "Retired" })[status];
@@ -25,50 +39,109 @@ const registryActionHelp: Record<RegistryAction, { title: string; detail: string
   claim_registration_bond: { title: "Claim an eligible bond", detail: "Claims a registration bond only when canonical project state marks it claimable by the depositor." },
 };
 
-export function Registry({ source, config, transactionFlow, sender }: { source: RegistryDataSource; config: AppConfig; transactionFlow?: RegistryTransactionFlow; sender?: string }) {
+export interface RegistryOutletContext {
+  source: RegistryDataSource;
+  config: AppConfig;
+  transactionFlow?: RegistryTransactionFlow;
+  sender?: string;
+  metadata?: MetadataClient;
+  publisher?: DocumentPublisher;
+}
+
+export function Registry({ source, config, transactionFlow, sender, metadata, publisher }: { source: RegistryDataSource; config: AppConfig; transactionFlow?: RegistryTransactionFlow; sender?: string; metadata?: MetadataClient; publisher?: DocumentPublisher }) {
   const load = useMemo(() => () => source.loadRegistry(), [source]);
   const [state, retry] = useAsync(load, "registry");
-  const [selected, setSelected] = useState<number | null>(null);
   const contractScope = useMemo(() => ({ chainId: config.chainId, contract: config.registryContract }), [config.chainId, config.registryContract]);
   const persistedSubmissionPresent = (sender
     ? loadRegistrySubmission({ sender, ...contractScope })
     : loadLatestRegistrySubmission(contractScope)) !== null;
-  const [actionsOpen, setActionsOpen] = useState(persistedSubmissionPresent);
-  const workbenchVisible = actionsOpen || persistedSubmissionPresent;
-  if (state.kind === "loading") return <main><State title="Loading project registry…" detail="Verifying the registry deployment and querying canonical Juno state." /></main>;
-  if (state.kind === "error") return <main><State title="Project registry unavailable" detail={state.message}><button className="button" onClick={retry}>Retry registry query</button></State></main>;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const modalOpen = location.pathname !== "/projects";
+  // Persisted submission evidence must surface on arrival: open the manage
+  // modal once per page mount, matching the old force-open behavior. The
+  // one-shot ref lets the user close the modal and stay on the page.
+  const lockRedirected = useRef(false);
+  useEffect(() => {
+    if (lockRedirected.current || !persistedSubmissionPresent || location.pathname !== "/projects") return;
+    lockRedirected.current = true;
+    void navigate("manage", { replace: true });
+  }, [persistedSubmissionPresent, location.pathname, navigate]);
+  // Child modal routes own the document title while they are open.
+  const pageMeta = modalOpen ? null : <PageMeta route="projects" />;
+  if (state.kind === "loading") return <main>{pageMeta}<State title="Loading project registry…" detail="Verifying the registry deployment and querying canonical Juno state." /></main>;
+  if (state.kind === "error") return <main>{pageMeta}<State title="Project registry unavailable" detail={state.message}><button className="button" onClick={retry}>Retry registry query</button></State></main>;
   const data = state.data;
+  const outletContext: RegistryOutletContext = { source, config, transactionFlow, sender, metadata, publisher };
   return <main>
-    <section className="hero protocol-hero registry-hero" aria-labelledby="registry-title"><div><p className="eyebrow">HACK JUNO · PROJECT REGISTRY</p><h1 id="registry-title">Eligible projects</h1><p>Explore the projects that can receive gauge allocations and applications awaiting public curation. Every status, owner, and payout destination comes from the verified registry.</p></div><aside className="hero-summary" aria-label="Registry summary"><Fact label="Active" value={`${data.health.accounting.active_projects} / ${data.config.max_active_projects}`} /><Fact label="Applications" value={String(data.health.accounting.pending_applications)} /><Fact label="Accounting" value={data.health.fully_backed ? "Fully backed" : "Degraded"} /></aside></section>
+    {pageMeta}
+    <PageHeader
+      eyebrow="HACK JUNO · PROJECT REGISTRY"
+      title="Eligible projects"
+      titleId="registry-title"
+      lede="Explore the projects that can receive gauge allocations and applications awaiting public curation. Every status, owner, and payout destination comes from the verified registry."
+      actions={<Link className="button" to="manage">Open project actions</Link>}
+      stats={[
+        { label: "Active", value: `${data.health.accounting.active_projects} / ${data.config.max_active_projects}` },
+        { label: "Applications", value: String(data.health.accounting.pending_applications) },
+        { label: "Accounting", value: data.health.fully_backed ? "Fully backed" : "Degraded" },
+      ]}
+      statsLabel="Registry summary"
+    />
+    {persistedSubmissionPresent && !modalOpen && <SubmissionEvidenceBanner to="manage" />}
     {(data.pause.admissions_stopped || data.pause.adapter_stopped) && <section className="notice" role="status"><strong>Registry stop is active.</strong> {data.pause.admissions_stopped && "New admissions are stopped. "}{data.pause.adapter_stopped && "Gauge distribution is stopped. "}{data.pause.reason}</section>}
     {!data.health.fully_backed && <section className="notice danger" role="alert"><strong>Bond accounting is not fully backed.</strong> Public write preparation is disabled.</section>}
     <details className="concept-disclosure"><summary>How project eligibility and retained allocations work</summary><div><p>Active projects become options only when a new gauge epoch takes its fixed snapshot. A current registry change never rewrites an epoch already in progress.</p><p><code>do-not-distribute</code> is a reserved gauge choice that retains its allocation in the Program Vault. It is not a project and never receives a payout.</p></div></details>
     <div className="registry-columns">
-      <section aria-labelledby="active-projects"><div className="toolbar"><div><p className="eyebrow">GAUGE OPTIONS</p><h2 id="active-projects">Active projects</h2></div></div><ProjectList projects={data.projects} empty="No active projects" onSelect={setSelected} /></section>
-      <section aria-labelledby="applications"><div className="toolbar"><div><p className="eyebrow">PUBLIC APPLICATIONS</p><h2 id="applications">Pending review</h2></div></div><ProjectList projects={data.applications} empty="No pending applications" onSelect={setSelected} /></section>
+      <section aria-labelledby="active-projects"><div className="toolbar"><div><p className="eyebrow">GAUGE OPTIONS</p><h2 id="active-projects">Active projects</h2></div></div><ProjectList projects={data.projects} empty="No active projects" metadata={metadata} /></section>
+      <section aria-labelledby="applications"><div className="toolbar"><div><p className="eyebrow">PUBLIC APPLICATIONS</p><h2 id="applications">Pending review</h2></div></div><ProjectList projects={data.applications} empty="No pending applications" metadata={metadata} /></section>
     </div>
-    {selected && <ProjectPanel key={selected} id={selected} source={source} close={() => setSelected(null)} />}
+    <Outlet context={outletContext} />
     <section className="facts-panel policy-panel" aria-labelledby="registry-economics"><div className="toolbar"><div><p className="eyebrow">LIVE CONTRACT RULES</p><h2 id="registry-economics">Registration policy</h2></div></div><div className="network-grid"><Fact label="Exact registration bond" value={juno(data.config.registration_bond)} /><Fact label="Native token" value="$JUNO" /><Fact label="Metadata URI limit" value={`${data.config.max_metadata_uri_bytes} bytes`} /><Fact label="Payout delay" value={`${data.config.payout_address_delay_seconds}s`} /><Fact label="Bond liability" value={juno(data.health.accounting.bond_liability)} /><Fact label="Actual balance" value={juno(data.health.actual_native_balance)} /><Fact label="Curator (label only)" value={compact(data.config.curator)} /><Fact label="Governor (label only)" value={compact(data.config.governor)} /></div></section>
-    <section className="action-launcher" aria-labelledby="registry-action-title"><div><p className="eyebrow">PROJECT ACTIONS</p><h2 id="registry-action-title">Apply or update a project</h2><p>Register a new project, update an application, or manage a project you own. You will review the details before anything is sent to your wallet.</p></div><button type="button" className="button" aria-expanded={workbenchVisible} aria-controls="registry-workbench" disabled={persistedSubmissionPresent} onClick={() => setActionsOpen((open) => !open)}>{persistedSubmissionPresent ? "Submission evidence open" : workbenchVisible ? "Close project actions" : "Open project actions"}</button></section>
-    {workbenchVisible && <ActionWorkbench config={config} source={source} transactionFlow={transactionFlow} sender={sender} />}
-    <details className="network-details"><summary>Registry provenance <span>Weakly consistent direct-RPC observation</span></summary><div className="network-grid"><Fact label="Contract" value={compact(config.registryContract)} /><Fact label="Code ID" value={String(config.registryCodeId)} /><Fact label="Observation height" value={data.observationHeight.toLocaleString()} /><Fact label="Observed" value={data.refreshedAt.toISOString()} /></div><p>Pages are ordered by exclusive contract cursors and may change between queries. Every write must re-query canonical state and chain time before wallet review.</p></details>
+    <details className="network-details"><summary>Registry provenance <span>Weakly consistent direct-RPC observation</span></summary><div className="network-grid"><Fact label="Contract" value={compact(config.registryContract)} /><Fact label="Code ID" value={String(config.registryCodeId)} /><Fact label="Observation height" value={data.observationHeight.toLocaleString()} /><Fact label="Observed" value={data.refreshedAt.toISOString()} /></div><p>Pages are ordered by exclusive contract cursors and may change between queries. Every write must re-query canonical state and chain time before wallet review. Project names and descriptions are fetched from the configured public IPFS gateway, which can observe the documents this browser requests.</p></details>
   </main>;
 }
-function ProjectList({ projects, empty, onSelect }: { projects: Project[]; empty: string; onSelect: (id: number) => void }) {
-  return <div className="project-list">{projects.length === 0 ? <State title={empty} detail="The verified contract returned an empty page." /> : projects.map((project) => <article className="project-card" key={project.id}><div><span className="badge">{statusLabel(project.status)}</span><h3 className="break">{project.metadata_uri}</h3><small>Project #{project.id}</small><p>Owner {compact(project.owner)}</p><small>Payout {compact(project.payout_address)}</small></div><button className="button secondary" onClick={() => onSelect(project.id)}>View canonical detail</button></article>)}</div>;
+export function ProjectManageRoute() {
+  const { source, config, transactionFlow, sender, publisher } = useOutletContext<RegistryOutletContext>();
+  const close = useCloseModal("/projects");
+  return <Modal titleId="project-action-form-title" onClose={close}>
+    <PageMeta route="projects/manage" />
+    <ActionWorkbench config={config} source={source} transactionFlow={transactionFlow} sender={sender} publisher={publisher} />
+  </Modal>;
 }
-function ProjectPanel({ id, source, close }: { id: number; source: RegistryDataSource; close: () => void }) {
+
+export function ProjectDetailRoute() {
+  const { source, config, metadata } = useOutletContext<RegistryOutletContext>();
+  const close = useCloseModal("/projects");
+  const params = useParams();
+  const projectId = params.projectId ?? "";
+  if (!/^[1-9]\d*$/.test(projectId)) return <NotFound />;
+  return <ProjectDetailLoader id={Number(projectId)} source={source} metadata={metadata} gateway={config.ipfsGateway} onClose={close} />;
+}
+
+function ProjectDetailLoader({ id, source, metadata, gateway, onClose }: { id: number; source: RegistryDataSource; metadata?: MetadataClient; gateway: string; onClose: () => void }) {
   const load = useMemo(() => () => source.loadProject(id), [source, id]); const [state, retry] = useAsync(load, `project ${id}`);
-  return <section className="detail-panel" aria-labelledby="project-detail"><div className="toolbar"><h2 id="project-detail">Project detail · {id}</h2><button className="button secondary" onClick={close}>Close</button></div>{state.kind === "loading" ? <State title="Loading canonical detail…" detail="Querying project and complete histories." /> : state.kind === "error" ? <State title="Detail unavailable" detail={state.message}><button className="button" onClick={retry}>Retry detail</button></State> : <Detail detail={state.data} />}</section>;
+  return <Modal variant="panel" titleId="project-detail" onClose={onClose}>
+    <PageMeta route="projects" titleOverride={`Project #${id} · Juno Voice`} />
+    <h2 id="project-detail">Project detail · {id}</h2>
+    {state.kind === "loading" ? <State title="Loading canonical detail…" detail="Querying project and complete histories." /> : state.kind === "error" ? <State title="Detail unavailable" detail={state.message}><button className="button" onClick={retry}>Retry detail</button></State> : <Detail detail={state.data} metadata={metadata} gateway={gateway} />}
+  </Modal>;
 }
-function Detail({ detail: { project: p, statusHistory, addressHistory } }: { detail: ProjectDetail }) {
-  return <div className="detail-grid"><div><h3>Canonical record</h3><dl><dt>Status</dt><dd>{statusLabel(p.status)}</dd><dt>Owner</dt><dd className="break">{p.owner}</dd><dt>Payout</dt><dd className="break">{p.payout_address}</dd><dt>Metadata URI</dt><dd className="break"><a href={p.metadata_uri} target="_blank" rel="noreferrer">{p.metadata_uri}</a></dd><dt>Metadata digest</dt><dd className="break">{p.metadata_digest}</dd><dt>Admission</dt><dd>{p.provenance.kind === "bonded_registration" ? "Bonded public registration" : `Graduated bounty #${p.provenance.source_bounty_id}`}</dd>{p.bond && <><dt>Registration bond</dt><dd>{juno(p.bond.amount)} · {p.bond.state}</dd></>}{p.latest_review && <><dt>Latest curator review</dt><dd>{p.latest_review.code.replaceAll("_", " ")} · {p.latest_review.note}</dd></>}</dl>{p.pending_payout_address && <div className="notice"><strong>Pending payout address</strong><p className="break">{p.pending_payout_address.address}</p><p>Acceptable by the proposed address at or after <time dateTime={utc(p.pending_payout_address.executable_at)}>{utc(p.pending_payout_address.executable_at)}</time>, subject to canonical chain time.</p></div>}</div><div><History title="Status history" entries={statusHistory.map((h) => ({ key: h.sequence, title: `${h.from ?? "new"} → ${h.to}`, detail: `${h.action} · ${utc(h.at)} · ${compact(h.actor)}` }))} /><History title="Payout address history" entries={addressHistory.map((h) => ({ key: h.sequence, title: h.action, detail: `${h.proposed_address ? compact(h.proposed_address) : "No proposed address"} · ${utc(h.at)}` }))} /></div></div>;
+
+function ProjectList({ projects, empty, metadata }: { projects: Project[]; empty: string; metadata?: MetadataClient }) {
+  return <div className="project-list">{projects.length === 0 ? <State title={empty} detail="The verified contract returned an empty page." /> : projects.map((project) => <article className="project-card" key={project.id}><div><span className="badge">{statusLabel(project.status)}</span><h3 className="break"><VerifiedName client={metadata} uri={project.metadata_uri} digest={project.metadata_digest} fallback={project.metadata_uri} /></h3><small>Project #{project.id}</small><p>Owner {compact(project.owner)}</p><small>Payout {compact(project.payout_address)}</small></div><Link className="button secondary" to={String(project.id)}>View canonical detail</Link></article>)}</div>;
+}
+function Detail({ detail: { project: p, statusHistory, addressHistory }, metadata, gateway }: { detail: ProjectDetail; metadata?: MetadataClient; gateway: string }) {
+  return <div className="detail-grid"><div><h3>Canonical record</h3><dl><dt>Status</dt><dd>{statusLabel(p.status)}</dd><dt>Owner</dt><dd className="break">{p.owner}</dd><dt>Payout</dt><dd className="break">{p.payout_address}</dd><dt>Metadata</dt><dd className="break"><MetadataPanel client={metadata} gateway={gateway} uri={p.metadata_uri} digest={p.metadata_digest} expected="juno-voice/project" /></dd><dt>Admission</dt><dd>{p.provenance.kind === "bonded_registration" ? "Bonded public registration" : `Graduated bounty #${p.provenance.source_bounty_id}`}</dd>{p.bond && <><dt>Registration bond</dt><dd>{juno(p.bond.amount)} · {p.bond.state}</dd></>}{p.latest_review && <><dt>Latest curator review</dt><dd>{p.latest_review.code.replaceAll("_", " ")} · {p.latest_review.note}</dd></>}</dl>{p.pending_payout_address && <div className="notice"><strong>Pending payout address</strong><p className="break">{p.pending_payout_address.address}</p><p>Acceptable by the proposed address at or after <time dateTime={utc(p.pending_payout_address.executable_at)}>{utc(p.pending_payout_address.executable_at)}</time>, subject to canonical chain time.</p></div>}</div><div><History title="Status history" entries={statusHistory.map((h) => ({ key: h.sequence, title: `${h.from ?? "new"} → ${h.to}`, detail: `${h.action} · ${utc(h.at)} · ${compact(h.actor)}` }))} /><History title="Payout address history" entries={addressHistory.map((h) => ({ key: h.sequence, title: h.action, detail: `${h.proposed_address ? compact(h.proposed_address) : "No proposed address"} · ${utc(h.at)}` }))} /></div></div>;
 }
 function History({ title, entries }: { title: string; entries: { key: number; title: string; detail: string }[] }) { return <section className="history"><h3>{title}</h3>{entries.length ? <ol>{entries.map((e) => <li key={e.key}><strong>{e.title}</strong><small>{e.detail}</small></li>)}</ol> : <p>No history entries.</p>}</section>; }
-function ActionWorkbench({ config, source, transactionFlow, sender }: { config: AppConfig; source: RegistryDataSource; transactionFlow?: RegistryTransactionFlow; sender?: string }) {
+function ActionWorkbench({ config, source, transactionFlow, sender, publisher }: { config: AppConfig; source: RegistryDataSource; transactionFlow?: RegistryTransactionFlow; sender?: string; publisher?: DocumentPublisher }) {
   const [action, setAction] = useState<RegistryAction>("register_project"), [projectId, setProjectId] = useState(""), [metadataUri, setMetadataUri] = useState(""), [digest, setDigest] = useState(""), [address, setAddress] = useState(""), [note, setNote] = useState("");
   const [connectedSender, setConnectedSender] = useState<string | null>(sender ?? null), [review, setReview] = useState<TransactionReview | null>(null), [outcome, setOutcome] = useState<TransactionOutcome | null>(null), [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false);
-  const [digestBusy, setDigestBusy] = useState(false), [digestError, setDigestError] = useState<string | null>(null);
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [fields, setFields] = useState(EMPTY_PROJECT_FIELDS);
+  const [manualMode, setManualMode] = useState(!publisher);
+  const [publishing, setPublishing] = useState(false);
   const activeSender = sender ?? connectedSender;
   const contractScope = useMemo(() => ({ chainId: config.chainId, contract: config.registryContract }), [config.chainId, config.registryContract]);
   const scope = useMemo(() => activeSender ? { sender: activeSender, ...contractScope } : null, [activeSender, contractScope]);
@@ -80,9 +153,28 @@ function ActionWorkbench({ config, source, transactionFlow, sender }: { config: 
   const persistedReceipt = storedSubmission?.kind === "uncertain" && storedSubmission.evidence.txHash && storedSubmission.evidence.explorerUrl
     ? { hash: storedSubmission.evidence.txHash, url: storedSubmission.evidence.explorerUrl, confirmed: false } : null;
   const visibleReceipt = receipt ?? persistedReceipt;
-  const hashMetadataFile = async (file: File | undefined) => { if (!file) return; setDigestBusy(true); setDigestError(null); try { setDigest(await digestMetadataFile(file)); setReview(null); } catch (cause) { setDigestError(cause instanceof Error ? cause.message : "Metadata hashing failed."); } finally { setDigestBusy(false); } };
   const connect = async () => { if (!transactionFlow?.connect) return; setBusy(true); setError(null); try { const identity = await transactionFlow.connect(); setConnectedSender(identity.address); } catch (cause) { setError(cause instanceof Error ? cause.message : "Wallet connection failed."); } finally { setBusy(false); } };
-  const prepare = async () => { if (!transactionFlow || !activeSender || submissionLocked) return; setBusy(true); setError(null); setReview(null); setOutcome(null); try { const numericProjectId = action === "register_project" ? null : Number(projectId); const context = await source.loadActionContext(numericProjectId); const intent = buildRegistryIntent(config, activeSender, context, { action, projectId: numericProjectId, metadataUri, metadataDigest: digest, address, note }); const prepared = await transactionFlow.prepare(intent); preparedAction.current = action; setReview(prepared); } catch (cause) { setError(cause instanceof Error ? cause.message : "Transaction preparation failed."); } finally { setBusy(false); } };
+  const prepare = async () => {
+    if (!transactionFlow || !activeSender || submissionLocked) return;
+    setBusy(true); setError(null); setReview(null); setOutcome(null);
+    try {
+      let uri = metadataUri, metadataDigest = digest;
+      if (usesMetadata && !manualMode) {
+        if (!publisher) throw new Error("Publishing from this app is not configured. Link a file you published yourself instead.");
+        setPublishing(true);
+        try {
+          const logo = fields.logo ? await publisher.publishImage(fields.logo) : null;
+          const pinned = await publisher.publishDocument("project.json", projectDocumentFrom(fields, logo?.uri));
+          uri = pinned.uri; metadataDigest = pinned.digest;
+        } finally { setPublishing(false); }
+      }
+      const numericProjectId = action === "register_project" ? null : Number(projectId);
+      const context = await source.loadActionContext(numericProjectId);
+      const intent = buildRegistryIntent(config, activeSender, context, { action, projectId: numericProjectId, metadataUri: uri, metadataDigest, address, note });
+      const prepared = await transactionFlow.prepare(intent);
+      preparedAction.current = action; setReview(prepared);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Transaction preparation failed."); } finally { setBusy(false); }
+  };
   const submit = async () => {
     if (!transactionFlow || !review || !scope) return;
     setBusy(true); setError(null);
@@ -129,29 +221,44 @@ function ActionWorkbench({ config, source, transactionFlow, sender }: { config: 
   return <section id="registry-workbench" className="workbench protocol-workbench" aria-labelledby="project-action-form-title">
     <div className="workbench-heading">
       <div><p className="eyebrow">PROJECT DETAILS</p><h2 id="project-action-form-title">Choose a project action</h2></div>
-      <span className="step-marker">1 · DETAILS</span>
+      <span className="step-marker">01 · DETAILS</span>
     </div>
     <p>Choose what you want to do and enter the project details. We will check the latest registry state before showing a wallet review.</p>
     <div className="action-guidance" role="note"><strong>{guidance.title}</strong><p>{guidance.detail}</p></div>
     <div className="form-grid">
       <label>Action<select aria-label="Project action" value={action} disabled={submissionLocked} onChange={(e) => { setAction(e.target.value as RegistryAction); setReview(null); }}><option value="register_project">Register project</option><option value="update_pending_metadata">Update pending metadata</option><option value="propose_payout_address">Propose payout address</option><option value="cancel_payout_address_change">Cancel payout change</option><option value="accept_payout_address">Accept delayed payout</option><option value="retire">Voluntary retirement</option><option value="claim_registration_bond">Claim registration bond</option></select><small className="form-help">Select the project change you want to make.</small></label>
       {action !== "register_project" && <label>Project ID<input aria-label="Project ID" value={projectId} inputMode="numeric" pattern="[1-9][0-9]*" disabled={submissionLocked} placeholder="1" onChange={(e) => setProjectId(e.target.value)} /><small className="form-help">Positive numeric ID assigned by the registry.</small></label>}
-      {usesMetadata && <><label>Metadata URI<input aria-label="Metadata URI" value={metadataUri} disabled={submissionLocked} placeholder="ipfs://… or https://…" onChange={(e) => setMetadataUri(e.target.value)} /><small className="form-help">A public, durable link to the project metadata.</small></label><label>Metadata fingerprint<input aria-label="SHA-256 metadata digest" value={digest} maxLength={71} disabled={submissionLocked || digestBusy} placeholder="sha256:…" onChange={(e) => setDigest(e.target.value)} /><small className="form-help">A SHA-256 fingerprint proves the linked file has not changed.</small></label><label className="metadata-file">Calculate fingerprint from file<input aria-label="Calculate digest from metadata file" type="file" disabled={submissionLocked || digestBusy} onChange={(event) => void hashMetadataFile(event.currentTarget.files?.[0])} /><small className="form-help">Choose the same file you publish at the metadata URI. It stays in your browser.</small></label></>}
+      {usesMetadata && manualMode && <>
+        <UriDigestFields uriLabel="Metadata URI" uriAriaLabel="Metadata URI"
+          uriHint="A public, durable link to the project metadata." uriValue={metadataUri}
+          onUriChange={(value) => { setMetadataUri(value); setReview(null); }}
+          digestLabel="Metadata fingerprint" digestAriaLabel="SHA-256 metadata digest"
+          digestHint="A SHA-256 fingerprint proves the linked file has not changed." digestValue={digest}
+          onDigestChange={(value) => { setDigest(value); setReview(null); }}
+          fileLabel="Calculate fingerprint from file" fileAriaLabel="Calculate digest from metadata file"
+          fileHint="Choose the same file you publish at the metadata URI. It stays in your browser."
+          disabled={submissionLocked} onHashingChange={setDigestBusy} />
+        {publisher
+          ? <button type="button" className="button secondary" onClick={() => setManualMode(false)}>Fill in project details instead</button>
+          : <small className="form-help">Publishing from this app is not configured. Link a file you published yourself.</small>}
+      </>}
+      {usesMetadata && !manualMode && <>
+        <ProjectFields value={fields} onChange={(next) => { setFields(next); setReview(null); }} disabled={submissionLocked || publishing} />
+        <small className="form-help">Juno Voice publishes these details to IPFS and commits their exact fingerprint on chain when you continue.</small>
+        <button type="button" className="button secondary" onClick={() => setManualMode(true)}>Advanced: link a file you already published</button>
+      </>}
       {["register_project", "propose_payout_address"].includes(action) && <label>Payout address<input aria-label="Payout address" value={address} disabled={submissionLocked} placeholder="juno1…" onChange={(e) => setAddress(e.target.value)} /><small className="form-help">The Juno account that can receive future project funding.</small></label>}
       {action === "retire" && <label>Retirement note<input aria-label="Retirement note" value={note} disabled={submissionLocked} onChange={(e) => setNote(e.target.value)} /><small className="form-help">A short public explanation for retiring the project.</small></label>}
     </div>
-    {digestBusy && <p className="inline-status" role="status">Calculating SHA-256 fingerprint in this browser…</p>}
-    {digestError && <p className="notice danger" role="alert">{digestError}</p>}
     <details className="workbench-help"><summary>Before you continue</summary><p>Juno Voice will show the selected account, registry contract, funds, fee, and expected result. The latest project state and wallet account are checked again before your wallet asks you to sign.</p></details>
-    {!transactionFlow ? <p className="notice" role="status">Supported Keplr or Leap wallet transaction support is unavailable in this browser. Registry browsing never requires a wallet.</p> : !activeSender ? <button className="button" disabled={busy || !transactionFlow.connect} onClick={connect}>{busy ? "Connecting wallet…" : "Connect wallet"}</button> : <><p className="notice" role="status">Connected account: {compact(activeSender)}</p><button className="button" disabled={busy || submissionLocked || digestBusy} onClick={prepare}>{busy ? "Checking project status…" : "Review project action"}</button></>}
+    {!transactionFlow ? <p className="notice" role="status">Supported Keplr or Leap wallet transaction support is unavailable in this browser. Registry browsing never requires a wallet.</p> : !activeSender ? <button className="button" disabled={busy || !transactionFlow.connect} onClick={connect}>{busy ? "Connecting wallet…" : "Connect wallet"}</button> : <><p className="notice" role="status">Connected account: {compact(activeSender)}</p><button className="button" disabled={busy || submissionLocked || digestBusy} onClick={prepare}>{busy ? (publishing ? "Publishing project details…" : "Checking project status…") : "Review project action"}</button></>}
     {error && <p className="notice danger" role="alert">{error}</p>}
-    {review && <div className="review-box"><strong>Review before signing</strong><pre>{JSON.stringify({ sender: review.sender, chainId: review.chainId, contract: review.contract, msg: review.executeMessage, ...userFacingTransactionAmounts(review), consequences: review.consequences, canonicalState: review.canonicalState }, null, 2)}</pre><button className="button" disabled={busy} onClick={submit}>{busy ? "Checking latest state…" : "Confirm and open wallet"}</button></div>}
+    {review && <Modal titleId="registry-review-title" onClose={() => setReview(null)} closeDisabled={busy} closeLabel="Cancel review">
+      <div className="review-box"><strong id="registry-review-title">Review before signing</strong><pre>{JSON.stringify({ sender: review.sender, chainId: review.chainId, contract: review.contract, msg: review.executeMessage, ...userFacingTransactionAmounts(review), consequences: review.consequences, canonicalState: review.canonicalState }, null, 2)}</pre><button className="button" disabled={busy} onClick={submit}>{busy ? "Checking latest state…" : "Confirm and open wallet"}</button></div>
+    </Modal>}
     {outcome && <p className="notice" role="status">{outcome.status === "confirmed" ? `Confirmed at height ${outcome.height}. Canonical state ${outcome.refreshStatus}.` : outcome.status === "failed" || outcome.status === "rejected" ? outcome.reason : outcome.txHash ? "Submission is not canonically confirmed. Use the transaction evidence below and do not submit again." : "Signing began and submission may have occurred, but no transaction hash is available. Do not submit again until you inspect this account on Juno."}</p>}
     {restoredNotice}
     {visibleReceipt && <p><a href={visibleReceipt.url} target="_blank" rel="noopener noreferrer">View {visibleReceipt.confirmed ? "confirmed transaction" : "transaction evidence"} {visibleReceipt.hash}</a></p>}
   </section>;
 }
-function Fact({ label, value }: { label: string; value: string }) { return <div className="fact"><span>{label}</span><strong>{value}</strong></div>; }
-function State({ title, detail, children }: { title: string; detail: string; children?: React.ReactNode }) { return <div className="state" role="status"><h2>{title}</h2><p>{detail}</p>{children}</div>; }
-
 export default Registry;

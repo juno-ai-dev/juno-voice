@@ -1,13 +1,26 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
-import { Ledger } from "./Ledger";
+import { BountyDetailRoute, CreateBountyRoute, Ledger } from "./Ledger";
+import type { VoiceDataSource } from "./client";
 import { config, ledger } from "./test/bountyFixtures";
 
 const source = (value = ledger) => ({
   loadLedger: () => Promise.resolve(value),
 });
+const renderLedger = (dataSource: VoiceDataSource, initialEntries: string[] = ["/bounties"]) =>
+  render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <Routes>
+        <Route path="/bounties" element={<Ledger config={config} source={dataSource} />}>
+          <Route path="create" element={<CreateBountyRoute />} />
+          <Route path=":bountyId" element={<BountyDetailRoute />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
 const checkA11y = async (container: HTMLElement) => {
   const result = await axe.run(container, {
     runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
@@ -17,59 +30,48 @@ const checkA11y = async (container: HTMLElement) => {
 
 describe("accessibility", () => {
   it("has no WCAG A/AA violations in loading state", async () => {
-    const { container } = render(
-      <Ledger
-        config={config}
-        source={{ loadLedger: () => new Promise(() => {}) }}
-      />,
-    );
+    const { container } = renderLedger({ loadLedger: () => new Promise(() => {}) });
     await checkA11y(container);
   });
 
   it("has no WCAG A/AA violations in error state", async () => {
-    const { container } = render(
-      <Ledger
-        config={config}
-        source={{ loadLedger: () => Promise.reject(new Error("RPC offline")) }}
-      />,
-    );
+    const { container } = renderLedger({ loadLedger: () => Promise.reject(new Error("RPC offline")) });
     await screen.findByText("RPC offline");
     await checkA11y(container);
   });
 
   it("has no WCAG A/AA violations in populated and empty states", async () => {
-    const populated = render(<Ledger config={config} source={source()} />);
+    const populated = renderLedger(source());
     await screen.findByText("Fund community tooling");
     await checkA11y(populated.container);
     populated.unmount();
 
-    const empty = render(
-      <Ledger config={config} source={source({ ...ledger, bounties: [] })} />,
-    );
+    const empty = renderLedger(source({ ...ledger, bounties: [] }));
     await screen.findByText("No on-chain bounties yet");
     await checkA11y(empty.container);
   });
 
   it("has no WCAG A/AA violations in paused, degraded, and filtered states", async () => {
-    const { container } = render(
-      <Ledger
-        config={config}
-        source={source({
-          ...ledger,
-          pause: {
-            paused: true,
-            reason: "maintenance",
-            actor: "juno1agent",
-            changed_at: "1",
-          },
-          health: { ...ledger.health, fully_backed: false },
-        })}
-      />,
-    );
+    const { container } = renderLedger(source({
+      ...ledger,
+      pause: {
+        paused: true,
+        reason: "maintenance",
+        actor: "juno1agent",
+        changed_at: "1",
+      },
+      health: { ...ledger.health, fully_backed: false },
+    }));
     await screen.findByText(/New activity is paused/);
     await checkA11y(container);
     await userEvent.type(screen.getByRole("searchbox"), "missing");
     await screen.findByText("No matching bounties");
+    await checkA11y(container);
+  });
+
+  it("has no WCAG A/AA violations in the route-addressed create modal", async () => {
+    const { container } = renderLedger(source(), ["/bounties/create"]);
+    await screen.findByRole("dialog", { name: "Create a bounty" });
     await checkA11y(container);
   });
 
@@ -79,9 +81,8 @@ describe("accessibility", () => {
       contributions: [{ bounty_id: 1, contributor: ledger.bounties[0].creator, contributor_index: 1,
         current_amount: "2500000", weight_at_round: null }], claims: [], history: [],
       observationHeight: ledger.observationHeight, chainTimeNanos: ledger.chainTimeNanos, fingerprint: "detail" };
-    const { container } = render(<Ledger config={config} source={{ loadLedger: async () => ledger,
-      loadBountyDetail: async () => detail }} />);
-    await userEvent.click(await screen.findByRole("button", { name: "Fund community tooling" }));
+    const { container } = renderLedger({ loadLedger: async () => ledger, loadBountyDetail: async () => detail });
+    await userEvent.click(await screen.findByRole("link", { name: "Fund community tooling" }));
     await screen.findByRole("heading", { name: "Contributor-controlled settlement" });
     await checkA11y(container);
   });

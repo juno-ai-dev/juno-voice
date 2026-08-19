@@ -1,0 +1,44 @@
+.uri-field .field-hint,
+.hash-field .field-hint,
+.hash-status {
+  display: block;
+  margin-top: 3px;
+  color: #d7bda1;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.hash-field {
+  display: grid;
+  gap: 9px;
+}
+
+.file-picker {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid #a65a5c;
+  color: #ff9a9b;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.file-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-picker:focus-within {
+  outline: 3px solid #ff9a9b;
+  outline-offset: 3px;
+}

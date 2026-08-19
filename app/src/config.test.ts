@@ -64,4 +64,40 @@ describe("fail-closed production configuration", () => {
       "Release commit",
     );
   });
+
+  it("defaults the IPFS gateway and requires credential-free HTTPS when overridden", () => {
+    expect(loadConfig(deployment({ VITE_IPFS_GATEWAY: undefined })).ipfsGateway).toBe("https://ipfs.io/ipfs");
+    expect(loadConfig(deployment({ VITE_IPFS_GATEWAY: "https://gateway.example/ipfs/" })).ipfsGateway).toBe(
+      "https://gateway.example/ipfs",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "http://gateway.example/ipfs" }))).toThrow(
+      "IPFS gateway",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "https://user:pw@gateway.example" }))).toThrow(
+      "IPFS gateway",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "not a url" }))).toThrow(
+      "Invalid IPFS gateway",
+    );
+  });
+
+  it("treats the presign endpoint as optional and allows only HTTPS or loopback dev", () => {
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: undefined })).presignUrl).toBeNull();
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "" })).presignUrl).toBeNull();
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "https://presign.example/sign" })).presignUrl).toBe(
+      "https://presign.example/sign",
+    );
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "http://127.0.0.1:8787/sign" })).presignUrl).toBe(
+      "http://127.0.0.1:8787/sign",
+    );
+    expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "http://presign.example/sign" }))).toThrow(
+      "Presign URL",
+    );
+    expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "https://user:pw@presign.example/sign" }))).toThrow(
+      "Presign URL",
+    );
+    expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "not a url" }))).toThrow(
+      "Invalid presign URL",
+    );
+  });
 });

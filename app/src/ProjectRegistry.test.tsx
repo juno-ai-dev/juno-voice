@@ -1,9 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.setConfig({ testTimeout: 15_000 });
-import { Registry } from "./ProjectRegistry";
+import { ProjectDetailRoute, ProjectManageRoute, Registry } from "./ProjectRegistry";
 import { digestMetadataFile } from "./metadataDigest";
 import type { Project, RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
@@ -34,9 +36,21 @@ const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender, cha
 const flow = (): RegistryTransactionFlow => ({ connect: vi.fn(async () => ({ address: sender })),
   prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "pending" as const, txHash: "KNOWN",
     explorerUrl: "https://www.mintscan.io/juno/tx/KNOWN" })) });
+const wrap = (ui: ReactElement) => (
+  <MemoryRouter initialEntries={["/projects"]}>
+    <Routes>
+      <Route path="/projects" element={ui}>
+        <Route path="manage" element={<ProjectManageRoute />} />
+        <Route path=":projectId" element={<ProjectDetailRoute />} />
+      </Route>
+    </Routes>
+  </MemoryRouter>
+);
 async function openProjectWorkbench() {
-  const launcher = screen.queryByRole("button", { name: "Open project actions" });
-  if (launcher) await userEvent.click(launcher);
+  await screen.findByText("Eligible projects");
+  const launcher = screen.queryByRole("link", { name: "Open project actions" });
+  if (launcher && !screen.queryByRole("dialog", { name: "Choose a project action" })) await userEvent.click(launcher);
+  await screen.findByRole("dialog", { name: "Choose a project action" });
 }
 async function prepareAndSubmit(port: RegistryTransactionFlow) {
   await screen.findByText("Eligible projects");
@@ -58,6 +72,50 @@ describe("registry transaction UI evidence", () => {
   beforeEach(() => sessionStorage.clear());
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); clearRegistrySubmission({ sender, chainId: config.chainId, contract: config.registryContract }); });
 
+  it("publishes structured project details and reviews the pinned reference", async () => {
+    const port = flow();
+    const publisher = {
+      publishDocument: vi.fn(async () => ({ uri: "ipfs://bafypinned", digest: `sha256:${"c".repeat(64)}`, size: 42 })),
+      publishImage: vi.fn(),
+    };
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} publisher={publisher} />));
+    await openProjectWorkbench();
+    expect(screen.queryByLabelText("Metadata URI")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/^Project name/), "Alpha");
+    await userEvent.type(screen.getByLabelText(/^Short summary/), "A project.");
+    await userEvent.type(screen.getByLabelText("Payout address"), sender);
+    await userEvent.click(screen.getByRole("button", { name: "Review project action" }));
+    await vi.waitFor(() => expect(port.prepare).toHaveBeenCalled());
+    expect(publisher.publishDocument).toHaveBeenCalledWith("project.json",
+      expect.objectContaining({ doc: "juno-voice/project", name: "Alpha", summary: "A project." }));
+    expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { register_project: expect.objectContaining({
+      metadata_uri: "ipfs://bafypinned", metadata_digest: `sha256:${"c".repeat(64)}` }) } }));
+  });
+
+  it("keeps the manual link mode reachable as an advanced escape hatch", async () => {
+    const publisher = { publishDocument: vi.fn(), publishImage: vi.fn() };
+    render(wrap(<Registry source={source()} config={config} transactionFlow={flow()} sender={sender} publisher={publisher} />));
+    await openProjectWorkbench();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced: link a file you already published" }));
+    expect(screen.getByLabelText("Metadata URI")).toBeInTheDocument();
+    expect(screen.getByLabelText("SHA-256 metadata digest")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Fill in project details instead" }));
+    expect(screen.getByLabelText(/^Project name/)).toBeInTheDocument();
+  });
+
+  it("shows a plain publishing error and signs nothing when validation fails", async () => {
+    const port = flow();
+    const publisher = { publishDocument: vi.fn(), publishImage: vi.fn() };
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} publisher={publisher} />));
+    await openProjectWorkbench();
+    await userEvent.type(screen.getByLabelText(/^Short summary/), "A project.");
+    await userEvent.type(screen.getByLabelText("Payout address"), sender);
+    await userEvent.click(screen.getByRole("button", { name: "Review project action" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Project name is required.");
+    expect(port.prepare).not.toHaveBeenCalled();
+    expect(publisher.publishDocument).not.toHaveBeenCalled();
+  });
+
   it("uses project metadata as the primary label and keeps the numeric ID secondary", async () => {
     const project: Project = {
       id: 7, owner: sender, payout_address: sender, metadata_uri: "ipfs://alpha-project",
@@ -69,7 +127,7 @@ describe("registry transaction UI evidence", () => {
     };
     const populated = source();
     vi.mocked(populated.loadRegistry).mockResolvedValue({ ...data, projects: [project] });
-    render(<Registry source={populated} config={config} />);
+    render(wrap(<Registry source={populated} config={config} />));
 
     expect(await screen.findByRole("heading", { name: project.metadata_uri })).toBeInTheDocument();
     expect(screen.getByText("Project #7")).toBeInTheDocument();
@@ -87,7 +145,7 @@ describe("registry transaction UI evidence", () => {
   });
 
   it("restores a known-hash pending lock and explorer evidence after unmount and remount", async () => {
-    const port = flow(); const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    const port = flow(); const view = render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await screen.findByText("Eligible projects");
     expect(screen.queryByLabelText("Project action")).not.toBeInTheDocument();
     await openProjectWorkbench();
@@ -102,7 +160,7 @@ describe("registry transaction UI evidence", () => {
     expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     expect(sessionStorage.length).toBeGreaterThan(0);
     view.unmount();
-    render(<Registry source={source()} config={config} transactionFlow={port} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} />));
     await openProjectWorkbench();
     expect(await screen.findByRole("link", { name: /transaction evidence KNOWN/ })).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/KNOWN");
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
@@ -113,7 +171,7 @@ describe("registry transaction UI evidence", () => {
     let finish!: (value: { status: "unknown" }) => void;
     const signing = new Promise<{ status: "unknown" }>((resolve) => { finish = resolve; });
     const port = flow(); vi.mocked(port.submit).mockReturnValueOnce(signing);
-    render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await prepareAndSubmit(port);
     await vi.waitFor(() => expect(port.submit).toHaveBeenCalledWith(review));
     expect(Array.from({ length: sessionStorage.length }, (_, index) => sessionStorage.getItem(sessionStorage.key(index)!)))
@@ -126,7 +184,7 @@ describe("registry transaction UI evidence", () => {
   it("refuses a prepared review whose action differs from the selected action", async () => {
     const port = flow();
     vi.mocked(port.prepare).mockResolvedValueOnce({ ...review, executeMessage: { retire: { project_id: 1 } } });
-    render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await screen.findByText("Eligible projects"); await openProjectWorkbench();
     await userEvent.type(screen.getByLabelText("Metadata URI"), "ipfs://alpha");
     await userEvent.type(screen.getByLabelText("SHA-256 metadata digest"), `sha256:${"a".repeat(64)}`);
@@ -139,14 +197,14 @@ describe("registry transaction UI evidence", () => {
 
   it("restores a hashless unknown lock after unmount and remount without inventing explorer evidence", async () => {
     const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
-    const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    const view = render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await prepareAndSubmit(port);
     expect(await screen.findByText(/no transaction hash is available/i)).toHaveTextContent(/Do not submit again/i);
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     expect(sessionStorage.length).toBeGreaterThan(0);
     view.unmount();
-    render(<Registry source={source()} config={config} transactionFlow={port} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} />));
     await openProjectWorkbench();
     expect(await screen.findByText(/no transaction hash is available/i)).toHaveTextContent(/Do not submit again/i);
     expect(screen.queryByRole("link", { name: /transaction evidence/i })).not.toBeInTheDocument();
@@ -157,12 +215,12 @@ describe("registry transaction UI evidence", () => {
   it("remains fail-closed after remount when uncertainty cannot be written to session storage", async () => {
     const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "unknown" });
     const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
-    const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    const view = render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await prepareAndSubmit(port);
     expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
     view.unmount();
-    render(<Registry source={source()} config={config} transactionFlow={port} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} />));
     await openProjectWorkbench();
     expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
@@ -173,11 +231,11 @@ describe("registry transaction UI evidence", () => {
   it("keeps confirmed explorer evidence across a canonical-data rerender", async () => {
     const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce({ status: "confirmed", txHash: "CONFIRMED", height: 101,
       confirmationStatus: "confirmed", refreshStatus: "refreshed", explorerUrl: "https://www.mintscan.io/juno/tx/CONFIRMED" });
-    const view = render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    const view = render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await prepareAndSubmit(port);
     const evidence = await screen.findByRole("link", { name: /confirmed transaction CONFIRMED/ });
     expect(sessionStorage).toHaveLength(0);
-    view.rerender(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    view.rerender(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     expect(evidence).toBeInTheDocument();
   });
 
@@ -186,7 +244,7 @@ describe("registry transaction UI evidence", () => {
     { status: "rejected" as const, reason: "wallet rejected the request" },
   ])("does not persist a $status outcome as a stale lock", async (terminal) => {
     const port = flow(); vi.mocked(port.submit).mockResolvedValueOnce(terminal);
-    render(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} />));
     await prepareAndSubmit(port);
     expect(await screen.findByText(terminal.reason)).toBeInTheDocument();
     expect(sessionStorage).toHaveLength(0);
@@ -200,7 +258,7 @@ describe("registry transaction UI evidence", () => {
       .find((key) => sessionStorage.getItem(key)?.includes('"action"'))!;
     sessionStorage.setItem(evidenceKey, "not json");
     const port = flow();
-    render(<Registry source={source()} config={config} transactionFlow={port} />);
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} />));
     await openProjectWorkbench();
     expect(await screen.findByText(/Stored submission evidence is malformed or unavailable/)).toHaveTextContent(/remains locked/i);
     expect(screen.getByLabelText("Project action")).toBeDisabled();

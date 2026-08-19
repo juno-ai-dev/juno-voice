@@ -2,6 +2,7 @@ import { fromBech32 } from "@cosmjs/encoding";
 import type { BountyDetail, PayoutRound, PayoutVote } from "./types";
 import type { TransactionIntent } from "./transactions";
 import { formatJuno } from "./junoAmount";
+import { METADATA_DIGEST_PATTERN, URI_SCHEME_PATTERN } from "./metadataDigest";
 
 const U64_MAX = 18446744073709551615n;
 const utf8 = (value: string) => new TextEncoder().encode(value).length;
@@ -20,7 +21,7 @@ function required(value: string, max: number, label: string): string {
 }
 function digest(value: string): string {
   const normalized = value.trim();
-  if (!/^sha256:[0-9a-f]{64}$/.test(normalized))
+  if (!METADATA_DIGEST_PATTERN.test(normalized))
     throw new Error("Evidence digest must use sha256:<64 lowercase hex characters>.");
   return normalized;
 }
@@ -64,7 +65,7 @@ export function nominatePayoutIntent(state: SettlementState, sender: string, inp
   if (b.next_round > b.terms.max_rounds) throw new Error("This bounty has reached its snapshotted round limit.");
   const recipient = junoAddress(input.recipient, "Recipient");
   const evidenceUri = required(input.evidenceUri, b.terms.max_evidence_uri_bytes, "Evidence URI");
-  if (!/^(https:\/\/|ipfs:\/\/)[^\s]+$/.test(evidenceUri))
+  if (!URI_SCHEME_PATTERN.test(evidenceUri))
     throw new Error("Evidence URI must be a bounded HTTPS or IPFS URI.");
   const evidenceDigest = digest(input.evidenceDigest);
   const rationale = required(input.rationale, b.terms.max_rationale_bytes, "Nomination rationale");

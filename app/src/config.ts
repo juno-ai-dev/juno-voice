@@ -4,6 +4,7 @@ export const PROTOCOL_VERSION = "v2" as const;
 export const DEFAULT_CHAIN_ID = "juno-1" as const;
 export const DEFAULT_RPC = "https://juno-rpc.publicnode.com:443" as const;
 export const DEFAULT_EXPLORER = "https://www.mintscan.io/juno" as const;
+export const DEFAULT_IPFS_GATEWAY = "https://ipfs.io/ipfs" as const;
 
 export interface AppConfig {
   protocolVersion: typeof PROTOCOL_VERSION;
@@ -26,6 +27,8 @@ export interface AppConfig {
   gaugeCodeId: number;
   gaugeCodeChecksum: string;
   releaseCommit: string;
+  ipfsGateway: string;
+  presignUrl: string | null;
 }
 
 export interface ConfigEnvironment {
@@ -49,6 +52,8 @@ export interface ConfigEnvironment {
   VITE_RPC_URL?: string;
   VITE_EXPLORER_URL?: string;
   VITE_RELEASE_COMMIT?: string;
+  VITE_IPFS_GATEWAY?: string;
+  VITE_PRESIGN_URL?: string;
 }
 
 function required(env: ConfigEnvironment, key: keyof ConfigEnvironment): string {
@@ -120,6 +125,33 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
   if (explorer !== DEFAULT_EXPLORER)
     throw new Error("Unsupported explorer URL. Configuration failed closed.");
 
+  const ipfsGateway = (env.VITE_IPFS_GATEWAY?.trim() || DEFAULT_IPFS_GATEWAY).replace(/\/+$/, "");
+  let gatewayUrl: URL;
+  try {
+    gatewayUrl = new URL(ipfsGateway);
+  } catch {
+    throw new Error("Invalid IPFS gateway URL. Configuration failed closed.");
+  }
+  if (gatewayUrl.protocol !== "https:" || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash)
+    throw new Error("IPFS gateway must be a credential-free HTTPS endpoint.");
+
+  // Optional: without a presign endpoint the app hides IPFS publishing and
+  // forms fall back to manual link-a-published-file mode. The loopback
+  // carve-out exists only for `wrangler dev`; production builds use HTTPS.
+  let presignUrl: string | null = null;
+  if (env.VITE_PRESIGN_URL?.trim()) {
+    let presign: URL;
+    try {
+      presign = new URL(env.VITE_PRESIGN_URL.trim());
+    } catch {
+      throw new Error("Invalid presign URL. Configuration failed closed.");
+    }
+    const loopbackDev = presign.protocol === "http:" && presign.hostname === "127.0.0.1";
+    if ((presign.protocol !== "https:" && !loopbackDev) || presign.username || presign.password || presign.search || presign.hash)
+      throw new Error("Presign URL must be a credential-free HTTPS endpoint. Only http://127.0.0.1 is allowed for local development.");
+    presignUrl = presign.toString();
+  }
+
   return {
     protocolVersion: PROTOCOL_VERSION,
     chainId,
@@ -141,5 +173,7 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
     gaugeCodeId: codeId(env, "VITE_GAUGE_CODE_ID", "gauge"),
     gaugeCodeChecksum: checksum(env, "VITE_GAUGE_CODE_CHECKSUM", "gauge"),
     releaseCommit,
+    ipfsGateway,
+    presignUrl,
   };
 }

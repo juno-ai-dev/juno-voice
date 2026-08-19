@@ -23,6 +23,11 @@ describe("registry transaction intent construction", () => {
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, projectId: 1 })).toThrow("assigned by the registry");
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, address: "juno1invalid" })).toThrow("valid Juno");
   });
+  it("rejects metadata URIs without a bounded HTTPS or IPFS scheme", () => {
+    expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataUri: "javascript:alert(1)" })).toThrow("HTTPS or IPFS");
+    expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataUri: "ftp://example.com/x" })).toThrow("HTTPS or IPFS");
+    expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataUri: "ipfs://with space" })).toThrow("HTTPS or IPFS");
+  });
   it("enforces ownership, status, stop, capacity, and backing", () => {
     expect(() => buildRegistryIntent(config, owner, context({ data: { ...context().data, pause: { ...context().data.pause, admissions_stopped: true } } }), input)).toThrow("stopped");
     expect(() => buildRegistryIntent(config, owner, context({ data: { ...context().data, health: { ...context().data.health, accounting: { ...context().data.health.accounting, active_projects: 99 } } } }), input)).toThrow("capacity");

@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { loadConfig } from "./config";
 import "./design-system/styles.css";
@@ -28,10 +29,22 @@ try {
     VITE_RPC_URL: import.meta.env.VITE_RPC_URL,
     VITE_EXPLORER_URL: import.meta.env.VITE_EXPLORER_URL,
     VITE_RELEASE_COMMIT: import.meta.env.VITE_RELEASE_COMMIT,
+    VITE_IPFS_GATEWAY: import.meta.env.VITE_IPFS_GATEWAY,
+    VITE_PRESIGN_URL: import.meta.env.VITE_PRESIGN_URL,
   });
+  // Browsers honor the FIRST <title> in the document, so the baked static
+  // head tags (crawler/unfurler metadata) must be removed before React's
+  // runtime tags take over. Only tags marked data-static-head are removed.
+  for (const element of document.querySelectorAll("[data-static-head]")) element.remove();
+  // normalizeBase guarantees BASE_URL is "/" or an absolute path ending in
+  // exactly one slash, so stripping the trailing slash is total.
+  const base = import.meta.env.BASE_URL;
+  const basename = base === "/" ? "/" : base.replace(/\/$/, "");
   createRoot(root).render(
     <StrictMode>
-      <App config={config} />
+      <BrowserRouter basename={basename}>
+        <App config={config} />
+      </BrowserRouter>
     </StrictMode>,
   );
 } catch (error) {

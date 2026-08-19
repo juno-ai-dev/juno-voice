@@ -1,0 +1,45 @@
+dialog.modal {
+  z-index: var(--z-modal, 1000);
+  margin: auto;
+  padding: 0;
+  border: 2px solid #a65a5c;
+  background: #160608;
+  color: #ffebd2;
+}
+
+dialog.modal::backdrop {
+  background: rgb(6 2 3 / 0.72);
+}
+
+dialog.modal-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 12vh);
+}
+
+dialog.modal-panel {
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 76px);
+}
+
+.modal-frame {
+  position: relative;
+  padding: 26px;
+  overflow-y: auto;
+  max-height: inherit;
+}
+
+.modal-close {
+  float: right;
+  margin: 0 0 12px 16px;
+}
+
+.modal-frame dd,
+.modal-frame code,
+.modal-frame pre {
+  overflow-wrap: anywhere;
+}
+
+.modal-frame pre {
+  white-space: pre-wrap;
+  color: #d7bda1;
+}

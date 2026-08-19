@@ -1,13 +1,14 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
+import { describe, expect, it } from "vitest";
 import { LandingPage } from "./LandingPage";
 
+const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
+
 describe("product landing page", () => {
-  it("explains the protocol, authority boundaries, and primary destinations", async () => {
-    const onNavigate = vi.fn();
-    render(<LandingPage onNavigate={onNavigate} />);
+  it("explains the protocol, authority boundaries, and primary destinations", () => {
+    renderPage();
 
     expect(screen.getByRole("heading", { name: /Fund useful work/ })).toBeInTheDocument();
     expect(screen.getByText(/Contributors—not an operator—decide/)).toBeInTheDocument();
@@ -16,14 +17,15 @@ describe("product landing page", () => {
     expect(screen.getByText(/split their snapshot voting power/)).toBeInTheDocument();
     expect(screen.queryByText("NEW TO JUNO VOICE?")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /View bounty ledger/ }));
-    await userEvent.click(screen.getByRole("button", { name: /View projects/ }));
-    await userEvent.click(screen.getByRole("button", { name: /View gauge epochs/ }));
-    expect(onNavigate.mock.calls).toEqual([["bounties"], ["projects"], ["gauge"]]);
+    expect(screen.getByRole("link", { name: /View bounty ledger/ })).toHaveAttribute("href", "/bounties");
+    expect(screen.getByRole("link", { name: /View projects/ })).toHaveAttribute("href", "/projects");
+    expect(screen.getByRole("link", { name: /View gauge epochs/ })).toHaveAttribute("href", "/gauge");
+    expect(screen.getByRole("link", { name: /Explore the funding gauge/ })).toHaveAttribute("href", "/gauge");
+    expect(screen.getByRole("link", { name: "Browse bounties" })).toHaveAttribute("href", "/bounties");
   });
 
   it("has no WCAG A/AA violations", async () => {
-    const { container } = render(<LandingPage onNavigate={vi.fn()} />);
+    const { container } = renderPage();
     const result = await axe.run(container, {
       runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
     });

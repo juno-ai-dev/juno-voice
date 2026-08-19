@@ -1,0 +1,32 @@
+.metadata-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.metadata-status {
+  color: #d7bda1;
+  font-size: 12px;
+}
+
+.metadata-doc-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.metadata-mismatch {
+  color: #ffc16b;
+}
+
+.metadata-source {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.metadata-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}

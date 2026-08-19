@@ -3,9 +3,10 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 
 export const limits = Object.freeze({
-  // Wallet simulation/signing support is deliberately bundled for #33. Keep an
+  // Wallet simulation/signing support is deliberately bundled for #33, and
+  // react-router was adopted for path-based routing in the UX overhaul. Keep an
   // explicit ceiling so future dependency growth remains a reviewed decision.
-  ".js": { raw: 2_100_000, gzip: 450_000 },
+  ".js": { raw: 2_200_000, gzip: 470_000 },
   ".css": { raw: 15_000, gzip: 5_000 },
 });
 

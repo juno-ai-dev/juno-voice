@@ -1,4 +1,5 @@
-import type { PublicView } from "./LandingPage";
+import { Link } from "react-router";
+import { PageMeta } from "./components/PageMeta";
 import "./FAQPage.css";
 import "./ShellLanding.css";
 
@@ -100,6 +101,10 @@ const sections: ReadonlyArray<FAQSection> = [
         answer: "Connecting reveals the selected public address and lets the wallet display transaction requests. It does not give Juno Voice permission to move funds on its own.",
       },
       {
+        question: "Where do project names and descriptions come from?",
+        answer: "The chain stores a link and a SHA-256 fingerprint for each document. Juno Voice fetches the linked file from a public IPFS gateway, checks its bytes against the on-chain fingerprint, and only shows content that matches. The gateway can observe which documents your browser requests; no wallet is involved in reading.",
+      },
+      {
         question: "What should I review before signing?",
         answer: "Compare the account, Juno network, contract, message, attached funds, fee, relevant deadlines, and expected consequences. Preparing a review is not the same as signing or submitting a transaction.",
       },
@@ -115,15 +120,16 @@ const sections: ReadonlyArray<FAQSection> = [
   },
 ];
 
-const destinations: ReadonlyArray<{ view: PublicView; label: string; detail: string }> = [
-  { view: "bounties", label: "Explore bounties", detail: "Find and fund requested work" },
-  { view: "gauge", label: "View the gauge", detail: "See current funding preferences" },
-  { view: "projects", label: "Browse projects", detail: "Inspect registry records" },
+const destinations: ReadonlyArray<{ to: string; label: string; detail: string }> = [
+  { to: "/bounties", label: "Explore bounties", detail: "Find and fund requested work" },
+  { to: "/gauge", label: "View the gauge", detail: "See current funding preferences" },
+  { to: "/projects", label: "Browse projects", detail: "Inspect registry records" },
 ];
 
-export function FAQPage({ onNavigate }: { onNavigate: (view: PublicView) => void }) {
+export function FAQPage() {
   return (
     <main className="faq-page">
+      <PageMeta route="faq" />
       <section className="faq-hero" aria-labelledby="faq-title">
         <div>
           <p className="eyebrow">JUNO VOICE FAQ</p>
@@ -167,9 +173,9 @@ export function FAQPage({ onNavigate }: { onNavigate: (view: PublicView) => void
         <div><p className="eyebrow">READY TO EXPLORE?</p><h2 id="faq-next-title">Follow the public record.</h2></div>
         <div className="faq-destinations">
           {destinations.map((destination) => (
-            <button type="button" key={destination.view} onClick={() => onNavigate(destination.view)}>
+            <Link key={destination.to} to={destination.to}>
               <span><strong>{destination.label}</strong><small>{destination.detail}</small></span><span aria-hidden="true">→</span>
-            </button>
+            </Link>
           ))}
         </div>
       </section>

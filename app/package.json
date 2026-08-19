@@ -16,6 +16,7 @@
     "test": "vitest run && node --test scripts/*.test.mjs",
     "test:e2e": "playwright test",
     "build": "tsc --noEmit && vite build",
+    "postbuild": "node scripts/generate-static-routes.mjs dist",
     "preview": "vite preview",
     "audit:all": "npm audit --audit-level=high",
     "audit:production": "npm audit --omit=dev --audit-level=high",
@@ -29,7 +30,8 @@
     "@cosmjs/stargate": "0.37.1",
     "cosmjs-types": "0.10.1",
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "react-router": "7.18.2"
   },
   "devDependencies": {
     "@eslint/js": "9.32.0",
