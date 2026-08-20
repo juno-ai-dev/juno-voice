@@ -11,6 +11,38 @@
 
 const PINATA_SIGN_ENDPOINT = "https://uploads.pinata.cloud/v3/files/sign";
 const SIGNED_URL_EXPIRES_SECONDS = 60;
+export const SIGN_REQUEST_MAX_BYTES = 1_024;
+
+class RequestTooLargeError extends Error {}
+
+async function readRequestJson(request) {
+  const declared = request.headers.get("content-length");
+  if (declared && /^\d+$/.test(declared) && BigInt(declared) > BigInt(SIGN_REQUEST_MAX_BYTES)) {
+    try { await request.body?.cancel(); } catch { /* The rejection remains oversized even if cancellation fails. */ }
+    throw new RequestTooLargeError();
+  }
+  if (!request.body) return JSON.parse("");
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > SIGN_REQUEST_MAX_BYTES) {
+      try { await reader.cancel(); } catch { /* The rejection remains oversized even if cancellation fails. */ }
+      throw new RequestTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
 
 export const KINDS = Object.freeze({
   document: Object.freeze({ maxBytes: 16_384, mimeTypes: Object.freeze(["application/json"]) }),
@@ -77,8 +109,11 @@ export async function handleRequest(request, env, fetcher = fetch) {
   if (!origin) return json(403, { error: "Origin not allowed." });
   let body;
   try {
-    body = await request.json();
-  } catch {
+    body = await readRequestJson(request);
+  } catch (cause) {
+    if (cause instanceof RequestTooLargeError) {
+      return json(413, { error: `The request body is too large; the limit is ${SIGN_REQUEST_MAX_BYTES} bytes.` }, origin);
+    }
     return json(400, { error: "The request body must be valid JSON." }, origin);
   }
   const validated = validateSignRequest(body);

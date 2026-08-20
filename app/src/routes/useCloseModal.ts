@@ -1,13 +1,17 @@
 import { useLocation, useNavigate } from "react-router";
 
-// Closing a route-addressed modal means leaving its URL. When the modal route
-// was opened from its parent page, going back closes it and preserves history;
-// on a direct load there is no entry behind us, so replace with the parent.
+export const MODAL_CLOSE_REPLACE_STATE = { junoVoiceModalClose: "replace" } as const;
+
+// Pushed modals close with Back so normal history stays intact. Direct loads
+// and persisted-lock auto-opens have no parent entry to return to, so they
+// replace their route with the explicit parent instead.
 export function useCloseModal(parentPath: string) {
   const navigate = useNavigate();
   const location = useLocation();
   return () => {
-    if (location.key === "default") void navigate(parentPath, { replace: true });
+    const replace = location.key === "default"
+      || (location.state as { junoVoiceModalClose?: unknown } | null)?.junoVoiceModalClose === "replace";
+    if (replace) void navigate(parentPath, { replace: true });
     else void navigate(-1);
   };
 }
