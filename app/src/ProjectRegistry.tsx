@@ -19,7 +19,7 @@ import { PageHeader } from "./components/PageHeader";
 import { PageMeta } from "./components/PageMeta";
 import { SubmissionEvidenceBanner } from "./components/SubmissionEvidenceBanner";
 import { NotFound } from "./routes/NotFound";
-import { useCloseModal } from "./routes/useCloseModal";
+import { MODAL_CLOSE_REPLACE_STATE, useCloseModal } from "./routes/useCloseModal";
 import { ProjectFields } from "./ProjectFields";
 import { EMPTY_PROJECT_FIELDS, projectDocumentFrom } from "./metadataForms";
 import type { DocumentPublisher } from "./metadataPublish";
@@ -65,7 +65,7 @@ export function Registry({ source, config, transactionFlow, sender, metadata, pu
   useEffect(() => {
     if (lockRedirected.current || !persistedSubmissionPresent) return;
     lockRedirected.current = true;
-    if (location.pathname === "/projects") void navigate("manage", { replace: true });
+    if (location.pathname === "/projects") void navigate("manage", { replace: true, state: MODAL_CLOSE_REPLACE_STATE });
   }, [persistedSubmissionPresent, location.pathname, navigate]);
   // Child modal routes own the document title while they are open.
   const pageMeta = modalOpen ? null : <PageMeta route="projects" />;

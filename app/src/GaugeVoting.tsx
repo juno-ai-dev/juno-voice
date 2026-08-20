@@ -16,7 +16,7 @@ import { Modal } from "./components/Modal";
 import { PageHeader } from "./components/PageHeader";
 import { PageMeta } from "./components/PageMeta";
 import { SubmissionEvidenceBanner } from "./components/SubmissionEvidenceBanner";
-import { useCloseModal } from "./routes/useCloseModal";
+import { MODAL_CLOSE_REPLACE_STATE, useCloseModal } from "./routes/useCloseModal";
 import "./registry-gauge.css";
 
 const utc = (seconds: number) => new Date(seconds * 1000).toISOString();
@@ -71,7 +71,7 @@ export function GaugeVoting({ source, config, transactionFlow, sender, metadata 
   useEffect(() => {
     if (lockRedirected.current || !persistedSubmissionPresent) return;
     lockRedirected.current = true;
-    if (location.pathname === "/gauge") void navigate("vote", { replace: true });
+    if (location.pathname === "/gauge") void navigate("vote", { replace: true, state: MODAL_CLOSE_REPLACE_STATE });
   }, [persistedSubmissionPresent, location.pathname, navigate]);
   // Child modal routes own the document title while they are open.
   const pageMeta = modalOpen ? null : <PageMeta route="gauge" />;
