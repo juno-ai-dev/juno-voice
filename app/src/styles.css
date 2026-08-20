@@ -73,9 +73,6 @@ main {
   padding: 64px 0;
 }
 .hero {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 70px;
   margin-bottom: 48px;
 }
 .hero h1 {
@@ -91,12 +88,15 @@ main {
   font-size: 10px;
   letter-spacing: 0.16em;
 }
-.hero-summary {
-  border-left: 1px solid #a65a5c;
-  padding-left: 24px;
-  display: grid;
-  gap: 14px;
-  align-content: end;
+.field-hint {
+  display: block;
+  margin-top: 3px;
+  color: #d7bda1;
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: var(--font-family-body, Montserrat, sans-serif);
+  text-transform: none;
+  letter-spacing: normal;
 }
 .fact {
   display: flex;
@@ -155,6 +155,10 @@ main {
   padding: 56px 20px;
 }
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 44px;
   border: 1px solid #ff9a9b;
   background: #ff9a9b;
@@ -162,6 +166,7 @@ main {
   padding: 0 16px;
   font-weight: 700;
   cursor: pointer;
+  text-decoration: none;
 }
 .bounty-row {
   display: grid;
@@ -219,13 +224,6 @@ footer {
   font-size: 12px;
 }
 @media (max-width: 800px) {
-  .hero {
-    grid-template-columns: 1fr;
-  }
-  .hero-summary {
-    border-left: 0;
-    padding-left: 0;
-  }
   .toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -254,7 +252,7 @@ footer {
   font-weight: 700;
 }
 .topbar nav { display: flex; gap: 4px; }
-.topbar nav button { min-height: 36px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #d7bda1; cursor: pointer; }
+.topbar nav button, .topbar nav a { min-height: 36px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #d7bda1; cursor: pointer; text-decoration: none; }
 .topbar nav .nav-active { color: #ffebd2; border-color: #ff9a9b; }
 .button.secondary { background: transparent; color: #ff9a9b; }
 .registry-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
@@ -264,7 +262,7 @@ footer {
 .project-card small { color: #d7bda1; display: block; }
 .option-note { border-left: 3px solid #ff9a9b; background: #160608; padding: 16px 20px; margin-bottom: 32px; }
 .option-note p { margin: 4px 0 0; color: #d7bda1; }
-.detail-panel, .workbench { margin-top: 40px; padding: 24px; border: 1px solid #a65a5c; background: #160608; }
+.workbench { margin-top: 40px; padding: 24px; border: 1px solid #a65a5c; background: #160608; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
 dl { display: grid; grid-template-columns: 140px 1fr; gap: 8px 16px; }
 dt { color: #d7bda1; font-family: var(--font-family-mono, monospace); font-size: 11px; text-transform: uppercase; }
@@ -275,9 +273,8 @@ dd { margin: 0; }
 .history small { display: block; color: #d7bda1; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 24px 0; }
 .form-grid label { font-family: var(--font-family-mono, monospace); font-size: 11px; }
-.form-grid input, .form-grid select { display: block; width: 100%; min-height: 44px; margin-top: 5px; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; padding: 8px; }
-.review-card { background: #100405; padding: 20px; border: 1px solid #553033; }
-.review-card pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #ffebd2; }
+.form-grid input, .form-grid select, .form-grid textarea { display: block; width: 100%; min-height: 44px; margin-top: 5px; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; padding: 8px; }
+.form-grid textarea { min-height: 80px; resize: vertical; font: inherit; }
 @media (max-width: 800px) {
   .registry-columns, .detail-grid, .form-grid { grid-template-columns: 1fr; }
   .topbar-inner { width: calc(100% - 20px); }
@@ -285,11 +282,7 @@ dd { margin: 0; }
   .project-card { align-items: stretch; flex-direction: column; }
 }
 .detail-link { border: 0; padding: 0; color: inherit; background: transparent; font: inherit; font-weight: 700; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: #a65a5c; }
-.detail-panel { position: fixed; inset: 76px max(20px, calc((100vw - 1120px) / 2)) 20px; z-index: 5; overflow: auto; padding: 32px; border: 1px solid #ff9a9b; background: #160608; box-shadow: 0 20px 80px #000; }
-.detail-panel .close { float: right; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
-.detail-panel section { border-top: 1px solid #6f3e40; }
-.detail-panel code, .detail-panel pre { overflow-wrap: anywhere; white-space: pre-wrap; color: #d7bda1; }
 .history { padding-left: 24px; }
 .chain-time { color: #ffc16b; font-family: monospace; }
 .action-panel { margin: 32px 0; padding: 24px; border: 1px solid #a65a5c; background: #160608; }
@@ -300,11 +293,9 @@ dd { margin: 0; }
 .action-grid .wide { grid-column: 1 / -1; }
 .action-grid fieldset { padding: 16px; border: 1px solid #6e4541; }
 .action-grid fieldset label + label { margin-top: 12px; }
-.review { position: fixed; inset: 10vh max(20px, calc((100vw - 760px) / 2)); z-index: 10; max-height: 80vh; overflow: auto; padding: 28px; border: 2px solid #ff9a9b; background: #100405; box-shadow: 0 20px 100px #000; }
-.review dl { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 8px 16px; }
-.review dt { color: #d7bda1; }.review dd { margin: 0; overflow-wrap: anywhere; }.secondary { background: transparent; color: #ffebd2; }
-@media (max-width: 800px) { .detail-panel { inset: 66px 0 0; padding: 20px; } .detail-grid { grid-template-columns: 1fr; } }
-@media (max-width: 600px) { .action-grid { grid-template-columns: 1fr; } .action-grid .wide { grid-column: auto; } .review { inset: 20px; } .review dl { grid-template-columns: 1fr; } }
+.secondary { background: transparent; color: #ffebd2; }
+@media (max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .action-grid { grid-template-columns: 1fr; } .action-grid .wide { grid-column: auto; } }
 .epoch-index { border: 1px solid #6f3e40; background: #160608; }
 .epoch-index > .toolbar { padding: 20px; }
 .epoch-detail { padding: 24px; }
@@ -326,5 +317,5 @@ dd { margin: 0; }
   .allocation-row { align-items: start; flex-direction: column; gap: 4px; }
   .preference-editor > label { grid-template-columns: 1fr; gap: 6px; padding: 10px 0; }
   .epoch-detail { padding: 16px; }
-  .topbar nav button { padding-inline: 6px; }
+  .topbar nav button, .topbar nav a { padding-inline: 6px; }
 }

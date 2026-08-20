@@ -1,6 +1,7 @@
 import type { Bounty, ContractConfig, PauseState } from "./types";
 import type { TransactionIntent } from "./transactions";
 import { formatJuno, parseJuno } from "./junoAmount";
+import { METADATA_DIGEST_PATTERN, URI_SCHEME_PATTERN } from "./metadataDigest";
 
 const U64_MAX = 18446744073709551615n;
 const utf8 = (value: string) => new TextEncoder().encode(value).length;
@@ -14,9 +15,9 @@ const optionalPair = (uri: string, digest: string, max: number, label: string) =
   const u = uri.trim(), d = digest.trim();
   if (Boolean(u) !== Boolean(d)) throw new Error(`${label} URI and SHA-256 digest must be supplied together.`);
   if (!u) return { uri: null, digest: null };
-  if (utf8(u) > max || !/^(https:\/\/|ipfs:\/\/)[^\s]+$/.test(u))
+  if (utf8(u) > max || !URI_SCHEME_PATTERN.test(u))
     throw new Error(`${label} URI must be a bounded HTTPS or IPFS URI.`);
-  if (!/^sha256:[0-9a-f]{64}$/.test(d)) throw new Error(`${label} digest must use sha256:<64 lowercase hex characters>.`);
+  if (!METADATA_DIGEST_PATTERN.test(d)) throw new Error(`${label} digest must use sha256:<64 lowercase hex characters>.`);
   return { uri: u, digest: d };
 };
 export interface CreateBountyInput {

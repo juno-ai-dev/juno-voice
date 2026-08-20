@@ -77,9 +77,13 @@ async function fulfill(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockMainnet(page: Page, options: { failures?: number; chain?: string } = {}) {
+async function mockMainnet(page: Page, options: { failures?: number; chain?: string; registryProjects?: unknown[] } = {}) {
   let failures = options.failures ?? 0;
   let requests = 0;
+  // The metadata read side is pointed at a fixed fake gateway host by
+  // TEST_DEPLOYMENT_ENV; abort by default so no test leaks to a live network.
+  // Tests that need documents register a more specific route afterwards.
+  await page.route("https://ipfs-gateway.test/**", (route) => route.abort());
   await page.route(`${rpc}/**`, async (route) => {
     requests += 1;
     if (failures > 0) {
@@ -149,8 +153,10 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
         if (key === "config") response = { native_denom: "ujuno", registration_bond: "100000000", max_active_projects: 99, max_metadata_uri_bytes: 512, max_page_limit: 100, max_reason_bytes: 2048, payout_address_delay_seconds: 86400, curator: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac", governor: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", version: 1 };
         else if (key === "pause") response = { admissions_stopped: false, adapter_stopped: false, reason: null, actor: null, changed_at: null };
         else if (key === "health") response = { accounting: { active_projects: 0, pending_applications: 0, bond_liability: "0", lifetime_bonds_received: "0", lifetime_bonds_refunded: "0", lifetime_bonds_forfeited: "0" }, actual_native_balance: "0", fully_backed: true };
-        else if (key === "projects" || key === "applications") response = { projects: [] };
-        else if (key === "all_options") response = { options: ["do-not-distribute"] };
+        else if (key === "projects") response = { projects: options.registryProjects ?? [] };
+        else if (key === "applications") response = { projects: [] };
+        else if (key === "all_options") response = { options: ["do-not-distribute",
+          ...(options.registryProjects ?? []).map((project) => `project:${(project as { id: number }).id}`)].sort() };
       }
       if (request.address === "juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v") {
         if (key === "config") response = { owner: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", dao_core: "juno178famzzydmmyuqteu5g0vdhkrw53r6zatud5ap55xn7a95jeakssqjh8wt", voting_powers: "juno1w0spzqef0ypkv8v56jwmvewju63xarn5x6v3wy0wee49yu6r9z6s6a35sr", hook_caller: "juno1cprm2juuadkrx9rpy73arxgrugqkzx4d20uvpj5ww49cnp6sndcqyz525v", power_source: { epoch_snapshot: { guardian: "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac" } } };
@@ -171,7 +177,7 @@ async function mockMainnet(page: Page, options: { failures?: number; chain?: str
 test("configured juno-1 artifact proves provenance and renders accepted-v2 empty state", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   await expect(page.getByText("No sample or demo records are shown.")).toBeVisible();
   await expect(page.getByText("juno-1", { exact: true })).toBeVisible();
@@ -186,7 +192,7 @@ test("freshness changes to stale in an open browser", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-08-12T12:00:00Z") });
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("Fresh direct-RPC observation")).toBeVisible();
   await page.clock.fastForward(60_002);
   await expect(page.getByText("Stale · retry recommended")).toBeVisible();
@@ -195,7 +201,7 @@ test("freshness changes to stale in an open browser", async ({ page }) => {
 test("RPC errors are explicit and retry recovers", async ({ page }) => {
   await mockMainnet(page, { failures: 1 });
   await gotoDeployableArtifact(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("Mainnet data unavailable")).toBeVisible();
   await page.getByRole("button", { name: "Retry query" }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
@@ -204,18 +210,18 @@ test("RPC errors are explicit and retry recovers", async ({ page }) => {
 test("provenance mismatch fails closed", async ({ page }) => {
   await mockMainnet(page, { chain: "uni-7" });
   await gotoDeployableArtifact(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByText(/expected chain juno-1, observed uni-7/)).toBeVisible();
 });
 
 test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
   const observed = await mockMainnet(page);
   await gotoDeployableArtifact(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   const first = observed.requests();
   await page.reload();
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByText("No on-chain bounties yet")).toBeVisible();
   expect(observed.requests()).toBeGreaterThan(first);
 });
@@ -223,12 +229,13 @@ test("hard refresh performs a new direct-RPC observation", async ({ page }) => {
 test("gauge route checks the mocked v2 identity profile and empty-state safety semantics", async ({ page }) => {
   await mockMainnet(page);
   await gotoDeployableArtifact(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Gauge", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Gauge", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
   await expect(page.getByText("No epoch has opened")).toBeVisible();
   await page.getByText("How retained value and fixed options work").click();
   await expect(page.getByText(/Nothing shown here implies an automatic rollover/)).toBeVisible();
-  await page.getByRole("button", { name: "Open voting workbench" }).click();
+  await page.getByRole("link", { name: "Open voting workbench" }).click();
+  await expect(page).toHaveURL(/\/gauge\/vote$/);
   await expect(page.getByText(/transaction support is unavailable in this browser/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Prepare open epoch" })).toHaveCount(0);
 });
@@ -239,7 +246,7 @@ test("footer opens the dedicated FAQ and the logo returns home", async ({ page }
 
   await expect(page.getByText("NEW TO JUNO VOICE?")).toHaveCount(0);
   await page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: /^FAQ/ }).click();
-  await expect(page).toHaveURL(/#faq$/);
+  await expect(page).toHaveURL(/\/faq$/);
   await expect(page.getByRole("heading", { name: /Questions, answered plainly/ })).toBeVisible();
   await page.getByText("What is a project candidate?").click();
   await expect(page.getByText(/does not register, endorse, approve, or automatically graduate/)).toBeVisible();
@@ -254,16 +261,118 @@ test("mobile public routes do not overflow or emit browser errors", async ({ pag
   await gotoDeployableArtifact(page);
 
   await expect(page.getByRole("heading", { name: /Fund useful work/ })).toBeVisible();
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Bounties", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Bounties", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Public bounty ledger" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Gauge", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Gauge", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Weighted allocation" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByRole("navigation", { name: "Primary" }).getByRole("button", { name: "Projects", exact: true }).click();
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Projects", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Eligible projects" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   expectNoBrowserErrors();
+});
+
+test("verified project metadata renders real names from the gateway", async ({ page }) => {
+  const { createHash } = await import("node:crypto");
+  const projectDoc = '{"doc":"juno-voice/project","name":"Alpha Project","summary":"A test project.","version":1}';
+  const projectDigest = `sha256:${createHash("sha256").update(projectDoc).digest("hex")}`;
+  const owner = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+  await mockMainnet(page, { registryProjects: [{
+    id: 7, owner, payout_address: owner, metadata_uri: "ipfs://bafyalphaproject", metadata_digest: projectDigest,
+    status: "active", created_at: "1", updated_at: "1", status_history_count: 1, address_history_count: 0,
+    provenance: { bonded_registration: { applicant: owner } },
+    bond: { amount: "100000000", depositor: owner, state: "deposited" },
+    pending_payout_address: null, latest_review: null,
+  }] });
+  await page.route("https://ipfs-gateway.test/ipfs/bafyalphaproject", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: projectDoc }));
+  await page.goto(`${projectPath}projects`);
+  await expect(page.getByRole("heading", { name: "Alpha Project" })).toBeVisible();
+  await expect(page.getByText("Project #7")).toBeVisible();
+});
+
+test("mismatching metadata is withheld, not rendered", async ({ page }) => {
+  const owner = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+  await mockMainnet(page, { registryProjects: [{
+    id: 8, owner, payout_address: owner, metadata_uri: "ipfs://bafytampered", metadata_digest: `sha256:${"1".repeat(64)}`,
+    status: "active", created_at: "1", updated_at: "1", status_history_count: 1, address_history_count: 0,
+    provenance: { bonded_registration: { applicant: owner } },
+    bond: { amount: "100000000", depositor: owner, state: "deposited" },
+    pending_payout_address: null, latest_review: null,
+  }] });
+  await page.route("https://ipfs-gateway.test/ipfs/bafytampered", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json",
+      body: '{"doc":"juno-voice/project","name":"Impostor","summary":"Tampered.","version":1}' }));
+  await page.goto(`${projectPath}projects`);
+  await expect(page.getByRole("heading", { name: "ipfs://bafytampered" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Impostor" })).toHaveCount(0);
+});
+
+test("deep links load each routed page directly", async ({ page }) => {
+  await mockMainnet(page);
+  await page.goto(`${projectPath}bounties`);
+  await expect(page.getByRole("heading", { name: "Public bounty ledger" })).toBeVisible();
+  await page.goto(`${projectPath}faq`);
+  await expect(page.getByRole("heading", { name: /Questions, answered plainly/ })).toBeVisible();
+  await page.goto(`${projectPath}no-such-page`);
+  await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+});
+
+test("the create-bounty modal is route-addressed, traps focus, and closes with Escape", async ({ page }) => {
+  await mockMainnet(page);
+  await page.goto(`${projectPath}bounties`);
+  const createLink = page.getByRole("link", { name: "Create a bounty" });
+  await createLink.click();
+  await expect(page).toHaveURL(/\/bounties\/create$/);
+  const dialog = page.getByRole("dialog", { name: "Create a bounty" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel(/^Title/)).toBeVisible();
+  // Focus is contained by the top-layer dialog.
+  await page.keyboard.press("Tab");
+  await expect(dialog.locator(":focus")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/bounties$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Focus returns to the header action that opened the modal.
+  await expect(createLink).toBeFocused();
+});
+
+test("a direct load of the create modal renders the page behind it", async ({ page }) => {
+  await mockMainnet(page);
+  await page.goto(`${projectPath}bounties/create`);
+  await expect(page.getByRole("dialog", { name: "Create a bounty" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/bounties$/);
+  await expect(page.getByRole("heading", { name: "Public bounty ledger" })).toBeVisible();
+});
+
+test("baked per-route metadata is served for crawlers and unfurlers", async ({ page }) => {
+  const bounties = await page.request.get(`${projectPath}bounties/`);
+  const bountiesHtml = await bounties.text();
+  expect(bountiesHtml).toContain("<title data-static-head>Public bounty ledger · Juno Voice</title>");
+  expect(bountiesHtml).toContain('property="og:title"');
+  const create = await page.request.get(`${projectPath}bounties/create/`);
+  expect(await create.text()).toContain('name="robots" content="noindex"');
+  const root = await page.request.get(projectPath);
+  expect(await root.text()).toContain("Juno Voice · Community funding on Juno");
+});
+
+test("the live app owns per-route document titles after boot", async ({ page }) => {
+  await mockMainnet(page);
+  await page.goto(`${projectPath}bounties`);
+  await expect(page).toHaveTitle("Public bounty ledger · Juno Voice");
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Gauge", exact: true }).click();
+  await expect(page).toHaveTitle("Funding gauge · Juno Voice");
+  await page.getByRole("link", { name: "Open voting workbench" }).click();
+  await expect(page).toHaveTitle("Gauge voting workbench · Juno Voice");
+});
+
+test("legacy #faq deep links redirect onto the /faq route", async ({ page }) => {
+  await mockMainnet(page);
+  await page.goto(`${projectPath}#faq`);
+  await expect(page).toHaveURL(/\/faq$/);
+  await expect(page.getByRole("heading", { name: /Questions, answered plainly/ })).toBeVisible();
 });
 
 test("keyboard reaches primary navigation and the public retry action", async ({ page }) => {
@@ -275,7 +384,7 @@ test("keyboard reaches primary navigation and the public retry action", async ({
   const primaryNavigation = page.getByRole("navigation", { name: "Primary" });
   for (const name of ["Bounties"]) {
     await page.keyboard.press("Tab");
-    await expect(primaryNavigation.getByRole("button", { name, exact: true })).toBeFocused();
+    await expect(primaryNavigation.getByRole("link", { name, exact: true })).toBeFocused();
   }
   await page.keyboard.press("Enter");
   await expect(page.getByText("Mainnet data unavailable")).toBeVisible();

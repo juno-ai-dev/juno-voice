@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig, type ConfigEnvironment } from "./config";
 import { TEST_DEPLOYMENT_ENV } from "./test/deployment";
@@ -63,5 +65,82 @@ describe("fail-closed production configuration", () => {
     expect(() => loadConfig(deployment({ VITE_RELEASE_COMMIT: "main" }))).toThrow(
       "Release commit",
     );
+  });
+
+  it("defaults the IPFS gateway and requires credential-free HTTPS when overridden", () => {
+    expect(loadConfig(deployment({ VITE_IPFS_GATEWAY: undefined })).ipfsGateway).toBe("https://ipfs.io/ipfs");
+    expect(loadConfig(deployment({ VITE_IPFS_GATEWAY: "https://gateway.example/ipfs/" })).ipfsGateway).toBe(
+      "https://gateway.example/ipfs",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "http://gateway.example/ipfs" }))).toThrow(
+      "IPFS gateway",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "https://user:pw@gateway.example" }))).toThrow(
+      "IPFS gateway",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "not a url" }))).toThrow(
+      "Invalid IPFS gateway",
+    );
+  });
+
+  it("treats a same-origin gateway as the local development pin store", () => {
+    expect(loadConfig(deployment()).localPinStore).toBe(false);
+    const local = loadConfig(deployment({ VITE_IPFS_GATEWAY: "/api/dev-ipfs/ipfs" }));
+    expect(local.ipfsGateway).toBe("/api/dev-ipfs/ipfs");
+    expect(local.localPinStore).toBe(true);
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "//gateway.example/ipfs" }))).toThrow(
+      "IPFS gateway",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "/api/../secrets" }))).toThrow(
+      "Invalid IPFS gateway",
+    );
+  });
+
+  it("treats the presign endpoint as optional and allows only HTTPS or loopback dev", () => {
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: undefined })).presignUrl).toBeNull();
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "" })).presignUrl).toBeNull();
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "https://presign.example/sign" })).presignUrl).toBe(
+      "https://presign.example/sign",
+    );
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "http://127.0.0.1:8787/sign" })).presignUrl).toBe(
+      "http://127.0.0.1:8787/sign",
+    );
+    expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "http://presign.example/sign" }))).toThrow(
+      "Presign URL",
+    );
+    expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "https://user:pw@presign.example/sign" }))).toThrow(
+      "Presign URL",
+    );
+    expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "not a url" }))).toThrow(
+      "Invalid presign URL",
+    );
+  });
+
+  it("ships an .env.example that is a working, publish-free configuration", () => {
+    // vitest runs with the app package as its root.
+    const text = readFileSync(resolve(process.cwd(), ".env.example"), "utf8");
+    const example: Record<string, string> = {};
+    for (const line of text.split("\n")) {
+      const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line.trim());
+      if (match) example[match[1]] = match[2];
+    }
+    const config = loadConfig(example);
+    expect(config.chainId).toBe("juno-1");
+    expect(config.releaseCommit).toBe("local-uncommitted");
+    // Everything optional stays commented out, so a copied file publishes
+    // nothing and reads through the public gateway.
+    expect(config.presignUrl).toBeNull();
+    expect(config.ipfsGateway).toBe("https://ipfs.io/ipfs");
+    expect(config.localPinStore).toBe(false);
+    expect(example.PINATA_JWT).toBeUndefined();
+  });
+
+  it("accepts a same-origin presign path and rejects near-miss shapes", () => {
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "/api/presign/sign" })).presignUrl).toBe(
+      "/api/presign/sign",
+    );
+    for (const value of ["//presign.example/sign", "/api/../sign", "/sign?token=1", "/sign#fragment", "/"]) {
+      expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: value }))).toThrow("presign URL");
+    }
   });
 });

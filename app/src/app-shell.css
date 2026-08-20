@@ -1,7 +1,7 @@
 .app-shell .app-topbar { height: auto; min-height: 72px; position: relative; z-index: 20; }
 .app-shell .app-topbar .topbar-inner { position: relative; min-height: 72px; gap: 28px; }
 .app-shell .app-topbar nav { position: absolute; top: 0; bottom: 0; left: 50%; align-items: center; transform: translateX(-50%); }
-.app-shell .app-topbar nav button { display: inline-flex; height: 100%; min-width: 68px; align-items: center; justify-content: center; padding: 0 12px; font-size: 12px; }
+.app-shell .app-topbar nav button, .app-shell .app-topbar nav a { display: inline-flex; height: 100%; min-width: 68px; align-items: center; justify-content: center; padding: 0 12px; font-size: 12px; }
 .app-shell .shell-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .app-shell .network-chip { display: flex; align-items: center; gap: 7px; color: #d7bda1; font: 10px var(--font-mono, monospace); letter-spacing: .1em; white-space: nowrap; }
 .app-shell .network-chip::before { width: 6px; height: 6px; border-radius: 50%; background: #8fb08a; content: ""; }
@@ -20,12 +20,12 @@
 @media (max-width: 900px) {
   .app-shell .app-topbar .topbar-inner { flex-wrap: wrap; padding: 12px 0; }
   .app-shell .app-topbar nav { position: static; order: 3; width: 100%; justify-content: center; transform: none; }
-  .app-shell .app-topbar nav button { height: 40px; min-height: 40px; }
+  .app-shell .app-topbar nav button, .app-shell .app-topbar nav a { height: 40px; min-height: 40px; }
 }
 @media (max-width: 600px) {
   .app-shell .app-topbar .topbar-inner { gap: 8px; }
   .app-shell .app-topbar nav { overflow-x: auto; justify-content: flex-start; }
-  .app-shell .app-topbar nav button { flex: 1; padding-inline: 7px; }
+  .app-shell .app-topbar nav button, .app-shell .app-topbar nav a { flex: 1; padding-inline: 7px; }
   .app-shell .network-chip { display: none; }
   .app-shell .wallet-button { max-width: 135px; padding-inline: 10px; }
   .app-shell .app-footer { grid-template-columns: 1fr; align-items: start; gap: 24px; width: calc(100% - 28px); }

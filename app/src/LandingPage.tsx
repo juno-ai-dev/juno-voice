@@ -1,7 +1,6 @@
+import { Link } from "react-router";
+import { PageMeta } from "./components/PageMeta";
 import "./LandingPage.css";
-import "./ShellLanding.css";
-
-export type PublicView = "bounties" | "projects" | "gauge";
 
 const steps = [
   {
@@ -27,28 +26,28 @@ const steps = [
 ] as const;
 
 const destinations: ReadonlyArray<{
-  view: PublicView;
+  to: string;
   eyebrow: string;
   title: string;
   body: string;
   action: string;
 }> = [
   {
-    view: "bounties",
+    to: "/bounties",
     eyebrow: "FUND WORK",
     title: "Explore bounties",
     body: "Find requested outcomes, inspect their terms and funding, or start a new bounty.",
     action: "View bounty ledger",
   },
   {
-    view: "gauge",
+    to: "/gauge",
     eyebrow: "SHAPE FUNDING",
     title: "Explore the gauge",
     body: "See how Juno stakers express weighted funding preferences, from each epoch snapshot through its final outcome.",
     action: "View gauge epochs",
   },
   {
-    view: "projects",
+    to: "/projects",
     eyebrow: "BUILD HISTORY",
     title: "Discover projects",
     body: "See active, pending, and retired project records and their public provenance.",
@@ -56,9 +55,10 @@ const destinations: ReadonlyArray<{
   },
 ];
 
-export function LandingPage({ onNavigate }: { onNavigate: (view: PublicView) => void }) {
+export function LandingPage() {
   return (
     <main className="landing">
+        <PageMeta route="" />
         <section className="landing-hero" aria-labelledby="landing-title">
           <div className="landing-hero-copy">
             <p className="eyebrow">COMMUNITY FUNDING, WITH A PUBLIC RECORD</p>
@@ -69,8 +69,8 @@ export function LandingPage({ onNavigate }: { onNavigate: (view: PublicView) => 
               how recurring Hack Juno funding should be distributed.
             </p>
             <div className="landing-actions">
-              <button className="button landing-primary" type="button" onClick={() => onNavigate("gauge")}>Explore the funding gauge <span aria-hidden="true">↗</span></button>
-              <button className="button secondary" type="button" onClick={() => onNavigate("bounties")}>Browse bounties</button>
+              <Link className="button landing-primary" to="/gauge">Explore the funding gauge <span aria-hidden="true">↗</span></Link>
+              <Link className="button secondary" to="/bounties">Browse bounties</Link>
             </div>
             <p className="wallet-free"><span aria-hidden="true">●</span> No wallet needed to explore verified mainnet data</p>
           </div>
@@ -112,7 +112,7 @@ export function LandingPage({ onNavigate }: { onNavigate: (view: PublicView) => 
               across eligible projects. The gauge turns those weighted preferences into an
               auditable funding outcome—without turning a vote into a blank cheque.
             </p>
-            <button className="button secondary" type="button" onClick={() => onNavigate("gauge")}>See current gauge activity <span aria-hidden="true">→</span></button>
+            <Link className="button secondary" to="/gauge">See current gauge activity <span aria-hidden="true">→</span></Link>
           </div>
           <ol className="gauge-principles" aria-label="Gauge characteristics">
             <li><span>01</span><div><strong>Snapshot power</strong><p>Voting power and project options are fixed for the epoch.</p></div></li>
@@ -143,11 +143,11 @@ export function LandingPage({ onNavigate }: { onNavigate: (view: PublicView) => 
           </div>
           <div className="destination-grid">
             {destinations.map((destination) => (
-              <article key={destination.view}>
+              <article key={destination.to}>
                 <p className="eyebrow">{destination.eyebrow}</p>
                 <h3>{destination.title}</h3>
                 <p>{destination.body}</p>
-                <button type="button" onClick={() => onNavigate(destination.view)}>{destination.action} <span aria-hidden="true">→</span></button>
+                <Link to={destination.to}>{destination.action} <span aria-hidden="true">→</span></Link>
               </article>
             ))}
           </div>

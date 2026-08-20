@@ -22,4 +22,6 @@ export const TEST_DEPLOYMENT_ENV: Required<ConfigEnvironment> = {
   VITE_RPC_URL: "https://rpc.example",
   VITE_EXPLORER_URL: "https://www.mintscan.io/juno",
   VITE_RELEASE_COMMIT: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  VITE_IPFS_GATEWAY: "https://ipfs-gateway.test/ipfs",
+  VITE_PRESIGN_URL: "https://presign.test/sign",
 };

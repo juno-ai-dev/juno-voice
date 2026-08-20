@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import type { BountyTransactionAccess } from "./BountyActions";
 import { createBrowserTransactionAccess } from "./browserTransactions";
 import { createDataSource, type VoiceDataSource } from "./client";
@@ -7,9 +8,19 @@ import { createRegistryDataSource, type RegistryDataSource } from "./registry";
 import type { RegistryTransactionFlow } from "./registryActions";
 import { createGaugeDataSource, type GaugeDataSource } from "./gauge";
 import type { GaugeTransactionFlow } from "./gaugeActions";
+import { createMetadataClient, type MetadataClient } from "./metadataFetch";
+import { createMetadataUploader } from "./metadataUpload";
+import { createDocumentPublisher, type DocumentPublisher } from "./metadataPublish";
+import { NotFound } from "./routes/NotFound";
+// Shell chrome styles must load with the shell itself, not with any lazy page
+// chunk: every route is now directly addressable.
+import "./app-shell.css";
 
 const GaugeVoting = lazy(() =>
   import("./GaugeVoting").then((module) => ({ default: module.GaugeVoting })),
+);
+const GaugeVoteRoute = lazy(() =>
+  import("./GaugeVoting").then((module) => ({ default: module.GaugeVoteRoute })),
 );
 const LandingPage = lazy(() =>
   import("./LandingPage").then((module) => ({ default: module.LandingPage })),
@@ -20,17 +31,37 @@ const FAQPage = lazy(() =>
 const Ledger = lazy(() =>
   import("./Ledger").then((module) => ({ default: module.Ledger })),
 );
+const CreateBountyRoute = lazy(() =>
+  import("./Ledger").then((module) => ({ default: module.CreateBountyRoute })),
+);
+const BountyDetailRoute = lazy(() =>
+  import("./Ledger").then((module) => ({ default: module.BountyDetailRoute })),
+);
 // Keep the component module name distinct from registry.ts. On case-folding
 // filesystems, the old `Registry.tsx` path resolved to the data module first.
 const Registry = lazy(() =>
   import("./ProjectRegistry").then((module) => ({ default: module.Registry })),
 );
+const ProjectManageRoute = lazy(() =>
+  import("./ProjectRegistry").then((module) => ({ default: module.ProjectManageRoute })),
+);
+const ProjectDetailRoute = lazy(() =>
+  import("./ProjectRegistry").then((module) => ({ default: module.ProjectDetailRoute })),
+);
 
 type TransactionAccess = BountyTransactionAccess & RegistryTransactionFlow & GaugeTransactionFlow;
-type PublicView = "home" | "faq" | "bounties" | "projects" | "gauge";
 
 const compactAddress = (address: string) => `${address.slice(0, 9)}…${address.slice(-5)}`;
-const isFaqHash = () => window.location.hash === "#faq" || window.location.hash.startsWith("#faq-");
+
+// Pre-router builds deep-linked the FAQ as /#faq or /#faq-<section>. Keep
+// those links working by redirecting them onto the /faq route.
+function LegacyFaqRedirect() {
+  const { pathname, hash } = useLocation();
+  if (pathname !== "/faq" && (hash === "#faq" || hash.startsWith("#faq-"))) {
+    return <Navigate replace to={{ pathname: "/faq", hash: hash === "#faq" ? "" : hash }} />;
+  }
+  return null;
+}
 
 export function App({
   source: supplied,
@@ -41,6 +72,8 @@ export function App({
   gaugeSource: suppliedGauge,
   gaugeTransactionFlow,
   walletAddress,
+  metadataClient: suppliedMetadata,
+  documentPublisher: suppliedPublisher,
 }: {
   source?: VoiceDataSource;
   registrySource?: RegistryDataSource;
@@ -50,6 +83,8 @@ export function App({
   gaugeSource?: GaugeDataSource;
   gaugeTransactionFlow?: GaugeTransactionFlow;
   walletAddress?: string;
+  metadataClient?: MetadataClient;
+  documentPublisher?: DocumentPublisher;
 }) {
   const base = import.meta.env.BASE_URL;
   const source = useMemo(
@@ -63,6 +98,14 @@ export function App({
   const gaugeSource = useMemo(
     () => suppliedGauge ?? createGaugeDataSource(config),
     [suppliedGauge, config],
+  );
+  const metadata = useMemo(
+    () => suppliedMetadata ?? createMetadataClient({ gatewayBase: config.ipfsGateway }),
+    [suppliedMetadata, config.ipfsGateway],
+  );
+  const publisher = useMemo(
+    () => suppliedPublisher ?? (config.presignUrl ? createDocumentPublisher(createMetadataUploader(config.presignUrl)) : undefined),
+    [suppliedPublisher, config.presignUrl],
   );
   const productionTransactions = useMemo<TransactionAccess | undefined>(() => {
     if (transactions && registryTransactionFlow && gaugeTransactionFlow) return undefined;
@@ -78,34 +121,31 @@ export function App({
   const bountyAccess = transactions ?? productionTransactions;
   const registryAccess = registryTransactionFlow ?? productionTransactions;
   const gaugeAccess = gaugeTransactionFlow ?? productionTransactions;
-  const [view, setView] = useState<PublicView>(() => isFaqHash() ? "faq" : "home");
   const [connectedAddress, setConnectedAddress] = useState<string | null>(walletAddress ?? null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const viewRegion = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const segment = location.pathname.split("/").filter(Boolean)[0] ?? "";
+  const viewName = segment || "home";
+  const previousSegment = useRef<string | null>(null);
   useEffect(() => {
     if (walletAddress) setConnectedAddress(walletAddress);
   }, [walletAddress]);
+  // Move focus to the view region only when the page (first path segment)
+  // changes: never on initial load, and never when a nested route such as a
+  // modal opens or closes within the same page.
   useEffect(() => {
-    const syncViewToLocation = () => setView((current) => isFaqHash() ? "faq" : current === "faq" ? "home" : current);
-    window.addEventListener("popstate", syncViewToLocation);
-    window.addEventListener("hashchange", syncViewToLocation);
-    return () => {
-      window.removeEventListener("popstate", syncViewToLocation);
-      window.removeEventListener("hashchange", syncViewToLocation);
-    };
-  }, []);
+    if (previousSegment.current !== null && previousSegment.current !== segment) {
+      setWalletError(null);
+      window.scrollTo(0, 0);
+      window.requestAnimationFrame(() => viewRegion.current?.focus());
+    }
+    previousSegment.current = segment;
+  }, [segment]);
   const walletConnector = productionTransactions ?? transactions ??
     (registryTransactionFlow?.connect ? registryTransactionFlow : undefined) ??
     (gaugeTransactionFlow?.connect ? gaugeTransactionFlow : undefined);
-  const navigate = (next: PublicView) => {
-    const pageUrl = `${window.location.pathname}${window.location.search}`;
-    if (next === "faq" && !isFaqHash()) window.history.pushState(null, "", `${pageUrl}#faq`);
-    if (next !== "faq" && isFaqHash()) window.history.replaceState(null, "", pageUrl);
-    setView(next);
-    setWalletError(null);
-    window.requestAnimationFrame(() => viewRegion.current?.focus());
-  };
   const connectWallet = async () => {
     if (!walletConnector?.connect || connectedAddress) return;
     setWalletBusy(true);
@@ -118,20 +158,21 @@ export function App({
       setWalletBusy(false);
     }
   };
+  const navClass = ({ isActive }: { isActive: boolean }) => isActive ? "nav-active" : "";
 
   return (
     <div className="shell app-shell juno-grid">
       <header className="topbar app-topbar">
         <div className="topbar-inner">
-          <a className="brand" href={base} onClick={(event) => { event.preventDefault(); navigate("home"); }}>
+          <Link className="brand" to="/">
             <img src={`${base}assets/logo-salmon.svg`} alt="" />
             <img src={`${base}assets/wordmark-salmon.svg`} alt="Juno" />
             <span>VOICE</span>
-          </a>
+          </Link>
           <nav aria-label="Primary">
-            <button className={view === "bounties" ? "nav-active" : ""} onClick={() => navigate("bounties")}>Bounties</button>
-            <button className={view === "gauge" ? "nav-active" : ""} onClick={() => navigate("gauge")}>Gauge</button>
-            <button className={view === "projects" ? "nav-active" : ""} onClick={() => navigate("projects")}>Projects</button>
+            <NavLink to="/bounties" className={navClass}>Bounties</NavLink>
+            <NavLink to="/gauge" className={navClass}>Gauge</NavLink>
+            <NavLink to="/projects" className={navClass}>Projects</NavLink>
           </nav>
           <div className="shell-actions">
             <span className="network-chip">JUNO MAINNET</span>
@@ -151,20 +192,32 @@ export function App({
           </div>
         </div>
       </header>
-      {walletError && <p className="notice danger shell-alert" role="alert">{walletError}</p>}
-      <div ref={viewRegion} className="view-region" tabIndex={-1} aria-live="polite" aria-label={`${view} view`}>
-      <Suspense fallback={<main className="route-loading"><p>Loading public view…</p></main>}>
-      {view === "home" ? (
-        <LandingPage onNavigate={navigate} />
-      ) : view === "faq" ? (
-        <FAQPage onNavigate={navigate} />
-      ) : view === "gauge" ? (
-          <GaugeVoting source={gaugeSource} config={config} transactionFlow={gaugeAccess} sender={connectedAddress ?? undefined} />
-      ) : view === "projects" ? (
-          <Registry source={registrySource} config={config} transactionFlow={registryAccess} sender={connectedAddress ?? undefined} />
-      ) : (
-          <Ledger source={source} config={config} transactions={bountyAccess} />
+      {config.localPinStore && (
+        <p className="notice shell-alert" role="status">
+          Local development: published metadata is pinned to a store on this machine, not to the public
+          IPFS network. Anything published here resolves only for you, so do not reference it on chain.
+        </p>
       )}
+      {walletError && <p className="notice danger shell-alert" role="alert">{walletError}</p>}
+      <div ref={viewRegion} className="view-region" tabIndex={-1} aria-live="polite" aria-label={`${viewName} view`}>
+      <Suspense fallback={<main className="route-loading"><p>Loading public view…</p></main>}>
+      <LegacyFaqRedirect />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/faq" element={<FAQPage />} />
+        <Route path="/bounties" element={<Ledger source={source} config={config} transactions={bountyAccess} metadata={metadata} publisher={publisher} />}>
+          <Route path="create" element={<CreateBountyRoute />} />
+          <Route path=":bountyId" element={<BountyDetailRoute />} />
+        </Route>
+        <Route path="/gauge" element={<GaugeVoting source={gaugeSource} config={config} transactionFlow={gaugeAccess} sender={connectedAddress ?? undefined} metadata={metadata} />}>
+          <Route path="vote" element={<GaugeVoteRoute />} />
+        </Route>
+        <Route path="/projects" element={<Registry source={registrySource} config={config} transactionFlow={registryAccess} sender={connectedAddress ?? undefined} metadata={metadata} publisher={publisher} />}>
+          <Route path="manage" element={<ProjectManageRoute />} />
+          <Route path=":projectId" element={<ProjectDetailRoute />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
       </Suspense>
       </div>
       <div className="footer-wrap">
@@ -178,7 +231,7 @@ export function App({
             <p>Explore freely. Connect a wallet only when you are ready to act.</p>
           </div>
           <nav className="footer-links" aria-label="Footer">
-            <a className="footer-link" href={`${base}#faq`} onClick={(event) => { event.preventDefault(); navigate("faq"); }}>FAQ <span aria-hidden="true">→</span></a>
+            <Link className="footer-link" to="/faq">FAQ <span aria-hidden="true">→</span></Link>
             <a className="footer-link" href="https://github.com/juno-ai-dev/juno-voice">Open source · MIT <span aria-hidden="true">↗</span></a>
           </nav>
         </footer>

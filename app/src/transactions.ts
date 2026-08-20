@@ -148,7 +148,12 @@ function validJunoAddress(address: string, lengths: readonly number[]): boolean 
 }
 const projectId = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 const metadataUri = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && new TextEncoder().encode(value).length <= 2_048;
-const account = (value: unknown): value is string => typeof value === "string" && validJunoAddress(value, [20]);
+// Any address the chain accepts as a fund destination: 20 bytes for an
+// account, 32 for a contract. DAOs, multisigs, and vaults are ordinary
+// recipients, and both contracts store the value after their own
+// addr_validate. The authorized signer is still checked as a 20-byte account
+// below: a contract cannot sign a transaction.
+const payee = (value: unknown): value is string => typeof value === "string" && validJunoAddress(value, [20, 32]);
 function objectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return exactDataObject(value, keys);
 }
@@ -188,7 +193,7 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
     BigInt(body.expires_at as string) <= 18446744073709551615n && projectCandidate(body.project_candidate),
   contribute: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   nominate_payout: (body) => objectWithExactKeys(body, ["bounty_id", "recipient", "evidence_uri", "evidence_digest", "rationale"]) &&
-    uint(body.bounty_id) && typeof body.recipient === "string" && validJunoAddress(body.recipient, [20]) &&
+    uint(body.bounty_id) && payee(body.recipient) &&
     text(body.evidence_uri) && digest(body.evidence_digest) && text(body.rationale),
   confirm_sole_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round"]) && uint(body.bounty_id) && uint32(body.round),
   decline_sole_payout: (body) => objectWithExactKeys(body, ["bounty_id", "round", "reason"]) &&
@@ -201,10 +206,10 @@ const ACTION_SCHEMAS: Readonly<Record<string, (body: unknown) => boolean>> = Obj
   expire: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   claim_refund: (body) => objectWithExactKeys(body, ["bounty_id"]) && uint(body.bounty_id),
   register_project: (body) => objectWithExactKeys(body, ["metadata_uri", "metadata_digest", "payout_address"]) &&
-    metadataUri(body.metadata_uri) && digest(body.metadata_digest) && account(body.payout_address),
+    metadataUri(body.metadata_uri) && digest(body.metadata_digest) && payee(body.payout_address),
   update_pending_metadata: (body) => objectWithExactKeys(body, ["project_id", "metadata_uri", "metadata_digest"]) &&
     projectId(body.project_id) && metadataUri(body.metadata_uri) && digest(body.metadata_digest),
-  propose_payout_address: (body) => objectWithExactKeys(body, ["project_id", "address"]) && projectId(body.project_id) && account(body.address),
+  propose_payout_address: (body) => objectWithExactKeys(body, ["project_id", "address"]) && projectId(body.project_id) && payee(body.address),
   cancel_payout_address_change: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
   accept_payout_address: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),
   claim_registration_bond: (body) => objectWithExactKeys(body, ["project_id"]) && projectId(body.project_id),

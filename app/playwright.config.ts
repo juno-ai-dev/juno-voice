@@ -30,6 +30,6 @@ export default defineConfig({
     },
     url: "http://127.0.0.1:4173/juno-voice/",
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 240_000,
   },
 });

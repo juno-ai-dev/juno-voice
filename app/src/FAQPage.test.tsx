@@ -1,12 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
+import { describe, expect, it } from "vitest";
 import { FAQPage } from "./FAQPage";
+
+const renderPage = () => render(<MemoryRouter><FAQPage /></MemoryRouter>);
 
 describe("FAQ page", () => {
   it("organizes protocol guidance by topic with progressive disclosure", async () => {
-    render(<FAQPage onNavigate={vi.fn()} />);
+    renderPage();
 
     expect(screen.getByRole("heading", { name: /Questions, answered plainly/ })).toBeInTheDocument();
     for (const topic of ["The basics", "Bounties", "The funding gauge", "Projects", "Wallet and safety"]) {
@@ -19,18 +22,16 @@ describe("FAQ page", () => {
     expect(screen.getByText(/split their snapshot voting power/)).toBeVisible();
   });
 
-  it("routes people back into each public protocol view", async () => {
-    const onNavigate = vi.fn();
-    render(<FAQPage onNavigate={onNavigate} />);
+  it("routes people back into each public protocol view", () => {
+    renderPage();
 
-    await userEvent.click(screen.getByRole("button", { name: /Explore bounties/ }));
-    await userEvent.click(screen.getByRole("button", { name: /View the gauge/ }));
-    await userEvent.click(screen.getByRole("button", { name: /Browse projects/ }));
-    expect(onNavigate.mock.calls).toEqual([["bounties"], ["gauge"], ["projects"]]);
+    expect(screen.getByRole("link", { name: /Explore bounties/ })).toHaveAttribute("href", "/bounties");
+    expect(screen.getByRole("link", { name: /View the gauge/ })).toHaveAttribute("href", "/gauge");
+    expect(screen.getByRole("link", { name: /Browse projects/ })).toHaveAttribute("href", "/projects");
   });
 
   it("has no WCAG A/AA violations when all answers are expanded", async () => {
-    const { container } = render(<FAQPage onNavigate={vi.fn()} />);
+    const { container } = renderPage();
     for (const details of container.querySelectorAll("details:not([open])")) {
       await userEvent.click(details.querySelector("summary")!);
     }
