@@ -29,6 +29,8 @@ export interface AppConfig {
   releaseCommit: string;
   ipfsGateway: string;
   presignUrl: string | null;
+  /** True when the gateway is this app's own origin: a local development pin store. */
+  localPinStore: boolean;
 }
 
 export interface ConfigEnvironment {
@@ -54,6 +56,17 @@ export interface ConfigEnvironment {
   VITE_RELEASE_COMMIT?: string;
   VITE_IPFS_GATEWAY?: string;
   VITE_PRESIGN_URL?: string;
+}
+
+// A root-relative endpoint is same-origin by construction: it introduces no
+// new egress origin and cannot be pointed at a third party. The dev server
+// mounts its presign endpoint and pin-store gateway this way (see
+// scripts/presign-dev.mjs), as would a worker deployed on a route of the
+// app's own host.
+function sameOriginPath(value: string): string | null {
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  if (/[\s?#]/.test(value) || value.includes("..")) return null;
+  return value.replace(/\/+$/, "") || null;
 }
 
 function required(env: ConfigEnvironment, key: keyof ConfigEnvironment): string {
@@ -125,24 +138,36 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
   if (explorer !== DEFAULT_EXPLORER)
     throw new Error("Unsupported explorer URL. Configuration failed closed.");
 
-  const ipfsGateway = (env.VITE_IPFS_GATEWAY?.trim() || DEFAULT_IPFS_GATEWAY).replace(/\/+$/, "");
-  let gatewayUrl: URL;
-  try {
-    gatewayUrl = new URL(ipfsGateway);
-  } catch {
-    throw new Error("Invalid IPFS gateway URL. Configuration failed closed.");
+  const configuredGateway = (env.VITE_IPFS_GATEWAY?.trim() || DEFAULT_IPFS_GATEWAY).replace(/\/+$/, "");
+  let ipfsGateway: string;
+  if (configuredGateway.startsWith("/")) {
+    const path = sameOriginPath(configuredGateway);
+    if (!path) throw new Error("Invalid IPFS gateway URL. Configuration failed closed.");
+    ipfsGateway = path;
+  } else {
+    let gatewayUrl: URL;
+    try {
+      gatewayUrl = new URL(configuredGateway);
+    } catch {
+      throw new Error("Invalid IPFS gateway URL. Configuration failed closed.");
+    }
+    if (gatewayUrl.protocol !== "https:" || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash)
+      throw new Error("IPFS gateway must be a credential-free HTTPS endpoint.");
+    ipfsGateway = configuredGateway;
   }
-  if (gatewayUrl.protocol !== "https:" || gatewayUrl.username || gatewayUrl.password || gatewayUrl.search || gatewayUrl.hash)
-    throw new Error("IPFS gateway must be a credential-free HTTPS endpoint.");
 
   // Optional: without a presign endpoint the app hides IPFS publishing and
   // forms fall back to manual link-a-published-file mode. The loopback
   // carve-out exists only for `wrangler dev`; production builds use HTTPS.
   let presignUrl: string | null = null;
-  if (env.VITE_PRESIGN_URL?.trim()) {
+  const configuredPresign = env.VITE_PRESIGN_URL?.trim();
+  if (configuredPresign?.startsWith("/")) {
+    presignUrl = sameOriginPath(configuredPresign);
+    if (!presignUrl) throw new Error("Invalid presign URL. Configuration failed closed.");
+  } else if (configuredPresign) {
     let presign: URL;
     try {
-      presign = new URL(env.VITE_PRESIGN_URL.trim());
+      presign = new URL(configuredPresign);
     } catch {
       throw new Error("Invalid presign URL. Configuration failed closed.");
     }
@@ -151,6 +176,11 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
       throw new Error("Presign URL must be a credential-free HTTPS endpoint. Only http://127.0.0.1 is allowed for local development.");
     presignUrl = presign.toString();
   }
+
+  // A same-origin gateway can only be the development pin store: locally
+  // pinned documents resolve for this machine and nobody else, so the app
+  // says so rather than implying the content is on the public network.
+  const localPinStore = ipfsGateway.startsWith("/");
 
   return {
     protocolVersion: PROTOCOL_VERSION,
@@ -175,5 +205,6 @@ export function loadConfig(env: ConfigEnvironment = {}): AppConfig {
     releaseCommit,
     ipfsGateway,
     presignUrl,
+    localPinStore,
   };
 }

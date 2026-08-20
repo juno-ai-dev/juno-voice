@@ -192,6 +192,12 @@ export function App({
           </div>
         </div>
       </header>
+      {config.localPinStore && (
+        <p className="notice shell-alert" role="status">
+          Local development: published metadata is pinned to a store on this machine, not to the public
+          IPFS network. Anything published here resolves only for you, so do not reference it on chain.
+        </p>
+      )}
       {walletError && <p className="notice danger shell-alert" role="alert">{walletError}</p>}
       <div ref={viewRegion} className="view-region" tabIndex={-1} aria-live="polite" aria-label={`${viewName} view`}>
       <Suspense fallback={<main className="route-loading"><p>Loading public view…</p></main>}>

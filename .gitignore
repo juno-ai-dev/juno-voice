@@ -3,6 +3,7 @@
 /app/dist/
 /app/test-results/
 /app/playwright-report/
+/app/.dev-ipfs/
 __pycache__/
 *.pyc
 .env.local

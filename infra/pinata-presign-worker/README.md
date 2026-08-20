@@ -49,12 +49,27 @@ contract above is what the frontend depends on; Pinata drift is absorbed here.
 
 ## Local development
 
-- `npx wrangler dev` with a personal Pinata JWT
-  (`ALLOWED_ORIGINS=http://localhost:5173` and `PINATA_JWT` in `.dev.vars`),
-  then run the app with `VITE_PRESIGN_URL=http://127.0.0.1:8787/sign`.
-- Or leave `VITE_PRESIGN_URL` unset: the app hides the upload flow and offers
-  the manual link-a-published-file mode only. Automated tests never need the
-  worker; they mock fetch and Playwright routes.
+`npm run dev` in `app/` mounts this same worker module at `/api/presign/sign`
+on the Vite dev server (`app/scripts/presign-dev.mjs`), so there is no second
+process to run and no drift between dev and deployment. Two modes:
+
+- **Real pinning.** Put `PINATA_JWT=<your jwt>` (optionally `PINATA_GROUP_ID`)
+  in `app/.env.local` and run `npm run dev`. Requests go through this worker to
+  Pinata; pins are public and permanent. The JWT stays in the dev-server
+  process: it has no `VITE_` prefix, so it can never reach the browser bundle.
+- **No credentials at all.** Run `npm run dev` with no `PINATA_JWT`. Documents
+  are pinned to a local store under `app/.dev-ipfs/` and served back through a
+  dev gateway, so composing, publishing, fetching, and digest verification all
+  work offline. The CIDs are real CIDv1 identifiers for those bytes, but the
+  pins are local only, and the app shows a standing notice saying so. Do not
+  reference locally pinned documents in mainnet transactions.
+
+Setting `VITE_PRESIGN_URL` yourself disables the dev endpoint entirely and
+points the app wherever you say, including a `wrangler dev` instance
+(`ALLOWED_ORIGINS=http://localhost:5173` plus `PINATA_JWT` in `.dev.vars`, then
+`VITE_PRESIGN_URL=http://127.0.0.1:8787/sign`). The dev endpoint never attaches
+to builds, previews, or vitest, so no production artifact can depend on it.
+Automated tests never need the worker; they mock fetch and Playwright routes.
 
 ## Teardown
 

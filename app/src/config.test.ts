@@ -81,6 +81,19 @@ describe("fail-closed production configuration", () => {
     );
   });
 
+  it("treats a same-origin gateway as the local development pin store", () => {
+    expect(loadConfig(deployment()).localPinStore).toBe(false);
+    const local = loadConfig(deployment({ VITE_IPFS_GATEWAY: "/api/dev-ipfs/ipfs" }));
+    expect(local.ipfsGateway).toBe("/api/dev-ipfs/ipfs");
+    expect(local.localPinStore).toBe(true);
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "//gateway.example/ipfs" }))).toThrow(
+      "IPFS gateway",
+    );
+    expect(() => loadConfig(deployment({ VITE_IPFS_GATEWAY: "/api/../secrets" }))).toThrow(
+      "Invalid IPFS gateway",
+    );
+  });
+
   it("treats the presign endpoint as optional and allows only HTTPS or loopback dev", () => {
     expect(loadConfig(deployment({ VITE_PRESIGN_URL: undefined })).presignUrl).toBeNull();
     expect(loadConfig(deployment({ VITE_PRESIGN_URL: "" })).presignUrl).toBeNull();
@@ -99,5 +112,14 @@ describe("fail-closed production configuration", () => {
     expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: "not a url" }))).toThrow(
       "Invalid presign URL",
     );
+  });
+
+  it("accepts a same-origin presign path and rejects near-miss shapes", () => {
+    expect(loadConfig(deployment({ VITE_PRESIGN_URL: "/api/presign/sign" })).presignUrl).toBe(
+      "/api/presign/sign",
+    );
+    for (const value of ["//presign.example/sign", "/api/../sign", "/sign?token=1", "/sign#fragment", "/"]) {
+      expect(() => loadConfig(deployment({ VITE_PRESIGN_URL: value }))).toThrow("presign URL");
+    }
   });
 });

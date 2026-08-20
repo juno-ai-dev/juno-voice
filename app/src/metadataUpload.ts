@@ -44,7 +44,11 @@ export function createMetadataUploader(presignUrl: string, fetcher?: typeof fetc
     if (!response.ok) throw new MetadataUploadError(`The publishing service declined the request (status ${response.status}).`, "presign_rejected");
     const payload: unknown = await response.json().catch(() => null);
     const url = (payload as { url?: unknown } | null)?.url;
-    if (typeof url !== "string" || !url.startsWith("https://"))
+    // HTTPS, or a same-origin path: the development pin store signs uploads
+    // back to the dev server itself. A protocol-relative "//host" URL is not
+    // same-origin and is rejected.
+    const sameOrigin = typeof url === "string" && url.startsWith("/") && !url.startsWith("//");
+    if (typeof url !== "string" || !(url.startsWith("https://") || sameOrigin))
       throw new MetadataUploadError("The publishing service returned an unexpected response.", "malformed_response");
     return url;
   };

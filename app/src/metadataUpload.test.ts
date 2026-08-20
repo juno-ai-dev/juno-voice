@@ -63,6 +63,21 @@ describe("metadata upload pipeline", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("uploads to a same-origin signed URL but never to a protocol-relative one", async () => {
+    const local = "/api/presign/sign";
+    const fetcher = vi.fn(async (url: RequestInfo | URL) =>
+      String(url) === local
+        ? new Response(JSON.stringify({ url: "/api/dev-ipfs/upload?token=abc" }), { status: 200 })
+        : new Response(JSON.stringify({ data: { cid } }), { status: 200 }));
+    const uploader = createMetadataUploader(local, fetcher as unknown as typeof fetch);
+    expect((await uploader.pinDocument("project.json", bytes)).uri).toBe(`ipfs://${cid}`);
+    expect(String(fetcher.mock.calls[1][0])).toBe("/api/dev-ipfs/upload?token=abc");
+
+    const offOrigin = createMetadataUploader(presignUrl, vi.fn(async () =>
+      new Response(JSON.stringify({ url: "//uploads.evil.example/x" }), { status: 200 })) as unknown as typeof fetch);
+    expect(await codeOf(offOrigin.pinDocument("a.json", bytes))).toBe("malformed_response");
+  });
+
   it("maps presign and upload failures to a typed, honest error taxonomy", async () => {
     const down = createMetadataUploader(presignUrl, vi.fn(async () => { throw new Error("offline"); }) as unknown as typeof fetch);
     expect(await codeOf(down.pinDocument("a.json", bytes))).toBe("presign_unavailable");

@@ -3,8 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { loadConfig } from "./config";
 import type { RegistryDataSource } from "./registry";
 import { config, ledger } from "./test/bountyFixtures";
+import { TEST_DEPLOYMENT_ENV } from "./test/deployment";
 
 const account = "juno10d07y265gmmuvt4z0w9aw880jnsr700jvss730";
 const registry = {
@@ -69,6 +71,21 @@ describe("production transaction wiring", () => {
     renderApp(["/no-such-page"]);
     expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to the landing page" })).toBeInTheDocument();
+  });
+
+  it("says so plainly when metadata is pinned to a local development store", async () => {
+    renderApp();
+    expect(await screen.findByRole("heading", { name: /Fund useful work/ })).toBeInTheDocument();
+    expect(screen.queryByText(/pinned to a store on this machine/)).not.toBeInTheDocument();
+
+    render(<MemoryRouter>
+      <App
+        config={loadConfig({ ...TEST_DEPLOYMENT_ENV, VITE_IPFS_GATEWAY: "/api/dev-ipfs/ipfs", VITE_PRESIGN_URL: "/api/presign/sign" })}
+        source={{ loadLedger: vi.fn(async () => ledger) }}
+        registrySource={registrySource()}
+      />
+    </MemoryRouter>);
+    expect(await screen.findByText(/pinned to a store on this machine/)).toBeInTheDocument();
   });
 
   it("keeps registry browsing wallet-free when no supported extension is present", async () => {
