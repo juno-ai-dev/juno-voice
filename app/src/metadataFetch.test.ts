@@ -33,6 +33,11 @@ describe("metadata read side", () => {
       .toBe(`${gateway}/bafyabc/metadata.json`);
   });
 
+  it("keeps a same-origin gateway path beneath its configured prefix", () => {
+    expect(ipfsGatewayUrl("/api/dev-ipfs/ipfs", "ipfs://bafyabc/metadata.json"))
+      .toBe("/api/dev-ipfs/ipfs/bafyabc/metadata.json");
+  });
+
   it("verifies fetched bytes against the on-chain digest before parsing", async () => {
     const fetcher = fetcherOf(bytes);
     const client = createMetadataClient({ gatewayBase: gateway, fetcher });

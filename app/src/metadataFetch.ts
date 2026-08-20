@@ -28,14 +28,16 @@ export function ipfsGatewayUrl(gatewayBase: string, uri: string): string | null 
   if (!/^[a-zA-Z0-9]+$/.test(segments[0] ?? "")) return null;
   if (segments.some((segment) => segment === "." || segment === "..")) return null;
   try {
-    const configured = new URL(gatewayBase);
+    const relativeGateway = gatewayBase.startsWith("/") && !gatewayBase.startsWith("//");
+    const relativeOrigin = "https://juno-voice.invalid";
+    const configured = relativeGateway ? new URL(gatewayBase, relativeOrigin) : new URL(gatewayBase);
     if (configured.search || configured.hash) return null;
     const prefix = new URL(configured.href);
     prefix.pathname = `${prefix.pathname.replace(/\/+$/, "")}/`;
     const target = new URL(prefix.href);
     target.pathname = `${prefix.pathname}${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
     if (target.origin !== prefix.origin || !target.pathname.startsWith(prefix.pathname)) return null;
-    return target.href;
+    return relativeGateway ? target.pathname : target.href;
   } catch {
     return null;
   }
