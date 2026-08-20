@@ -12,6 +12,9 @@ import { createMetadataClient, type MetadataClient } from "./metadataFetch";
 import { createMetadataUploader } from "./metadataUpload";
 import { createDocumentPublisher, type DocumentPublisher } from "./metadataPublish";
 import { NotFound } from "./routes/NotFound";
+// Shell chrome styles must load with the shell itself, not with any lazy page
+// chunk: every route is now directly addressable.
+import "./app-shell.css";
 
 const GaugeVoting = lazy(() =>
   import("./GaugeVoting").then((module) => ({ default: module.GaugeVoting })),

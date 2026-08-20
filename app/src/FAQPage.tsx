@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { PageMeta } from "./components/PageMeta";
 import "./FAQPage.css";
-import "./ShellLanding.css";
 
 type FAQSection = {
   id: string;

@@ -88,6 +88,16 @@ main {
   font-size: 10px;
   letter-spacing: 0.16em;
 }
+.field-hint {
+  display: block;
+  margin-top: 3px;
+  color: #d7bda1;
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: var(--font-family-body, Montserrat, sans-serif);
+  text-transform: none;
+  letter-spacing: normal;
+}
 .fact {
   display: flex;
   justify-content: space-between;
@@ -145,6 +155,10 @@ main {
   padding: 56px 20px;
 }
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 44px;
   border: 1px solid #ff9a9b;
   background: #ff9a9b;
@@ -152,6 +166,7 @@ main {
   padding: 0 16px;
   font-weight: 700;
   cursor: pointer;
+  text-decoration: none;
 }
 .bounty-row {
   display: grid;
@@ -258,7 +273,8 @@ dd { margin: 0; }
 .history small { display: block; color: #d7bda1; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 24px 0; }
 .form-grid label { font-family: var(--font-family-mono, monospace); font-size: 11px; }
-.form-grid input, .form-grid select { display: block; width: 100%; min-height: 44px; margin-top: 5px; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; padding: 8px; }
+.form-grid input, .form-grid select, .form-grid textarea { display: block; width: 100%; min-height: 44px; margin-top: 5px; border: 1px solid #a65a5c; background: #100405; color: #ffebd2; padding: 8px; }
+.form-grid textarea { min-height: 80px; resize: vertical; font: inherit; }
 @media (max-width: 800px) {
   .registry-columns, .detail-grid, .form-grid { grid-template-columns: 1fr; }
   .topbar-inner { width: calc(100% - 20px); }

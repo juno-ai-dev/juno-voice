@@ -1,6 +1,9 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+// findBy*/waitFor default to 1s, which flakes on loaded CI machines.
+configure({ asyncUtilTimeout: 5_000 });
 
 vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
   () =>

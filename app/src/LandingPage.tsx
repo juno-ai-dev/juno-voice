@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { PageMeta } from "./components/PageMeta";
 import "./LandingPage.css";
-import "./ShellLanding.css";
 
 const steps = [
   {

@@ -28,9 +28,29 @@ dialog.modal-panel {
   max-height: inherit;
 }
 
+.modal-frame:focus {
+  outline: 0;
+}
+
+/* Step markers label the standalone workbench flow; inside a modal they crowd
+   the close button. */
+.modal-frame .step-marker {
+  display: none;
+}
+
 .modal-close {
   float: right;
   margin: 0 0 12px 16px;
+}
+
+/* Panels designed to stand alone on a page carry their own box; inside the
+   already-bordered modal frame that reads as a frame within a frame. */
+.modal-frame .action-panel,
+.modal-frame .workbench {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .modal-frame dd,

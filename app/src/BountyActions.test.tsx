@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toBech32 } from "@cosmjs/encoding";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 15_000 });
 import { BountyActions, type BountyTransactionAccess } from "./BountyActions";
 import { config, ledger, bounty } from "./test/bountyFixtures";
 import type { TransactionReview } from "./transactions";

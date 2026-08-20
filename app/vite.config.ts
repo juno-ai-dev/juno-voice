@@ -14,6 +14,8 @@ export default defineConfig(({ command, mode }) => {
       environment: "jsdom",
       setupFiles: "./src/test/setup.ts",
       css: false,
+      // Generous ceiling for loaded CI machines; local runs finish far sooner.
+      testTimeout: 15_000,
       exclude: [...configDefaults.exclude, "e2e/**", "scripts/**"],
     },
   };

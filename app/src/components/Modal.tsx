@@ -14,11 +14,15 @@ export function Modal({ titleId, onClose, variant = "dialog", closeDisabled = fa
   children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!dialog.open) dialog.showModal();
+    // showModal focuses the first focusable element (the close button), which
+    // paints a focus ring on every open. Start on the frame instead.
+    frameRef.current?.focus();
     return () => {
       if (dialog.open) dialog.close();
       opener?.focus();
@@ -33,7 +37,7 @@ export function Modal({ titleId, onClose, variant = "dialog", closeDisabled = fa
       onCancel={(event) => { event.preventDefault(); if (!closeDisabled) onClose(); }}
       onClick={(event) => { if (event.target === dialogRef.current && !closeDisabled) onClose(); }}
     >
-      <div className="modal-frame">
+      <div className="modal-frame" ref={frameRef} tabIndex={-1}>
         <button type="button" className="button secondary modal-close" onClick={onClose} disabled={closeDisabled}>{closeLabel}</button>
         {children}
       </div>
