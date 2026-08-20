@@ -1,8 +1,8 @@
-import { fromBech32 } from "@cosmjs/encoding";
 import type { AppConfig } from "./config";
 import type { Project, RegistryData } from "./registry";
 import type { TransactionIntent, TransactionReview, TransactionOutcome } from "./transactions";
 import { formatJuno } from "./junoAmount";
+import { isJunoAccount, isJunoAddress } from "./junoAddress";
 import { METADATA_DIGEST_PATTERN, URI_SCHEME_PATTERN } from "./metadataDigest";
 
 export { METADATA_DIGEST_PATTERN } from "./metadataDigest";
@@ -13,17 +13,13 @@ export interface RegistryActionContext { data: RegistryData; project: Project | 
 export interface RegistryTransactionFlow { connect?(): Promise<{ address: string }>; prepare(intent: TransactionIntent): Promise<TransactionReview>; submit(review: TransactionReview): Promise<TransactionOutcome> }
 
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-const validAccount = (value: string) => {
-  try { const decoded = fromBech32(value); return value === value.toLowerCase() && decoded.prefix === "juno" && decoded.data.length === 20; }
-  catch { return false; }
-};
 const fail = (message: string): never => { throw new Error(message); };
 const controller = (project: Project, sender: string) => project.owner === sender || project.payout_address === sender;
 
 export function buildRegistryIntent(config: AppConfig, sender: string, context: RegistryActionContext, input: RegistryActionInput): TransactionIntent {
   const { action, projectId, metadataUri, metadataDigest, address, note } = input;
   const { data, project } = context;
-  if (!validAccount(sender)) fail("Connect a valid Juno account before preparing this action.");
+  if (!isJunoAccount(sender)) fail("Connect a valid Juno account before preparing this action.");
   if (action === "register_project" ? projectId !== null : !Number.isSafeInteger(projectId) || (projectId ?? 0) <= 0)
     fail(action === "register_project" ? "Registration IDs are assigned by the registry." : "Project ID must be a positive integer returned by the registry.");
   if (!data.health.fully_backed) fail("Registry bond accounting is not fully backed.");
@@ -49,7 +45,10 @@ export function buildRegistryIntent(config: AppConfig, sender: string, context: 
     if (!URI_SCHEME_PATTERN.test(metadataUri)) fail("Metadata URI must be a bounded HTTPS or IPFS URI.");
     if (!METADATA_DIGEST_PATTERN.test(metadataDigest)) fail("Metadata digest must be sha256: followed by exactly 64 lowercase hex characters.");
   }
-  if (["register_project", "propose_payout_address"].includes(action) && !validAccount(address)) fail("Payout address must be a valid Juno account address.");
+  // Payouts may go to a contract: DAOs, multisigs, and vaults are ordinary
+  // recipients, and the registry validates the address with addr_validate.
+  if (["register_project", "propose_payout_address"].includes(action) && !isJunoAddress(address))
+    fail("Payout address must be a valid Juno address. An account or a contract, such as a DAO, both work.");
   if (action === "propose_payout_address" && address === project?.payout_address) fail("New payout address must differ from the current payout address.");
   if (action === "retire" && (!note.trim() || bytes(note) > data.config.max_reason_bytes)) fail(`Retirement note must be non-empty and at most ${data.config.max_reason_bytes} UTF-8 bytes.`);
 

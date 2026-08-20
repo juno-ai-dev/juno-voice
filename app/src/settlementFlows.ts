@@ -1,7 +1,7 @@
-import { fromBech32 } from "@cosmjs/encoding";
 import type { BountyDetail, PayoutRound, PayoutVote } from "./types";
 import type { TransactionIntent } from "./transactions";
 import { formatJuno } from "./junoAmount";
+import { isJunoAddress } from "./junoAddress";
 import { METADATA_DIGEST_PATTERN, URI_SCHEME_PATTERN } from "./metadataDigest";
 
 const U64_MAX = 18446744073709551615n;
@@ -25,12 +25,12 @@ function digest(value: string): string {
     throw new Error("Evidence digest must use sha256:<64 lowercase hex characters>.");
   return normalized;
 }
+// Payouts may go to a contract: a team paying a DAO or a multisig is ordinary,
+// and the bounty contract validates the recipient with addr_validate.
 function junoAddress(value: string, label: string): string {
   const normalized = value.trim();
-  try {
-    const decoded = fromBech32(normalized);
-    if (normalized !== normalized.toLowerCase() || decoded.prefix !== "juno" || decoded.data.length !== 20) throw new Error();
-  } catch { throw new Error(`${label} must be a valid Juno account address.`); }
+  if (!isJunoAddress(normalized))
+    throw new Error(`${label} must be a valid Juno address. An account or a contract, such as a DAO, both work.`);
   return normalized;
 }
 function base(state: SettlementState, bountyContract: string, executeMessage: Record<string, unknown>, consequences: string[]): TransactionIntent {

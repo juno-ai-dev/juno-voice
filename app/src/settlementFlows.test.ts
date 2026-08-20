@@ -39,6 +39,14 @@ describe("settlement intent actor, state, schema, and time boundaries", () => {
     ["unsafe evidence", (s: BountyDetail) => nominatePayoutIntent(s, creator, { recipient, evidenceUri: "javascript:bad", evidenceDigest: digest, rationale: "x" }, config.contract)],
   ])("rejects nomination boundary: %s", (_, run) => expect(() => run(open())).toThrow());
 
+  it("nominates a contract recipient, since work is often paid to a DAO", () => {
+    const dao = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+    expect(nominatePayoutIntent(open(), creator, { recipient: dao, evidenceUri: "ipfs://evidence", evidenceDigest: digest, rationale: "Shipped" }, config.contract))
+      .toMatchObject({ executeMessage: { nominate_payout: { recipient: dao } } });
+    expect(() => nominatePayoutIntent(open(), creator, { recipient: toBech32("juno", new Uint8Array(21)), evidenceUri: "ipfs://evidence", evidenceDigest: digest, rationale: "x" }, config.contract))
+      .toThrow("valid Juno address");
+  });
+
   it("enforces sole actor, exact round, and strict close/expiry deadlines", () => {
     const round = payoutRound({ rule: "sole_confirmation", contributor_count: 1, total_weight: "2500000",
       yes_weight: "0", no_weight: "0", voter_count: 0 });

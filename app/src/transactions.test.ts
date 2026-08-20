@@ -159,6 +159,23 @@ describe("address and centrally-owned execute policy", () => {
     await expect(flow.prepare({ ...intent, executeMessage: { [action]: body }, funds }))
       .rejects.toMatchObject({ code: "message_forbidden" });
   });
+  it("allows a contract as a payout destination but never as the signer", async () => {
+    const dao = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+    const { wallet, dependencies } = setup(); await wallet.connect(); const flow = createTransactionFlow(dependencies);
+    await expect(flow.prepare({ ...intent, contract: config.registryContract, funds: [{ denom: "ujuno", amount: "1000000" }],
+      executeMessage: { register_project: { metadata_uri: "https://example.com/a", metadata_digest: `sha256:${"a".repeat(64)}`, payout_address: dao } } }))
+      .resolves.toMatchObject({ contract: config.registryContract });
+    await expect(flow.prepare({ ...intent, contract: config.registryContract, funds: [],
+      executeMessage: { propose_payout_address: { project_id: 1, address: dao } } }))
+      .resolves.toMatchObject({ contract: config.registryContract });
+    await expect(flow.prepare({ ...intent, funds: [],
+      executeMessage: { nominate_payout: { bounty_id: 1, recipient: dao, evidence_uri: "ipfs://evidence", evidence_digest: `sha256:${"a".repeat(64)}`, rationale: "Shipped" } } }))
+      .resolves.toMatchObject({ contract: config.contract });
+    // A 32-byte address still cannot be the authorized signer.
+    const foreign = setup();
+    vi.mocked(foreign.walletPort.connect).mockResolvedValueOnce({ chainId: "juno-1", address: dao });
+    await expect(foreign.wallet.connect()).rejects.toMatchObject({ code: "invalid_identity" });
+  });
   it("rejects privileged registry actions and non-voluntary retirement", async () => {
     const { wallet, dependencies } = setup(); await wallet.connect(); const flow = createTransactionFlow(dependencies);
     for (const action of ["review_registration", "suspend", "override_project_status", "stop", "resume", "update_curator", "update_economic_config"])

@@ -92,7 +92,7 @@ describe("bounty action UI", () => {
       chainTimeNanos: ledger.chainTimeNanos, fingerprint: ledger.fingerprint };
     render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty}
       contributions={settlement.contributions} settlement={settlement} publisher={publisher} />);
-    await userEvent.type(screen.getByLabelText("Recipient Juno address"), recipient);
+    await userEvent.type(screen.getByLabelText(/^Recipient Juno address/), recipient);
     expect(screen.queryByLabelText("Evidence URI (HTTPS/IPFS)")).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/^What was delivered/), "Shipped the tooling.");
     await userEvent.type(screen.getByLabelText("Evidence link 1"), "https://github.example/pr/1");
@@ -209,7 +209,7 @@ describe("bounty action UI", () => {
       chainTimeNanos: ledger.chainTimeNanos, fingerprint: ledger.fingerprint };
     render(<BountyActions bountyContract={config.contract} canonical={canonical} stale={false} access={port} bounty={bounty}
       contributions={settlement.contributions} settlement={settlement} />);
-    await userEvent.type(screen.getByLabelText("Recipient Juno address"), recipient);
+    await userEvent.type(screen.getByLabelText(/^Recipient Juno address/), recipient);
     await userEvent.type(screen.getByLabelText("Evidence URI (HTTPS/IPFS)"), "ipfs://evidence");
     await userEvent.type(screen.getByLabelText("Evidence digest (sha256: + 64 lowercase hex)"), `sha256:${"ab".repeat(32)}`);
     await userEvent.type(screen.getByLabelText("Nomination rationale"), "Acceptance criteria shipped");

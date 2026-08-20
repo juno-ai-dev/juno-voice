@@ -247,7 +247,7 @@ function ActionWorkbench({ config, source, transactionFlow, sender, publisher }:
         <small className="form-help">Juno Voice publishes these details to IPFS and commits their exact fingerprint on chain when you continue.</small>
         <button type="button" className="button secondary" onClick={() => setManualMode(true)}>Advanced: link a file you already published</button>
       </>}
-      {["register_project", "propose_payout_address"].includes(action) && <label>Payout address<input aria-label="Payout address" value={address} disabled={submissionLocked} placeholder="juno1…" onChange={(e) => setAddress(e.target.value)} /><small className="form-help">The Juno account that can receive future project funding.</small></label>}
+      {["register_project", "propose_payout_address"].includes(action) && <label>Payout address<input aria-label="Payout address" value={address} disabled={submissionLocked} placeholder="juno1…" onChange={(e) => setAddress(e.target.value)} /><small className="form-help">Where future project funding goes. A personal account or a contract, such as a DAO or a multisig.</small></label>}
       {action === "retire" && <label>Retirement note<input aria-label="Retirement note" value={note} disabled={submissionLocked} onChange={(e) => setNote(e.target.value)} /><small className="form-help">A short public explanation for retiring the project.</small></label>}
     </div>
     <details className="workbench-help"><summary>Before you continue</summary><p>Juno Voice will show the selected account, registry contract, funds, fee, and expected result. The latest project state and wallet account are checked again before your wallet asks you to sign.</p></details>

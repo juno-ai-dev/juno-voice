@@ -92,6 +92,25 @@ describe("registry transaction UI evidence", () => {
       metadata_uri: "ipfs://bafypinned", metadata_digest: `sha256:${"c".repeat(64)}` }) } }));
   });
 
+  it("accepts a DAO contract as the payout address", async () => {
+    const dao = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+    const port = flow();
+    const publisher = {
+      publishDocument: vi.fn(async () => ({ uri: "ipfs://bafypinned", digest: `sha256:${"c".repeat(64)}`, size: 42 })),
+      publishImage: vi.fn(),
+    };
+    render(wrap(<Registry source={source()} config={config} transactionFlow={port} sender={sender} publisher={publisher} />));
+    await openProjectWorkbench();
+    await userEvent.type(screen.getByLabelText(/^Project name/), "Alpha");
+    await userEvent.type(screen.getByLabelText(/^Short summary/), "A project.");
+    await userEvent.type(screen.getByLabelText("Payout address"), dao);
+    await userEvent.click(screen.getByRole("button", { name: "Review project action" }));
+    await vi.waitFor(() => expect(port.prepare).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(port.prepare).toHaveBeenCalledWith(expect.objectContaining({ executeMessage: { register_project:
+      expect.objectContaining({ payout_address: dao }) } }));
+  });
+
   it("keeps the manual link mode reachable as an advanced escape hatch", async () => {
     const publisher = { publishDocument: vi.fn(), publishImage: vi.fn() };
     render(wrap(<Registry source={source()} config={config} transactionFlow={flow()} sender={sender} publisher={publisher} />));

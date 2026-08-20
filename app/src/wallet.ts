@@ -1,4 +1,4 @@
-import { fromBech32 } from "@cosmjs/encoding";
+import { isJunoAccount } from "./junoAddress";
 
 export type WalletKind = "keplr" | "leap";
 export interface WalletIdentity {
@@ -170,13 +170,9 @@ export class WalletSession {
         "wrong_chain",
         `Wrong chain: expected ${this.targetChainId}, wallet reported ${identity.chainId}.`,
       );
-    try {
-      if (identity.address !== identity.address.toLowerCase()) throw new Error();
-      const decoded = fromBech32(identity.address);
-      if (decoded.prefix !== "juno" || decoded.data.length !== 20) throw new Error();
-    } catch {
+    // A signer is always an externally owned account: a contract cannot sign.
+    if (!isJunoAccount(identity.address))
       throw new WalletSafetyError("invalid_identity", "Wallet returned an invalid Juno account.");
-    }
   }
 
   private invalidate(message: string): void {

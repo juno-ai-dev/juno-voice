@@ -1,6 +1,6 @@
-import { fromBech32 } from "@cosmjs/encoding";
 import type { AppConfig } from "./config";
 import { formatJuno } from "./junoAmount";
+import { isJunoAccount } from "./junoAddress";
 import { canonicalDecimal, DECIMAL_SCALE, GAUGE_ID, parseDecimal18, type GaugeActionContext, type GaugeVote } from "./gauge";
 import type { TransactionIntent, TransactionOutcome, TransactionReview } from "./transactions";
 
@@ -12,10 +12,6 @@ export interface GaugeTransactionFlow {
   submit(review: TransactionReview): Promise<TransactionOutcome>;
 }
 
-const validAccount = (value: string) => {
-  try { const decoded = fromBech32(value); return value === value.toLowerCase() && decoded.prefix === "juno" && decoded.data.length === 20; }
-  catch { return false; }
-};
 const fail = (message: string): never => { throw new Error(message); };
 const chainSeconds = (nanos: string) => BigInt(nanos) / 1_000_000_000n;
 
@@ -58,7 +54,7 @@ export function gaugeEligibility(context: GaugeActionContext) {
 }
 
 export function buildGaugeIntent(config: AppConfig, sender: string, context: GaugeActionContext, action: GaugeAction, preferences: readonly PreferenceInput[] = []): TransactionIntent {
-  if (!validAccount(sender)) fail("Connect a valid Juno account before preparing this action.");
+  if (!isJunoAccount(sender)) fail("Connect a valid Juno account before preparing this action.");
   const { data } = context, eligibility = gaugeEligibility(context), epoch = data.current;
   let executeMessage: Record<string, unknown>, consequence: string;
   if (action === "open_epoch") {

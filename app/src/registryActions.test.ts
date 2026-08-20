@@ -23,6 +23,18 @@ describe("registry transaction intent construction", () => {
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, projectId: 1 })).toThrow("assigned by the registry");
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, address: "juno1invalid" })).toThrow("valid Juno");
   });
+  it("accepts a contract as the payout address, because people fund DAOs", () => {
+    // A real Juno DAO address: 32 bytes, where an account is 20.
+    const dao = "juno18k65at7fkf8elhece0fnhsvuxggqg6cved6trp5fyk3lftfn93xsmpeaac";
+    expect(buildRegistryIntent(config, owner, context(), { ...input, address: dao }).executeMessage).toMatchObject({
+      register_project: { payout_address: dao },
+    });
+    expect(buildRegistryIntent(config, owner, context({ project }), {
+      ...input, action: "propose_payout_address", projectId: project.id, address: dao,
+    }).executeMessage).toEqual({ propose_payout_address: { project_id: project.id, address: dao } });
+    // The signer is still an account: a contract cannot sign a transaction.
+    expect(() => buildRegistryIntent(config, dao, context(), input)).toThrow("Connect a valid Juno account");
+  });
   it("rejects metadata URIs without a bounded HTTPS or IPFS scheme", () => {
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataUri: "javascript:alert(1)" })).toThrow("HTTPS or IPFS");
     expect(() => buildRegistryIntent(config, owner, context(), { ...input, metadataUri: "ftp://example.com/x" })).toThrow("HTTPS or IPFS");

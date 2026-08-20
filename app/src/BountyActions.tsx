@@ -315,7 +315,7 @@ function SettlementControls({ state, bountyContract, disabled, onPrepare, publis
     {b.status === "open" && now < BigInt(b.expires_at) && <form onSubmit={(event) => { event.preventDefault(); void submitNomination(new FormData(event.currentTarget)); }}>
       <h3>Nominate payout</h3><p>The public control is creator-only; no agent or governor controls are exposed.</p>
       <div className="action-grid">
-        <label>Recipient Juno address<input name="recipient" required /></label>
+        <label>Recipient Juno address<span className="field-hint">An account or a contract, such as a DAO.</span><input name="recipient" placeholder="juno1…" required /></label>
         {evidenceManual ? <>
           <label>Evidence URI (HTTPS/IPFS)<input name="evidenceUri" required /></label>
           <label className="wide">Evidence digest (sha256: + 64 lowercase hex)<input name="evidenceDigest" pattern="sha256:[0-9a-f]{64}" required /></label>
