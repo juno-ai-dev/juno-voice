@@ -25,6 +25,14 @@ describe("metadata read side", () => {
     expect(ipfsGatewayUrl(gateway, "https://example.com/x")).toBeNull();
   });
 
+  it("rejects dot path segments before URL normalization can leave the gateway prefix", () => {
+    expect(ipfsGatewayUrl(gateway, "ipfs://bafyabc/./metadata.json")).toBeNull();
+    expect(ipfsGatewayUrl(gateway, "ipfs://bafyabc/../metadata.json")).toBeNull();
+    expect(ipfsGatewayUrl(gateway, "ipfs://bafyabc/path/../../outside.json")).toBeNull();
+    expect(ipfsGatewayUrl(`${gateway}/nested/../`, "ipfs://bafyabc/metadata.json"))
+      .toBe(`${gateway}/bafyabc/metadata.json`);
+  });
+
   it("verifies fetched bytes against the on-chain digest before parsing", async () => {
     const fetcher = fetcherOf(bytes);
     const client = createMetadataClient({ gatewayBase: gateway, fetcher });

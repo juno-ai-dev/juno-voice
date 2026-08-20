@@ -63,9 +63,9 @@ export function Registry({ source, config, transactionFlow, sender, metadata, pu
   // one-shot ref lets the user close the modal and stay on the page.
   const lockRedirected = useRef(false);
   useEffect(() => {
-    if (lockRedirected.current || !persistedSubmissionPresent || location.pathname !== "/projects") return;
+    if (lockRedirected.current || !persistedSubmissionPresent) return;
     lockRedirected.current = true;
-    void navigate("manage", { replace: true });
+    if (location.pathname === "/projects") void navigate("manage", { replace: true });
   }, [persistedSubmissionPresent, location.pathname, navigate]);
   // Child modal routes own the document title while they are open.
   const pageMeta = modalOpen ? null : <PageMeta route="projects" />;

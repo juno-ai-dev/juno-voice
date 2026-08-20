@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allowedOrigin, handleRequest, KINDS, validateSignRequest } from "./worker.mjs";
+import { allowedOrigin, handleRequest, KINDS, SIGN_REQUEST_MAX_BYTES, validateSignRequest } from "./worker.mjs";
 
 const env = { PINATA_JWT: "test-jwt", ALLOWED_ORIGINS: "https://app.example, https://other.example" };
 const signBody = { kind: "document", filename: "project.json", size: 100, content_type: "application/json" };
@@ -61,6 +61,44 @@ test("group id is forwarded when configured", async () => {
   const fetcher = async (_url, init) => { upstreamBody = JSON.parse(init.body); return pinataOk(); };
   await handleRequest(postRequest(signBody), { ...env, PINATA_GROUP_ID: "group-1" }, fetcher);
   assert.equal(upstreamBody.group_id, "group-1");
+});
+
+test("request JSON is byte-capped while streaming regardless of Content-Length", async () => {
+  for (const contentLength of [null, "1"]) {
+    let cancelled = false;
+    const stream = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode(" ".repeat(SIGN_REQUEST_MAX_BYTES + 1)));
+      },
+      cancel() { cancelled = true; },
+    });
+    const headers = { origin: "https://app.example", "content-type": "application/json" };
+    if (contentLength !== null) headers["content-length"] = contentLength;
+    const request = new Request("https://worker.example/sign", { method: "POST", headers, body: stream, duplex: "half" });
+    const fetcher = async () => { throw new Error("must not be called"); };
+
+    const response = await handleRequest(request, env, fetcher);
+
+    assert.equal(response.status, 413);
+    assert.match((await response.json()).error, /too large/i);
+    assert.equal(cancelled, true);
+  }
+});
+
+test("an oversized declared Content-Length is rejected before the body is read", async () => {
+  let pulled = false;
+  const stream = new ReadableStream({ pull() { pulled = true; } });
+  const request = new Request("https://worker.example/sign", {
+    method: "POST",
+    headers: { origin: "https://app.example", "content-type": "application/json", "content-length": String(SIGN_REQUEST_MAX_BYTES + 1) },
+    body: stream,
+    duplex: "half",
+  });
+
+  const response = await handleRequest(request, env, async () => { throw new Error("must not be called"); });
+
+  assert.equal(response.status, 413);
+  assert.equal(pulled, false);
 });
 
 test("disallowed origins, bad routes, and preflight are handled", async () => {

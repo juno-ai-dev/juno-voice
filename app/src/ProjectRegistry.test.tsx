@@ -36,8 +36,8 @@ const review: TransactionReview = { reviewId: "r", flowBinding: "f", sender, cha
 const flow = (): RegistryTransactionFlow => ({ connect: vi.fn(async () => ({ address: sender })),
   prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "pending" as const, txHash: "KNOWN",
     explorerUrl: "https://www.mintscan.io/juno/tx/KNOWN" })) });
-const wrap = (ui: ReactElement) => (
-  <MemoryRouter initialEntries={["/projects"]}>
+const wrap = (ui: ReactElement, initialEntries = ["/projects"]) => (
+  <MemoryRouter initialEntries={initialEntries} initialIndex={initialEntries.length - 1}>
     <Routes>
       <Route path="/projects" element={ui}>
         <Route path="manage" element={<ProjectManageRoute />} />
@@ -184,6 +184,18 @@ describe("registry transaction UI evidence", () => {
     expect(await screen.findByRole("link", { name: /transaction evidence KNOWN/ })).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/KNOWN");
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     expect(screen.getByRole("button", { name: "Review project action" })).toBeDisabled();
+  });
+
+  it("allows a directly loaded persisted-lock modal to close without reopening", async () => {
+    saveRegistrySubmission({ version: 1, sender, chainId: config.chainId, contract: config.registryContract,
+      action: "register_project", status: "unknown" });
+    render(wrap(<Registry source={source()} config={config} transactionFlow={flow()} sender={sender} />, ["/projects/manage"]));
+    expect(await screen.findByRole("dialog", { name: "Choose a project action" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(await screen.findByText("Eligible projects")).toBeVisible();
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose a project action" })).not.toBeInTheDocument());
   });
 
   it("writes scoped unknown evidence before invoking transaction submission", async () => {

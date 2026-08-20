@@ -16,9 +16,10 @@ const source: GaugeDataSource = { loadGauge: vi.fn(async () => gaugeData), loadA
 const review = { reviewId: "review", flowBinding: "flow", sender: voter, chainId: "juno-1", contract: config.gaugeContract, executeMessage: { place_votes: { gauge: 0, votes: [{ option: "project:1", weight: "0.5" }] } }, funds: [], fee: { gas: "100000", amount: [{ denom: "ujuno", amount: "7500" }] }, consequences: ["Replace ballot"], canonicalState: { fingerprint: gaugeContext.fingerprint, height: 40_000_100 }, walletRevision: 1 } as const;
 function flow(): GaugeTransactionFlow { return { connect: vi.fn(async () => ({ address: voter })), prepare: vi.fn(async () => review), submit: vi.fn(async () => ({ status: "confirmed" as const, confirmationStatus: "confirmed" as const, refreshStatus: "refreshed" as const, txHash: "ABC", height: 40_000_101, explorerUrl: "https://www.mintscan.io/juno/tx/ABC" })) }; }
 const submissionScope = { sender: voter, chainId: config.chainId, contract: config.gaugeContract, gaugeId: 0 as const };
-const wrap = (ui: ReactElement) => (
-  <MemoryRouter initialEntries={["/gauge"]}>
+const wrap = (ui: ReactElement, initialEntries = ["/gauge"]) => (
+  <MemoryRouter initialEntries={initialEntries} initialIndex={initialEntries.length - 1}>
     <Routes>
+      <Route path="/" element={<h1>Previous page</h1>} />
       <Route path="/gauge" element={ui}>
         <Route path="vote" element={<GaugeVoteRoute />} />
       </Route>
@@ -102,6 +103,18 @@ describe("gauge voting UI", () => {
     expect(screen.getByRole("link", { name: /transaction evidence GAUGE_KNOWN/ })).toHaveAttribute("href", "https://www.mintscan.io/juno/tx/GAUGE_KNOWN");
     await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     expect(await screen.findByRole("button", { name: "Prepare ballot revision" })).toBeDisabled();
+  });
+
+  it("closes an auto-opened persisted-lock modal explicitly to its parent route", async () => {
+    saveGaugeSubmission({ ...submissionScope, version: 1, action: "place_votes", epoch: 2, status: "unknown" });
+    render(wrap(<GaugeVoting source={source} config={config} sender={voter} transactionFlow={flow()} />, ["/", "/gauge"]));
+    expect(await screen.findByRole("dialog", { name: "Choose a gauge action" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(await screen.findByRole("heading", { name: "Weighted allocation" })).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Choose a gauge action" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Previous page" })).not.toBeInTheDocument();
   });
 
   it("restores hashless unknown action and epoch evidence without inventing a link", async () => {
